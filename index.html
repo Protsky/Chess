@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Aperture di Scacchi</title>
+  <meta name="description" content="Gioco per memorizzare le aperture di scacchi più importanti, divise per livello.">
+  <meta name="theme-color" content="#0f1219">
+  <meta name="color-scheme" content="dark">
+
+  <!-- iPhone: app a schermo intero dopo "Aggiungi a Home" -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Aperture">
+  <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
+  <link rel="icon" href="assets/icons/icon-192.png" sizes="192x192">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+  <header class="app-bar">
+    <button class="icon-btn icon-btn--ghost" id="bar-back" hidden aria-label="Indietro">‹ Indietro</button>
+    <h1 class="app-bar__title" id="bar-title">Aperture di Scacchi</h1>
+    <button class="icon-btn icon-btn--ghost" id="bar-action" hidden></button>
+  </header>
+
+  <main class="view" id="view"></main>
+
+  <noscript>
+    <p style="padding:24px;color:#96a2b8">Per giocare serve JavaScript attivo.</p>
+  </noscript>
+
+  <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

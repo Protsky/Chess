@@ -1,0 +1,11 @@
+{
+  "name": "aperture-scacchi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gioco web per memorizzare le aperture di scacchi, ottimizzato per iPhone",
+  "scripts": {
+    "validate": "node tools/validate.mjs",
+    "start": "python3 -m http.server 8080"
+  }
+}
