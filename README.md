@@ -32,6 +32,10 @@ dando la precedenza a quelle con meno stelle.
 La notazione è italiana per impostazione predefinita (R, D, T, A, C) e commutabile in inglese
 dalle impostazioni, insieme a suoni ed elenco mosse.
 
+## In linea
+
+Pubblicata con GitHub Pages: **https://protsky.github.io/Chess/**
+
 ## Provarlo
 
 Serve un piccolo server locale (i moduli JavaScript non funzionano aprendo il file da disco):
@@ -64,9 +68,12 @@ tools/                   validazione, prove end-to-end, generatore di icone
 ## Sviluppo
 
 ```bash
-node tools/validate.mjs     # ogni linea è legale? la notazione coincide?
-node tools/smoke.mjs        # prova end-to-end su viewport iPhone (richiede playwright)
-python3 tools/make_icons.py # rigenera le icone PNG
+node tools/validate.mjs      # ogni linea è legale? la notazione coincide?
+node tools/smoke.mjs         # prova end-to-end su viewport iPhone (richiede playwright)
+node tools/smoke.mjs URL     # stessa prova contro un sito già pubblicato
+node tools/build-single.mjs  # genera la versione in un file solo, in dist/
+node tools/check-single.mjs  # verifica quel file aperto da disco (file://)
+python3 tools/make_icons.py  # rigenera le icone PNG
 ```
 
 `validate.mjs` rigioca tutte le varianti sul motore: se una mossa è illegale o ambigua,

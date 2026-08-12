@@ -2,7 +2,8 @@
  * Prova end-to-end su viewport iPhone: naviga le schermate, gioca un
  * allenamento completo e salva gli screenshot in tools/screenshots/.
  *
- *   node tools/smoke.mjs
+ *   node tools/smoke.mjs                              server locale
+ *   node tools/smoke.mjs https://esempio.github.io/   sito pubblicato
  */
 import { chromium, devices } from 'playwright';
 import { mkdirSync } from 'node:fs';
@@ -46,7 +47,9 @@ const check = (label, condition, detail = '') => {
 // Indice della casa: 0 = a8 ... 63 = h1
 const square = (name) => (8 - Number(name[1])) * 8 + 'abcdefgh'.indexOf(name[0]);
 
-await new Promise((resolve) => server.listen(PORT, resolve));
+const BASE = process.argv[2] || `http://localhost:${PORT}/`;
+if (!process.argv[2]) await new Promise((resolve) => server.listen(PORT, resolve));
+else console.log(`Verifica del sito pubblicato: ${BASE}`);
 mkdirSync(SHOTS, { recursive: true });
 
 const browser = await chromium.launch();
@@ -71,7 +74,7 @@ const move = async (from, to) => {
 };
 
 console.log('\n▸ Home');
-await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'networkidle' });
+await page.goto(BASE, { waitUntil: 'networkidle' });
 check('titolo presente', (await page.textContent('.hero h1')).includes('Impara le aperture'));
 check('tre livelli elencati', (await page.locator('#levels .level-card').count()) === 3);
 await page.screenshot({ path: join(SHOTS, '1-home.png') });
