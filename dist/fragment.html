@@ -1,0 +1,2750 @@
+<title>Aperture di Scacchi</title>
+<style>
+/* ------------------------------------------------------------------ *
+ *  Aperture di Scacchi — foglio di stile (mobile first, iPhone)
+ * ------------------------------------------------------------------ */
+
+:root {
+  --bg: #0f1219;
+  --bg-soft: #161b26;
+  --surface: #1a2030;
+  --surface-2: #212939;
+  --line: #2b3446;
+  --text: #e9edf5;
+  --muted: #96a2b8;
+  --gold: #e5b567;
+  --gold-dim: #a9834a;
+  --green: #6fca86;
+  --red: #ea6d63;
+  --blue: #6aa9e9;
+
+  --light-sq: #ebecd0;
+  --dark-sq: #779556;
+  --sel-sq: rgba(255, 220, 100, 0.55);
+  --last-sq: rgba(255, 214, 92, 0.35);
+
+  --radius: 16px;
+  --radius-sm: 11px;
+  --tap: 44px;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+/* `display` esplicito sui bottoni della barra batterebbe l'attributo hidden */
+[hidden] { display: none !important; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #1d2436 0%, transparent 60%),
+    var(--bg);
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+h1, h2, h3 { margin: 0; line-height: 1.2; }
+p { margin: 0; }
+
+/* ----------------------------- barra ----------------------------- */
+
+.app-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(var(--safe-top) + 8px) calc(var(--safe-right) + 12px) 8px calc(var(--safe-left) + 12px);
+  background: rgba(15, 18, 25, 0.82);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.app-bar__title {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  min-width: var(--tap);
+  height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 15px;
+  padding: 0 10px;
+}
+
+.icon-btn:active { background: var(--surface-2); }
+.icon-btn--ghost { color: var(--muted); }
+
+/* ----------------------------- layout ---------------------------- */
+
+.view {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 18px calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 28px) calc(var(--safe-left) + 16px);
+  animation: fade 0.22s ease;
+}
+
+@keyframes fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.spacer { flex: 1; }
+
+/* ------------------------------ home ----------------------------- */
+
+.hero h1 {
+  font-size: 30px;
+  font-weight: 750;
+  letter-spacing: -0.4px;
+}
+
+.hero p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.stat__value { font-size: 21px; font-weight: 700; }
+.stat__value--gold { color: var(--gold); }
+.stat__label { font-size: 11px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.6px; }
+
+.section-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  font-weight: 650;
+  margin-top: 6px;
+}
+
+.card {
+  width: 100%;
+  display: block;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  color: inherit;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.card:active { transform: scale(0.985); border-color: var(--gold-dim); }
+
+.level-card { display: flex; align-items: center; gap: 14px; }
+
+.level-card__badge {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  line-height: 1;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #2b3446, #1c2333);
+  border: 1px solid var(--line);
+  color: var(--gold);
+}
+
+.level-card__body { flex: 1; min-width: 0; }
+.level-card__name { font-size: 17px; font-weight: 650; }
+.level-card__tag { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.level-card__chevron { color: var(--muted); font-size: 20px; }
+
+.bar {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.bar__fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+  transition: width 0.4s ease;
+}
+
+.bar__label { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* --------------------------- lista aperture ---------------------- */
+
+.opening-card { display: flex; flex-direction: column; gap: 8px; }
+
+.opening-card__top { display: flex; align-items: baseline; gap: 8px; }
+.opening-card__name { font-size: 16px; font-weight: 650; flex: 1; }
+
+.tag {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.tag--w { color: #f0e6d2; }
+.tag--b { color: #a9b6c9; }
+.tag--gold { color: var(--gold); border-color: var(--gold-dim); }
+
+.opening-card__meta { font-size: 13px; color: var(--muted); line-height: 1.4; }
+
+.stars { display: flex; gap: 3px; font-size: 14px; letter-spacing: 1px; }
+.star { color: #3a4356; }
+.star--on { color: var(--gold); }
+
+/* ------------------------------ board ---------------------------- */
+
+.board-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.board {
+  --size: min(calc(100vw - 32px), 30rem, calc(100dvh - 21rem));
+  width: var(--size);
+  height: var(--size);
+  min-width: 260px;
+  min-height: 260px;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--line);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sq {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--light-sq);
+}
+
+.sq--dark { background: var(--dark-sq); }
+
+.sq__coord {
+  position: absolute;
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.sq__coord--file { right: 3px; bottom: 1px; }
+.sq__coord--rank { left: 3px; top: 1px; }
+.sq .sq__coord { color: #6c8149; }
+.sq--dark .sq__coord { color: #e3e6cb; }
+
+.piece {
+  font-size: calc(var(--size, 320px) / 8 * 0.82);
+  line-height: 1;
+  pointer-events: none;
+  font-family: 'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols 2', 'DejaVu Sans', serif;
+  transform: translateY(-2%);
+}
+
+.piece--w {
+  color: #fbfbf7;
+  text-shadow:
+    0 0 1px #2a2a2a, 0 0 1px #2a2a2a, 1px 0 1px #2a2a2a, -1px 0 1px #2a2a2a,
+    0 1px 1px #2a2a2a, 0 -1px 1px #2a2a2a, 0 2px 3px rgba(0, 0, 0, 0.35);
+}
+
+.piece--b {
+  color: #20242b;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.18), 0 2px 3px rgba(0, 0, 0, 0.3);
+}
+
+.sq--last::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--last-sq);
+}
+
+.sq--sel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--sel-sq);
+}
+
+.sq--dest::after {
+  content: '';
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: rgba(20, 30, 20, 0.32);
+}
+
+.sq--dest.sq--capture::after {
+  width: 88%;
+  height: 88%;
+  background: none;
+  border: 5px solid rgba(20, 30, 20, 0.3);
+}
+
+.sq--hint::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(106, 169, 233, 0.5);
+  animation: pulse 0.9s ease-in-out infinite;
+}
+
+.sq--check::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(234, 109, 99, 0.85) 20%, transparent 70%);
+}
+
+.sq--wrong { animation: shake 0.36s ease; }
+.sq--wrong::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(234, 109, 99, 0.55);
+}
+
+.sq--good::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(111, 202, 134, 0.5);
+  animation: fadeout 0.6s ease forwards;
+}
+
+@keyframes pulse { 50% { opacity: 0.35; } }
+@keyframes fadeout { to { opacity: 0; } }
+@keyframes shake {
+  10%, 90% { transform: translateX(-2px); }
+  30%, 70% { transform: translateX(3px); }
+  50% { transform: translateX(-3px); }
+}
+
+.board--locked { cursor: default; }
+
+/* ------------------------- studio / mosse ------------------------ */
+
+.opening-head { margin-bottom: 4px; }
+.opening-head h2 { font-size: 20px; font-weight: 700; }
+.opening-head p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+.segmented {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.segmented button {
+  flex: 1;
+  height: 38px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.segmented button[aria-selected='true'] {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.moves {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.moves::-webkit-scrollbar { display: none; }
+
+.move-chip {
+  flex: none;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.move-chip--done { color: var(--text); }
+.move-chip--current {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #1a1408;
+  font-weight: 700;
+}
+
+.move-chip--hidden { color: transparent; text-shadow: 0 0 7px var(--muted); }
+
+.note {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 66px;
+}
+
+.note__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--gold);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.controls { display: flex; justify-content: center; gap: 8px; }
+
+.controls button {
+  width: 52px;
+  height: var(--tap);
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 16px;
+  color: var(--text);
+}
+
+.controls button:disabled { opacity: 0.35; }
+.controls button:active:not(:disabled) { background: var(--surface-2); }
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 50px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 650;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.btn:active { transform: scale(0.99); }
+.btn--primary { background: linear-gradient(180deg, #efc478, var(--gold)); color: #1a1408; border-color: var(--gold); }
+.btn--ghost { background: transparent; }
+.btn--danger { color: var(--red); }
+.btn-row { display: flex; gap: 10px; }
+
+/* ------------------------- allenamento --------------------------- */
+
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  min-height: 58px;
+}
+
+.prompt__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+  border: 1px solid #000;
+}
+
+.prompt__dot--w { background: #f4f4ef; }
+.prompt__dot--b { background: #222831; border-color: #55607a; }
+
+.prompt__text { font-size: 14px; line-height: 1.4; flex: 1; }
+.prompt__text strong { font-weight: 700; }
+.prompt--good { border-color: var(--green); }
+.prompt--bad { border-color: var(--red); }
+.prompt--good .prompt__text { color: var(--green); }
+.prompt--bad .prompt__text { color: var(--red); }
+
+.progress-line {
+  display: flex;
+  gap: 4px;
+}
+
+.progress-line span {
+  flex: 1;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--surface-2);
+}
+
+.progress-line span.ok { background: var(--green); }
+.progress-line span.err { background: var(--red); }
+.progress-line span.now { background: var(--gold); }
+
+/* --------------------------- risultato --------------------------- */
+
+.result {
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px 18px;
+}
+
+.result__stars { font-size: 40px; letter-spacing: 6px; }
+.result__title { font-size: 22px; font-weight: 750; margin-top: 10px; }
+.result__sub { color: var(--muted); font-size: 14px; margin-top: 6px; line-height: 1.5; }
+
+.result__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* -------------------------- impostazioni ------------------------- */
+
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.setting__label { flex: 1; font-size: 15px; }
+.setting__hint { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.switch {
+  width: 50px;
+  height: 30px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  position: relative;
+  flex: none;
+  transition: background 0.18s ease;
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.switch[aria-checked='true'] { background: var(--gold-dim); border-color: var(--gold); }
+.switch[aria-checked='true']::after { transform: translateX(20px); background: #fff8e9; }
+
+.hint-text { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.hint-text strong { color: var(--text); }
+
+.empty { text-align: center; color: var(--muted); padding: 30px 10px; font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+</style>
+
+<header class="app-bar">
+  <button class="icon-btn icon-btn--ghost" id="bar-back" hidden aria-label="Indietro">‹ Indietro</button>
+  <h1 class="app-bar__title" id="bar-title">Aperture di Scacchi</h1>
+  <button class="icon-btn icon-btn--ghost" id="bar-action" hidden></button>
+</header>
+
+<main class="view" id="view"></main>
+
+<script>
+// Alcuni host forniscono il proprio <head>: ci si assicura che il viewport
+// sia impostato prima di disegnare la scacchiera.
+if (!document.querySelector('meta[name="viewport"]')) {
+  const meta = document.createElement('meta');
+  meta.name = 'viewport';
+  meta.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+  document.head.appendChild(meta);
+}
+</script>
+
+<script type="module">
+/* motore */
+
+/*
+ * chess.js — mini motore scacchistico
+ * Indici: 0 = a8 ... 63 = h1  (riga 0 in alto)
+ * Pezzi:  maiuscolo = Bianco, minuscolo = Nero, null = casa vuota
+ */
+
+const FILES = 'abcdefgh';
+
+const idx = (r, c) => r * 8 + c;
+const rowOf = (i) => i >> 3;
+const colOf = (i) => i & 7;
+const nameOf = (i) => FILES[colOf(i)] + (8 - rowOf(i));
+const idxOf = (name) => idx(8 - Number(name[1]), FILES.indexOf(name[0]));
+const colorOf = (p) => (p ? (p === p.toUpperCase() ? 'w' : 'b') : null);
+const other = (c) => (c === 'w' ? 'b' : 'w');
+
+const KNIGHT_D = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
+const BISHOP_D = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+const ROOK_D = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const QUEEN_D = [...BISHOP_D, ...ROOK_D];
+
+const inside = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
+
+/** Posizione iniziale. */
+function newGame() {
+  const board = new Array(64).fill(null);
+  const back = 'rnbqkbnr';
+  for (let c = 0; c < 8; c++) {
+    board[idx(0, c)] = back[c];
+    board[idx(1, c)] = 'p';
+    board[idx(6, c)] = 'P';
+    board[idx(7, c)] = back[c].toUpperCase();
+  }
+  return { board, turn: 'w', castling: { K: true, Q: true, k: true, q: true }, ep: null, half: 0, full: 1 };
+}
+
+function clone(s) {
+  return {
+    board: s.board.slice(),
+    turn: s.turn,
+    castling: { ...s.castling },
+    ep: s.ep,
+    half: s.half,
+    full: s.full,
+  };
+}
+
+/** La casa `target` è attaccata da un pezzo di colore `by`? */
+function isAttacked(board, target, by) {
+  const r = rowOf(target);
+  const c = colOf(target);
+
+  // Pedoni (il bianco cattura verso righe minori, il nero verso righe maggiori)
+  const pr = by === 'w' ? r + 1 : r - 1;
+  const pawn = by === 'w' ? 'P' : 'p';
+  for (const dc of [-1, 1]) {
+    if (inside(pr, c + dc) && board[idx(pr, c + dc)] === pawn) return true;
+  }
+
+  // Cavalli
+  const knight = by === 'w' ? 'N' : 'n';
+  for (const [dr, dc] of KNIGHT_D) {
+    if (inside(r + dr, c + dc) && board[idx(r + dr, c + dc)] === knight) return true;
+  }
+
+  // Re
+  const king = by === 'w' ? 'K' : 'k';
+  for (const [dr, dc] of QUEEN_D) {
+    if (inside(r + dr, c + dc) && board[idx(r + dr, c + dc)] === king) return true;
+  }
+
+  // Pezzi che scorrono
+  const sliders = [
+    { dirs: BISHOP_D, pieces: by === 'w' ? ['B', 'Q'] : ['b', 'q'] },
+    { dirs: ROOK_D, pieces: by === 'w' ? ['R', 'Q'] : ['r', 'q'] },
+  ];
+  for (const { dirs, pieces } of sliders) {
+    for (const [dr, dc] of dirs) {
+      let rr = r + dr;
+      let cc = c + dc;
+      while (inside(rr, cc)) {
+        const p = board[idx(rr, cc)];
+        if (p) {
+          if (pieces.includes(p)) return true;
+          break;
+        }
+        rr += dr;
+        cc += dc;
+      }
+    }
+  }
+  return false;
+}
+
+function kingSquare(board, color) {
+  const king = color === 'w' ? 'K' : 'k';
+  return board.indexOf(king);
+}
+
+function inCheck(state, color = state.turn) {
+  const k = kingSquare(state.board, color);
+  return k >= 0 && isAttacked(state.board, k, other(color));
+}
+
+function pushMove(list, m) {
+  list.push({ promo: null, capture: null, castle: null, enPassant: false, ...m });
+}
+
+/** Mosse pseudo-legali (senza filtro sullo scacco). */
+function pseudoMoves(state) {
+  const { board, turn } = state;
+  const moves = [];
+  for (let from = 0; from < 64; from++) {
+    const piece = board[from];
+    if (!piece || colorOf(piece) !== turn) continue;
+    const r = rowOf(from);
+    const c = colOf(from);
+    const type = piece.toUpperCase();
+
+    if (type === 'P') {
+      const dir = turn === 'w' ? -1 : 1;
+      const startRow = turn === 'w' ? 6 : 1;
+      const lastRow = turn === 'w' ? 0 : 7;
+      const one = idx(r + dir, c);
+      if (inside(r + dir, c) && !board[one]) {
+        addPawn(moves, from, one, piece, null, r + dir === lastRow);
+        const two = idx(r + 2 * dir, c);
+        if (r === startRow && !board[two]) {
+          pushMove(moves, { from, to: two, piece });
+        }
+      }
+      for (const dc of [-1, 1]) {
+        if (!inside(r + dir, c + dc)) continue;
+        const to = idx(r + dir, c + dc);
+        const targetPiece = board[to];
+        if (targetPiece && colorOf(targetPiece) !== turn) {
+          addPawn(moves, from, to, piece, targetPiece, r + dir === lastRow);
+        } else if (!targetPiece && state.ep === to) {
+          pushMove(moves, { from, to, piece, capture: turn === 'w' ? 'p' : 'P', enPassant: true });
+        }
+      }
+      continue;
+    }
+
+    if (type === 'N' || type === 'K') {
+      const dirs = type === 'N' ? KNIGHT_D : QUEEN_D;
+      for (const [dr, dc] of dirs) {
+        if (!inside(r + dr, c + dc)) continue;
+        const to = idx(r + dr, c + dc);
+        const targetPiece = board[to];
+        if (targetPiece && colorOf(targetPiece) === turn) continue;
+        pushMove(moves, { from, to, piece, capture: targetPiece });
+      }
+      if (type === 'K') addCastling(state, moves, from, piece);
+      continue;
+    }
+
+    const dirs = type === 'B' ? BISHOP_D : type === 'R' ? ROOK_D : QUEEN_D;
+    for (const [dr, dc] of dirs) {
+      let rr = r + dr;
+      let cc = c + dc;
+      while (inside(rr, cc)) {
+        const to = idx(rr, cc);
+        const targetPiece = board[to];
+        if (targetPiece && colorOf(targetPiece) === turn) break;
+        pushMove(moves, { from, to, piece, capture: targetPiece });
+        if (targetPiece) break;
+        rr += dr;
+        cc += dc;
+      }
+    }
+  }
+  return moves;
+}
+
+function addPawn(moves, from, to, piece, capture, promoting) {
+  if (promoting) {
+    for (const p of ['Q', 'R', 'B', 'N']) {
+      pushMove(moves, { from, to, piece, capture, promo: colorOf(piece) === 'w' ? p : p.toLowerCase() });
+    }
+  } else {
+    pushMove(moves, { from, to, piece, capture });
+  }
+}
+
+function addCastling(state, moves, from, piece) {
+  const { board, turn, castling } = state;
+  const enemy = other(turn);
+  const home = turn === 'w' ? idxOf('e1') : idxOf('e8');
+  if (from !== home) return;
+  if (isAttacked(board, home, enemy)) return;
+
+  const short = turn === 'w' ? castling.K : castling.k;
+  const long = turn === 'w' ? castling.Q : castling.q;
+
+  if (short) {
+    const [f1, g1, h1] = turn === 'w' ? ['f1', 'g1', 'h1'] : ['f8', 'g8', 'h8'];
+    const rook = turn === 'w' ? 'R' : 'r';
+    if (!board[idxOf(f1)] && !board[idxOf(g1)] && board[idxOf(h1)] === rook &&
+        !isAttacked(board, idxOf(f1), enemy) && !isAttacked(board, idxOf(g1), enemy)) {
+      pushMove(moves, { from, to: idxOf(g1), piece, castle: 'K' });
+    }
+  }
+  if (long) {
+    const [d1, c1, b1, a1] = turn === 'w' ? ['d1', 'c1', 'b1', 'a1'] : ['d8', 'c8', 'b8', 'a8'];
+    const rook = turn === 'w' ? 'R' : 'r';
+    if (!board[idxOf(d1)] && !board[idxOf(c1)] && !board[idxOf(b1)] && board[idxOf(a1)] === rook &&
+        !isAttacked(board, idxOf(d1), enemy) && !isAttacked(board, idxOf(c1), enemy)) {
+      pushMove(moves, { from, to: idxOf(c1), piece, castle: 'Q' });
+    }
+  }
+}
+
+/** Mosse legali della posizione. */
+function legalMoves(state) {
+  return pseudoMoves(state).filter((m) => {
+    const next = applyMove(state, m);
+    return !inCheck({ ...next, turn: state.turn }, state.turn);
+  });
+}
+
+/** Applica una mossa e restituisce il nuovo stato (non muta l'originale). */
+function applyMove(state, move) {
+  const s = clone(state);
+  const { board } = s;
+  const color = colorOf(move.piece);
+
+  board[move.from] = null;
+  board[move.to] = move.promo || move.piece;
+
+  if (move.enPassant) {
+    const capturedSquare = idx(rowOf(move.to) + (color === 'w' ? 1 : -1), colOf(move.to));
+    board[capturedSquare] = null;
+  }
+
+  if (move.castle) {
+    const row = color === 'w' ? 7 : 0;
+    const rook = color === 'w' ? 'R' : 'r';
+    if (move.castle === 'K') {
+      board[idx(row, 7)] = null;
+      board[idx(row, 5)] = rook;
+    } else {
+      board[idx(row, 0)] = null;
+      board[idx(row, 3)] = rook;
+    }
+  }
+
+  // Diritti di arrocco
+  const type = move.piece.toUpperCase();
+  if (type === 'K') {
+    if (color === 'w') { s.castling.K = false; s.castling.Q = false; }
+    else { s.castling.k = false; s.castling.q = false; }
+  }
+  const corner = { [idxOf('a1')]: 'Q', [idxOf('h1')]: 'K', [idxOf('a8')]: 'q', [idxOf('h8')]: 'k' };
+  if (corner[move.from]) s.castling[corner[move.from]] = false;
+  if (corner[move.to]) s.castling[corner[move.to]] = false;
+
+  // Presa al varco disponibile solo dopo un doppio passo di pedone
+  s.ep = null;
+  if (type === 'P' && Math.abs(rowOf(move.to) - rowOf(move.from)) === 2) {
+    s.ep = idx((rowOf(move.to) + rowOf(move.from)) / 2, colOf(move.from));
+  }
+
+  s.half = type === 'P' || move.capture ? 0 : s.half + 1;
+  if (color === 'b') s.full += 1;
+  s.turn = other(color);
+  return s;
+}
+
+function sameMove(a, b) {
+  return !!a && !!b && a.from === b.from && a.to === b.to && (a.promo || null) === (b.promo || null);
+}
+
+/** Notazione algebrica (inglese) della mossa nella posizione data. */
+function toSan(state, move, moves = legalMoves(state)) {
+  const type = move.piece.toUpperCase();
+  let san;
+
+  if (move.castle) {
+    san = move.castle === 'K' ? 'O-O' : 'O-O-O';
+  } else if (type === 'P') {
+    san = move.capture ? `${FILES[colOf(move.from)]}x${nameOf(move.to)}` : nameOf(move.to);
+    if (move.promo) san += `=${move.promo.toUpperCase()}`;
+  } else {
+    const rivals = moves.filter(
+      (m) => m.piece === move.piece && m.to === move.to && m.from !== move.from,
+    );
+    let disamb = '';
+    if (rivals.length) {
+      const sameFile = rivals.some((m) => colOf(m.from) === colOf(move.from));
+      const sameRank = rivals.some((m) => rowOf(m.from) === rowOf(move.from));
+      if (!sameFile) disamb = FILES[colOf(move.from)];
+      else if (!sameRank) disamb = String(8 - rowOf(move.from));
+      else disamb = nameOf(move.from);
+    }
+    san = `${type}${disamb}${move.capture ? 'x' : ''}${nameOf(move.to)}`;
+  }
+
+  const next = applyMove(state, move);
+  if (inCheck(next)) san += legalMoves(next).length ? '+' : '#';
+  return san;
+}
+
+/** Converte una SAN (inglese) nella mossa legale corrispondente, o null. */
+function fromSan(state, san) {
+  const moves = legalMoves(state);
+  const clean = san.replace(/[+#!?]/g, '').replace(/\s+/g, '').replace(/e\.p\./i, '');
+
+  if (/^([0O])-\1-\1$/.test(clean)) return moves.find((m) => m.castle === 'Q') || null;
+  if (/^([0O])-\1$/.test(clean)) return moves.find((m) => m.castle === 'K') || null;
+
+  const m = clean.match(/^([KQRBN])?([a-h])?([1-8])?x?([a-h][1-8])(?:=?([QRBN]))?$/);
+  if (!m) return null;
+  const [, letter, file, rank, target, promo] = m;
+  const type = letter || 'P';
+  const to = idxOf(target);
+
+  const candidates = moves.filter((mv) => {
+    if (mv.piece.toUpperCase() !== type) return false;
+    if (mv.to !== to) return false;
+    if (file && FILES[colOf(mv.from)] !== file) return false;
+    if (rank && String(8 - rowOf(mv.from)) !== rank) return false;
+    if (promo && (mv.promo || '').toUpperCase() !== promo) return false;
+    if (!promo && mv.promo) return mv.promo.toUpperCase() === 'Q';
+    return true;
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+/**
+ * Riproduce una linea di mosse SAN.
+ * @returns {{states: object[], moves: object[], sans: string[]}}
+ */
+function playLine(sans, start = newGame()) {
+  const states = [start];
+  const moves = [];
+  let state = start;
+  sans.forEach((san, i) => {
+    const move = fromSan(state, san);
+    if (!move) throw new Error(`Mossa non valida "${san}" alla semimossa ${i + 1}`);
+    moves.push(move);
+    state = applyMove(state, move);
+    states.push(state);
+  });
+  return { states, moves, sans };
+}
+
+function fen(state) {
+  let rows = [];
+  for (let r = 0; r < 8; r++) {
+    let row = '';
+    let empty = 0;
+    for (let c = 0; c < 8; c++) {
+      const p = state.board[idx(r, c)];
+      if (p) {
+        if (empty) { row += empty; empty = 0; }
+        row += p;
+      } else empty++;
+    }
+    if (empty) row += empty;
+    rows.push(row);
+  }
+  const rights = ['K', 'Q', 'k', 'q'].filter((k) => state.castling[k]).join('') || '-';
+  return `${rows.join('/')} ${state.turn} ${rights} ${state.ep === null ? '-' : nameOf(state.ep)} ${state.half} ${state.full}`;
+}
+
+/** Numero di mossa leggibile: 1, 1..., 2, ... */
+function moveNumber(ply) {
+  return Math.floor(ply / 2) + 1;
+}
+
+/* repertorio */
+
+/*
+ * openings.js — repertorio di aperture organizzato per livello.
+ * `line`  : mosse in notazione algebrica inglese, separate da spazio.
+ * `side`  : colore da allenare (le mosse avversarie vengono giocate dall'app).
+ * `notes` : commento su singole semimosse (chiave = indice della semimossa, da 0).
+ */
+
+const LEVELS = [
+  {
+    id: 1,
+    name: 'Principiante',
+    tagline: 'I fondamentali: centro, sviluppo, arrocco',
+    description:
+      'Le aperture che ogni giocatore deve conoscere. Poche mosse, idee chiare: occupare il centro, sviluppare i pezzi leggeri e mettere il re al sicuro.',
+    icon: '♙',
+  },
+  {
+    id: 2,
+    name: 'Intermedio',
+    tagline: 'Sistemi completi e piani a lungo termine',
+    description:
+      'Varianti principali delle grandi difese e dei sistemi più giocati. Qui contano la struttura di pedoni e il piano, non solo le mosse.',
+    icon: '♘',
+  },
+  {
+    id: 3,
+    name: 'Avanzato',
+    tagline: 'Teoria da torneo, linee affilate',
+    description:
+      'Linee critiche giocate ai massimi livelli. Sequenze lunghe, sacrifici tematici e conoscenza precisa dell’ordine delle mosse.',
+    icon: '♕',
+  },
+];
+
+const OPENINGS = [
+  /* ------------------------------------------------------------------ *
+   *  LIVELLO 1 — PRINCIPIANTE
+   * ------------------------------------------------------------------ */
+  {
+    id: 'italiana',
+    name: 'Apertura Italiana',
+    eco: 'C50',
+    level: 1,
+    side: 'w',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'L’apertura più naturale del mondo: pedone al centro, cavallo e alfiere puntati sul punto debole f7.',
+    plan:
+      'Costruisci il centro con c3 e d4 al momento giusto, arrocca presto e tieni l’alfiere sulla diagonale a2-g8. Nella versione "Pianissimo" (d3) si gioca con manovre lente: Nbd2-f1-g3.',
+    line: 'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3 d6 O-O O-O',
+    notes: {
+      0: 'Occupa il centro e libera donna e alfiere: la mossa più forte del bianco.',
+      2: 'Sviluppa attaccando e5. Ogni mossa deve fare qualcosa di utile.',
+      3: 'Difende il pedone sviluppando: mai difendere con mosse passive.',
+      4: 'L’alfiere mira a f7, la casa più debole del nero all’inizio.',
+      5: 'Il nero risponde con simmetria e controlla d4.',
+      6: 'Prepara d4: il centro si costruisce con i pedoni sostenuti.',
+      8: 'Il "Giuoco Pianissimo": si rinuncia alla rottura immediata per un gioco di manovra.',
+      10: 'Re al sicuro entro le prime 10 mosse: regola d’oro.',
+    },
+  },
+  {
+    id: 'due-cavalli',
+    name: 'Difesa dei Due Cavalli',
+    eco: 'C55',
+    level: 1,
+    side: 'b',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'Il nero rinuncia alla simmetria e gioca 3...Nf6 attaccando e4: nasce subito una lotta tagliente.',
+    plan:
+      'Dopo 4.Ng5 il nero sacrifica un pedone con 4...d5 5.exd5 Na5 per scacciare l’alfiere e prendere l’iniziativa sullo sviluppo.',
+    line: 'e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5 exd5 Na5 Bb5+ c6 dxc6 bxc6 Be2 h6',
+    notes: {
+      5: 'Contrattacco: invece di difendere e5, il nero attacca e4.',
+      6: 'Mossa "da principianti" solo in apparenza: attacca f7 con due pezzi.',
+      7: 'La risposta corretta: si chiude la diagonale invece di difendere f7.',
+      9: 'Attacca l’alfiere in c4 e guadagna tempo: il pedone in d5 si riprende dopo.',
+      11: 'Il nero restituisce materiale per accelerare lo sviluppo.',
+      15: 'Scaccia il cavallo: il nero ha un pedone in meno ma pezzi molto attivi.',
+    },
+  },
+  {
+    id: 'spagnola',
+    name: 'Partita Spagnola (Ruy López)',
+    eco: 'C84',
+    level: 1,
+    side: 'w',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'L’apertura più studiata della storia: 3.Bb5 mette pressione al difensore del pedone e5.',
+    plan:
+      'Il bianco costruisce il centro con c3 e d4, ritira l’alfiere su c2 e manovra il cavallo b1-d2-f1-g3 verso il re nero.',
+    line: 'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7 Re1 b5 Bb3 d6 c3 O-O h3',
+    notes: {
+      4: 'Attacca indirettamente e5 inchiodando il difensore.',
+      5: 'La "domanda" all’alfiere: mossa quasi obbligata nel repertorio moderno.',
+      6: 'Il bianco mantiene la diagonale: prendere in c6 regala i due alfieri.',
+      8: 'Arrocco: il pedone e4 è avvelenato per il momento.',
+      10: 'La torre sostiene e4 e prepara la spinta d4.',
+      14: 'Prepara d4 costruendo il centro ideale.',
+      16: 'Mossa profilattica: toglie la casa g4 all’alfiere nero prima di giocare d4.',
+    },
+  },
+  {
+    id: 'scozzese',
+    name: 'Partita Scozzese',
+    eco: 'C45',
+    level: 1,
+    side: 'w',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'Il bianco apre subito il centro con 3.d4: poca teoria da memorizzare, pezzi attivi immediatamente.',
+    plan:
+      'Il centro si apre presto: sviluppa rapidamente, occupa la colonna d e sfrutta lo spazio. Ottima scelta per chi non vuole studiare la Spagnola.',
+    line: 'e4 e5 Nf3 Nc6 d4 exd4 Nxd4 Bc5 Be3 Qf6 c3 Nge7',
+    notes: {
+      4: 'Rottura immediata al centro: nessuna preparazione, gioco aperto.',
+      6: 'Il cavallo al centro è ben piazzato ma può essere attaccato.',
+      7: 'Attacca il cavallo in d4 e sviluppa con tempo.',
+      8: 'Sostiene il cavallo e prepara lo scambio degli alfieri.',
+      9: 'La donna difende l’alfiere e punta su f2.',
+      10: 'Rinforza d4 e apre una via di fuga per l’alfiere.',
+    },
+  },
+  {
+    id: 'scandinava',
+    name: 'Difesa Scandinava',
+    eco: 'B01',
+    level: 1,
+    side: 'b',
+    family: 'Difese a 1.e4',
+    summary:
+      'Il nero sfida subito il pedone e4. Facile da imparare: poche varianti, piani sempre uguali.',
+    plan:
+      'Dopo aver riportato la donna in a5 (o d6), il nero completa lo sviluppo con Nf6, c6, Bf5 e arrocco lungo o corto.',
+    line: 'e4 d5 exd5 Qxd5 Nc3 Qa5 d4 Nf6 Nf3 c6 Bc4 Bf5',
+    notes: {
+      1: 'Sfida diretta al centro bianco fin dalla prima mossa.',
+      3: 'Riprendere di donna è possibile perché il nero sa già dove ritirarla.',
+      4: 'Sviluppo con tempo: il bianco guadagna un tempo attaccando la donna.',
+      5: 'Casella sicura: la donna resta attiva sulla diagonale a5-e1.',
+      9: 'Mossa chiave: dà una casa di fuga alla donna e sostiene d5.',
+      11: 'L’alfiere esce prima di chiudere la catena con e6.',
+    },
+  },
+  {
+    id: 'francese',
+    name: 'Difesa Francese',
+    eco: 'C11',
+    level: 1,
+    side: 'b',
+    family: 'Difese a 1.e4',
+    summary:
+      'Struttura solida: il nero cede spazio ma ottiene un centro compatto e un piano chiarissimo, la spinta ...c5.',
+    plan:
+      'Il nero attacca la base della catena bianca con ...c5 e ...f6. Problema storico: l’alfiere campochiaro chiuso da e6, da attivare con ...b6/...Ba6 o ...Bd7-b5.',
+    line: 'e4 e6 d4 d5 Nc3 Nf6 e5 Nfd7 f4 c5 Nf3 Nc6',
+    notes: {
+      1: 'Prepara ...d5 sostenuto: il nero non concede il centro.',
+      3: 'Il centro viene sfidato immediatamente.',
+      5: 'Aumenta la pressione su e4 e costringe il bianco a decidere.',
+      6: 'Il bianco chiude il centro e guadagna spazio (Variante Steinitz).',
+      7: 'Il cavallo si ritira per riorganizzarsi: da d7 sosterrà ...c5.',
+      9: 'La mossa tematica: si attacca la base della catena bianca (d4).',
+    },
+  },
+  {
+    id: 'caro-kann',
+    name: 'Difesa Caro-Kann',
+    eco: 'B18',
+    level: 1,
+    side: 'b',
+    family: 'Difese a 1.e4',
+    summary:
+      'Come la Francese, ma senza il problema dell’alfiere cattivo: il nero lo sviluppa fuori dalla catena prima di giocare ...e6.',
+    plan:
+      'Struttura solidissima. Il nero completa con ...e6, ...Nd7, ...Ngf6 e arrocca; il finale è spesso leggermente migliore per lui grazie alla struttura sana.',
+    line: 'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5 Ng3 Bg6 h4 h6 Nf3 Nd7',
+    notes: {
+      1: 'Prepara ...d5 con il pedone c, tenendo libera la diagonale c8-h3.',
+      5: 'Si elimina la tensione: il nero sa già dove mettere i pezzi.',
+      7: 'La mossa che distingue la Caro-Kann dalla Francese: alfiere attivo fuori dalla catena.',
+      8: 'Scaccia l’alfiere guadagnando tempo.',
+      10: 'Il bianco guadagna spazio sull’ala di re e minaccia h5.',
+      11: 'Necessaria: crea la casa h7 per l’alfiere.',
+      13: 'Sviluppo flessibile: il cavallo va in d7 per non ostruire il pedone c6.',
+    },
+  },
+  {
+    id: 'siciliana-aperta',
+    name: 'Difesa Siciliana (Variante Aperta)',
+    eco: 'B50',
+    level: 1,
+    side: 'b',
+    family: 'Difese a 1.e4',
+    summary:
+      'La difesa più giocata al mondo: il nero non copia il bianco, sbilancia la partita e gioca per vincere.',
+    plan:
+      'Il nero scambia il pedone c contro il pedone d e ottiene la colonna c semiaperta per la controffensiva sull’ala di donna, mentre il bianco attacca sull’ala di re.',
+    line: 'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6',
+    notes: {
+      1: 'Combatte per d4 restando asimmetrica: nasce una partita ricca di gioco.',
+      3: 'Controlla e5 e prepara ...Nf6 senza essere scacciato subito.',
+      5: 'Lo scambio tematico: il nero cede il centro ma apre la colonna c.',
+      7: 'Attacca e4 e costringe il bianco a difenderlo.',
+      8: 'La difesa naturale del pedone e4.',
+      9: 'Mossa flessibile che toglie b5 ai pezzi bianchi: si entra nella Najdorf.',
+    },
+  },
+  {
+    id: 'qgd',
+    name: 'Gambetto di Donna Rifiutato',
+    eco: 'D35',
+    level: 1,
+    side: 'b',
+    family: 'Aperture chiuse · 1.d4',
+    summary:
+      'Il modo più classico e solido di rispondere a 1.d4: il nero sostiene il centro con ...e6 e costruisce una fortezza.',
+    plan:
+      'Il nero completa lo sviluppo e cerca la liberazione con ...c5 o ...dxc4 seguito da ...c5. Il bianco gioca sulla "minoranza" con b4-b5.',
+    line: 'd4 d5 c4 e6 Nc3 Nf6 Bg5 Be7 e3 O-O Nf3 h6 Bh4 b6',
+    notes: {
+      2: 'Non è un vero sacrificio: il pedone c4 si può sempre recuperare.',
+      3: 'Il nero rifiuta il pedone e sostiene solidamente d5.',
+      6: 'Inchioda il cavallo e aumenta la pressione su d5.',
+      7: 'Rompe l’inchiodatura e prepara l’arrocco.',
+      11: 'Utile: chiede all’alfiere di decidere e crea aria per il re.',
+      13: 'Prepara ...Bb7: l’alfiere problematico trova una diagonale.',
+    },
+  },
+  {
+    id: 'londra',
+    name: 'Sistema Londra',
+    eco: 'D02',
+    level: 1,
+    side: 'w',
+    family: 'Sistemi · 1.d4',
+    summary:
+      'Un sistema, non una variante: le stesse cinque mosse contro quasi tutto. Perfetto per chi vuole giocare senza studiare teoria.',
+    plan:
+      'Struttura solida (d4-e3-c3), alfiere fuori dalla catena in f4, poi Bd3, Nbd2, O-O e attacco al re con Ne5 e la spinta f4 o h4.',
+    line: 'd4 d5 Bf4 Nf6 e3 e6 Nf3 c5 c3 Nc6 Nbd2 Bd6 Bg3 O-O Bd3',
+    notes: {
+      2: 'La firma del sistema: l’alfiere esce prima di chiudere con e3.',
+      4: 'Solo ora si chiude la diagonale: l’ordine delle mosse è tutto.',
+      8: 'Sostiene d4 e dà una casa di ritirata all’alfiere in c2.',
+      10: 'Sviluppo armonico: il cavallo va in d2 per liberare l’alfiere in f1.',
+      12: 'Evita lo scambio degli alfieri mantenendo la pressione sulla diagonale.',
+      14: 'L’alfiere punta a h7: comincia il piano d’attacco al re.',
+    },
+  },
+  {
+    id: 'russa',
+    name: 'Difesa Russa (Petroff)',
+    eco: 'C42',
+    level: 1,
+    side: 'b',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'Difesa simmetrica e solidissima. Contiene una trappola classica che ogni principiante deve conoscere.',
+    plan:
+      'Il nero non difende e5, contrattacca e4. Attenzione all’ordine: prima ...d6 per scacciare il cavallo, solo dopo ...Nxe4.',
+    line: 'e4 e5 Nf3 Nf6 Nxe5 d6 Nf3 Nxe4 d4 d5 Bd3 Be7 O-O Nc6',
+    notes: {
+      3: 'Simmetria: il nero attacca e4 invece di difendere e5.',
+      4: 'Il bianco prende, ma il pedone si recupera.',
+      5: 'MOSSA CHIAVE: mai 4...Nxe4? subito per via di 5.Qe2! che vince un pezzo.',
+      6: 'Il cavallo deve ritirarsi.',
+      7: 'Solo adesso è sicuro riprendere il pedone.',
+      9: 'Sostiene il cavallo in e4: senza questa mossa il pezzo è instabile.',
+    },
+  },
+
+  /* ------------------------------------------------------------------ *
+   *  LIVELLO 2 — INTERMEDIO
+   * ------------------------------------------------------------------ */
+  {
+    id: 'najdorf',
+    name: 'Siciliana Najdorf',
+    eco: 'B90',
+    level: 2,
+    side: 'b',
+    family: 'Siciliana',
+    summary:
+      'L’arma di Fischer e Kasparov: la variante più analizzata della storia degli scacchi.',
+    plan:
+      'La mossa 5...a6 toglie b5 ai pezzi bianchi e prepara ...e5 o ...e6. Il nero gioca sulla colonna c e sulla debolezza di e4; il bianco attacca con f3, g4 e arrocco lungo.',
+    line: 'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6 Be3 e5 Nb3 Be6 f3 Be7',
+    notes: {
+      9: 'La mossa Najdorf: profilassi pura, controlla b5 prima di sviluppare.',
+      10: 'Attacco Inglese: il bianco prepara f3, Qd2 e arrocco lungo.',
+      11: 'Guadagna spazio e scaccia il cavallo, accettando il buco in d5.',
+      13: 'Controlla d5, la casa debole della struttura nera.',
+      14: 'Sostiene e4 e prepara g4: il bianco attacca sull’ala di re.',
+    },
+  },
+  {
+    id: 'dragone',
+    name: 'Siciliana Variante del Drago',
+    eco: 'B70',
+    level: 2,
+    side: 'b',
+    family: 'Siciliana',
+    summary:
+      'Il nero fianchetta in g7: l’alfiere "drago" spara sulla grande diagonale fino a a1.',
+    plan:
+      'Corsa agli armamenti: il nero gioca ...Rc8, ...Qa5 e sacrifici in c3; il bianco arrocca lungo e spinge h4-h5 con Bh6.',
+    line: 'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 g6 Be3 Bg7 f3 O-O Qd2 Nc6',
+    notes: {
+      9: 'Prepara il fianchetto: l’alfiere in g7 sarà il pezzo migliore del nero.',
+      12: 'Blinda e4 e prepara l’attacco g4-h4: è la mossa dell’Attacco Jugoslavo.',
+      13: 'Il nero arrocca comunque: la corsa è cominciata.',
+      14: 'Collega le torri e prepara Bh6 per scambiare l’alfiere drago.',
+      15: 'Sviluppo con pressione su d4 e sulla colonna c.',
+    },
+  },
+  {
+    id: 'nimzo',
+    name: 'Difesa Nimzo-Indiana',
+    eco: 'E32',
+    level: 2,
+    side: 'b',
+    family: 'Difese indiane · 1.d4',
+    summary:
+      'Il nero inchioda il cavallo c3 e combatte per e4 con i pezzi, non con i pedoni. Difesa rispettatissima a ogni livello.',
+    plan:
+      'Scambiare l’alfiere in c3 raddoppiando i pedoni bianchi, poi bloccare la posizione e sfruttare le debolezze permanenti nel finale.',
+    line: 'd4 Nf6 c4 e6 Nc3 Bb4 Qc2 O-O a3 Bxc3+ Qxc3 b6 Bg5 Bb7',
+    notes: {
+      1: 'Impedisce e4 e mantiene la massima flessibilità.',
+      5: 'La mossa Nimzo: inchioda il cavallo e contende la casa e4.',
+      6: 'Variante Classica: il bianco evita i pedoni doppi in anticipo.',
+      8: 'Chiede all’alfiere di decidere: prendere o ritirarsi.',
+      9: 'Il nero cede i due alfieri per rovinare la struttura o guadagnare tempo.',
+      11: 'Prepara ...Bb7: il controllo di e4 continua con i pezzi.',
+    },
+  },
+  {
+    id: 'est-indiana',
+    name: 'Difesa Est-Indiana',
+    eco: 'E90',
+    level: 2,
+    side: 'b',
+    family: 'Difese indiane · 1.d4',
+    summary:
+      'Il nero lascia il centro al bianco e poi lo attacca: ipermodernismo puro, partite feroci.',
+    plan:
+      'Dopo ...e5 e la chiusura d5, il nero attacca sull’ala di re con ...f5-f4-g5, il bianco sull’ala di donna con c5. Vince chi arriva primo.',
+    line: 'd4 Nf6 c4 g6 Nc3 Bg7 e4 d6 Nf3 O-O Be2 e5 O-O Nc6 d5 Ne7',
+    notes: {
+      3: 'Prepara il fianchetto: il nero cede il centro per attaccarlo dopo.',
+      6: 'Il bianco costruisce il centro ideale, come vuole la teoria classica.',
+      7: 'Prepara la rottura ...e5, il cuore dell’Est-Indiana.',
+      11: 'La sfida al centro: ora il bianco deve scegliere fra tenere, chiudere o cambiare.',
+      13: 'Aumenta la pressione su d4 provocando la chiusura.',
+      14: 'Il centro si chiude: adesso ogni giocatore attacca sulla propria ala.',
+      15: 'Il cavallo si sposta per liberare la spinta ...f5.',
+    },
+  },
+  {
+    id: 'slava',
+    name: 'Difesa Slava',
+    eco: 'D17',
+    level: 2,
+    side: 'b',
+    family: 'Aperture chiuse · 1.d4',
+    summary:
+      'Come il Gambetto di Donna Rifiutato, ma sostenendo d5 con ...c6: l’alfiere campochiaro resta libero.',
+    plan:
+      'Il nero prende in c4 e sviluppa l’alfiere in f5 prima di chiudere con ...e6. Struttura sana e finali affidabili.',
+    line: 'd4 d5 c4 c6 Nf3 Nf6 Nc3 dxc4 a4 Bf5 e3 e6 Bxc4 Bb4',
+    notes: {
+      3: 'Sostiene d5 senza rinchiudere l’alfiere in c8.',
+      7: 'Ora prendere è possibile: il nero minaccia di tenere il pedone con ...b5.',
+      8: 'Impedisce ...b5, ma indebolisce b4.',
+      9: 'La ragione di tutta la variante: l’alfiere esce prima di ...e6.',
+      13: 'Usa la casa b4 indebolita da a4 e prepara l’arrocco.',
+    },
+  },
+  {
+    id: 'qga',
+    name: 'Gambetto di Donna Accettato',
+    eco: 'D20',
+    level: 2,
+    side: 'b',
+    family: 'Aperture chiuse · 1.d4',
+    summary:
+      'Il nero prende il pedone, non per tenerlo, ma per cedere il centro e colpirlo subito con ...c5.',
+    plan:
+      'Restituire il pedone c4, giocare ...c5 per aprire la posizione e attaccare il pedone isolato o il centro bianco con pezzi attivi.',
+    line: 'd4 d5 c4 dxc4 Nf3 Nf6 e3 e6 Bxc4 c5 O-O a6 a4 Nc6 Qe2 cxd4 Rd1 Be7',
+    notes: {
+      3: 'Accettare è del tutto valido: il pedone non si può tenere a lungo.',
+      4: 'Prima lo sviluppo: 3.e4 sarebbe possibile ma 3.Nf3 impedisce ...e5.',
+      9: 'La rottura tematica: si colpisce d4 e si apre la posizione.',
+      11: 'Prepara ...b5 guadagnando spazio sull’ala di donna.',
+      12: 'Il bianco lo impedisce, accettando un piccolo indebolimento.',
+      16: 'La torre occupa la colonna aperta: sarà lei a fare pressione su d5.',
+    },
+  },
+  {
+    id: 'inglese',
+    name: 'Apertura Inglese',
+    eco: 'A29',
+    level: 2,
+    side: 'w',
+    family: 'Aperture di fianchetto · 1.c4',
+    summary:
+      'Una Siciliana con un tempo in più e i colori invertiti: gioco posizionale, spesso trasponibile.',
+    plan:
+      'Fianchetto in g2, pressione sulla colonna c e sulla casa d5. Il bianco gioca lentamente e sfrutta il tempo extra.',
+    line: 'c4 e5 Nc3 Nf6 Nf3 Nc6 g3 d5 cxd5 Nxd5 Bg2 Nb6 O-O Be7',
+    notes: {
+      0: 'Controlla d5 dall’ala: apertura flessibile e poco teorica.',
+      6: 'Il fianchetto punta al centro da lontano, in particolare su d5.',
+      7: 'Il nero rivendica il centro, come farebbe il bianco in una Siciliana.',
+      10: 'L’alfiere in g2 e la pressione sulla lunga diagonale sono l’anima dell’Inglese.',
+      12: 'Sviluppo completato: il bianco giocherà d3, Be3 e pressione sulla colonna c.',
+    },
+  },
+  {
+    id: 'winawer',
+    name: 'Francese Variante Winawer',
+    eco: 'C18',
+    level: 2,
+    side: 'b',
+    family: 'Difese a 1.e4',
+    summary:
+      'La linea più affilata della Francese: il nero rovina la struttura bianca cedendo i due alfieri.',
+    plan:
+      'Il nero attacca il centro con ...c5 e sfrutta i pedoni doppi in c3; il bianco attacca sull’ala di re con Qg4 e la coppia degli alfieri.',
+    line: 'e4 e6 d4 d5 Nc3 Bb4 e5 c5 a3 Bxc3+ bxc3 Ne7 Qg4 Qc7',
+    notes: {
+      5: 'La mossa Winawer: inchioda il cavallo che difende e4.',
+      6: 'Il bianco guadagna spazio e chiude il centro.',
+      7: 'Attacco immediato alla base della catena.',
+      8: 'Chiede all’alfiere di decidere subito.',
+      10: 'Struttura sbilanciata: pedoni doppi in cambio di due alfieri e spazio.',
+      12: 'Attacca g7 approfittando dell’assenza dell’alfiere nero.',
+      13: 'Il nero ignora g7 e punta tutto sul contrattacco al centro.',
+    },
+  },
+  {
+    id: 'berlinese',
+    name: 'Spagnola Variante Berlinese',
+    eco: 'C67',
+    level: 2,
+    side: 'b',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'Il "muro di Berlino" reso celebre da Kramnik contro Kasparov nel 2000: si entra in un finale difficilissimo da attaccare.',
+    plan:
+      'Il nero accetta pedoni doppi e la perdita dell’arrocco in cambio dei due alfieri e di una struttura molto resistente.',
+    line: 'e4 e5 Nf3 Nc6 Bb5 Nf6 O-O Nxe4 d4 Nd6 Bxc6 dxc6 dxe5 Nf5 Qxd8+ Kxd8',
+    notes: {
+      5: 'Invece di 3...a6, il nero attacca subito e4.',
+      7: 'Prendere è corretto: la casa e5 non si può tenere per sempre.',
+      9: 'Il cavallo torna a difendere e blocca l’alfiere in b5.',
+      11: 'La struttura nera si rovina, ma i due alfieri compensano.',
+      14: 'Il cambio di donne è forzato...',
+      15: '...e il re nero perde l’arrocco: nasce il celebre finale di Berlino.',
+    },
+  },
+  {
+    id: 'evans',
+    name: 'Gambetto Evans',
+    eco: 'C52',
+    level: 2,
+    side: 'w',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'Un pedone in cambio di tempi e del centro: gambetto romantico ancora oggi pericolosissimo.',
+    plan:
+      'Con c3 e d4 il bianco costruisce un centro imponente sfruttando il tempo guadagnato sull’alfiere nero.',
+    line: 'e4 e5 Nf3 Nc6 Bc4 Bc5 b4 Bxb4 c3 Ba5 d4 exd4 O-O Nge7',
+    notes: {
+      6: 'Il sacrificio: si devia l’alfiere per guadagnare tempo con c3 e d4.',
+      7: 'Accettare è la scelta principale (rifiutare con ...Bb6 è solido).',
+      8: 'Guadagna un tempo e prepara il centro.',
+      10: 'Ecco la compensazione: centro forte e sviluppo rapido.',
+      12: 'Il bianco non recupera il pedone: apre linee e sviluppa.',
+    },
+  },
+  {
+    id: 'caro-avanzata',
+    name: 'Caro-Kann Variante Avanzata',
+    eco: 'B12',
+    level: 2,
+    side: 'b',
+    family: 'Difese a 1.e4',
+    summary:
+      'Il bianco chiude il centro con 3.e5 e attacca subito l’alfiere che il nero è appena riuscito a sviluppare.',
+    plan:
+      'Il nero sviluppa l’alfiere in f5 prima di ...e6 e poi colpisce la catena con ...c5, spesso completando con ...Ne7 e ...Nbc6.',
+    line: 'e4 c6 d4 d5 e5 Bf5 Nf3 e6 Be2 c5 Be3 cxd4 Nxd4 Ne7',
+    notes: {
+      4: 'Chiude il centro e guadagna spazio: la linea più giocata oggi.',
+      5: 'Da fare subito: dopo ...e6 l’alfiere resterebbe murato.',
+      7: 'Ora si può chiudere: l’alfiere buono è già fuori.',
+      9: 'La rottura tematica contro ogni catena bianca in d4-e5.',
+      13: 'Il cavallo va in e7 per non ostacolare la pressione su d4.',
+    },
+  },
+  {
+    id: 'gambetto-re',
+    name: 'Gambetto di Re',
+    eco: 'C33',
+    level: 2,
+    side: 'w',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'L’apertura romantica per eccellenza: il bianco offre un pedone per deviare e5 e conquistare il centro.',
+    plan:
+      'Recuperare il pedone f4 al momento giusto, aprire la colonna f per la torre e attaccare il re nero prima che si metta al sicuro.',
+    line: 'e4 e5 f4 exf4 Nf3 g5 h4 g4 Ne5 Nf6 d4 d6 Nd3 Nxe4 Bxf4',
+    notes: {
+      2: 'L’offerta: si devia il pedone e5 per prendere tutto il centro.',
+      4: 'Impedisce ...Qh4+ e sviluppa: mossa necessaria prima di tutto il resto.',
+      5: 'Il nero difende il pedone in più con la catena di pedoni.',
+      6: 'Colpisce subito la catena: variante Kieseritzky.',
+      8: 'Il cavallo si installa in e5, cuore della posizione.',
+      10: 'Il centro bianco è imponente: questa è la compensazione.',
+      14: 'Il pedone f4 è recuperato e la colonna f è aperta verso il re nero.',
+    },
+  },
+
+  /* ------------------------------------------------------------------ *
+   *  LIVELLO 3 — AVANZATO
+   * ------------------------------------------------------------------ */
+  {
+    id: 'grunfeld',
+    name: 'Difesa Grünfeld',
+    eco: 'D85',
+    level: 3,
+    side: 'b',
+    family: 'Difese indiane · 1.d4',
+    summary:
+      'Il nero lascia costruire al bianco un centro gigantesco per poi demolirlo con pezzi e pedoni. Arma di Kasparov e Svidler.',
+    plan:
+      'Pressione sulla catena c3-d4 con ...c5, ...Qa5, ...Bg4 e ...Rc8. Se il centro bianco resiste, il bianco vince; se cade, vince il nero.',
+    line: 'd4 Nf6 c4 g6 Nc3 d5 cxd5 Nxd5 e4 Nxc3 bxc3 Bg7 Nf3 c5 Rb1 O-O Be2 cxd4 cxd4 Qa5+ Bd2 Qxa2',
+    notes: {
+      5: 'La differenza dall’Est-Indiana: si sfida subito il centro.',
+      8: 'Il bianco guadagna il centro con tempo.',
+      10: 'Struttura tipica: centro bianco imponente contro pressione nera.',
+      11: 'L’alfiere in g7 spara direttamente sul centro bianco.',
+      13: 'La rottura chiave: si attacca la base della catena.',
+      14: 'Linea moderna: la torre esce dalla diagonale dell’alfiere prima di sviluppare.',
+      19: 'Scacco che guadagna materiale: la donna raccoglie in a2.',
+      21: 'Il nero prende un pedone ma la donna resta lontana dal gioco.',
+    },
+  },
+  {
+    id: 'najdorf-inglese',
+    name: 'Najdorf — Attacco Inglese',
+    eco: 'B90',
+    level: 3,
+    side: 'b',
+    family: 'Siciliana',
+    summary:
+      'Il sistema più diretto contro la Najdorf: arrocchi opposti e corsa all’attacco sulle due ali.',
+    plan:
+      'Il bianco spinge g4-g5 e apre la colonna h; il nero contrattacca con ...b5-b4 e ...Rc8 sulla colonna c. Ogni tempo vale una figura.',
+    line: 'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6 Be3 e5 Nb3 Be6 f3 Be7 Qd2 O-O O-O-O Nbd7',
+    notes: {
+      10: 'Attacco Inglese: la coppia f3+Qd2 prepara l’arrocco lungo.',
+      14: 'Blinda e4 e prepara g4: l’attacco parte da qui.',
+      16: 'Collega le torri e prepara O-O-O.',
+      18: 'Arrocchi opposti: si comincia a contare i tempi.',
+      19: 'Il cavallo sostiene b5 e mira a c5 o b6.',
+    },
+  },
+  {
+    id: 'sveshnikov',
+    name: 'Siciliana Sveshnikov',
+    eco: 'B33',
+    level: 3,
+    side: 'b',
+    family: 'Siciliana',
+    summary:
+      'Il nero accetta volontariamente un buco in d5 e un pedone doppio in cambio di attività dinamica. Usata da Carlsen nel match mondiale 2018.',
+    plan:
+      'Cacciare i pezzi bianchi da d5 con ...f5 e ...Be6, sfruttando i due alfieri e la pressione sulla colonna b dopo ...b5-b4.',
+    line: 'e4 c5 Nf3 Nc6 d4 cxd4 Nxd4 Nf6 Nc3 e5 Ndb5 d6 Bg5 a6 Na3 b5 Bxf6 gxf6 Nd5 f5',
+    notes: {
+      9: 'La mossa che definisce la variante: si scaccia il cavallo accettando il buco in d5.',
+      10: 'L’unica casa attiva: da b5 il cavallo minaccia c7.',
+      12: 'Aumenta la pressione sulla casa d5 inchiodando il difensore.',
+      13: 'Scaccia il cavallo che deve andare nell’angolo.',
+      15: 'Guadagna spazio e imprigiona il cavallo in a3.',
+      17: 'Pedoni doppi accettati: in cambio, colonna g aperta e due alfieri.',
+      19: 'Contrattacco immediato al centro: il nero non è mai passivo.',
+    },
+  },
+  {
+    id: 'marshall',
+    name: 'Attacco Marshall',
+    eco: 'C89',
+    level: 3,
+    side: 'b',
+    family: 'Aperture aperte · 1.e4 e5',
+    summary:
+      'Un pedone sacrificato per un attacco permanente contro il re bianco: teoria pura, da conoscere a memoria.',
+    plan:
+      'Dopo ...d5 il nero ottiene un attacco duraturo con ...Bd6, ...Qh4 e ...Qh3 sulla colonna e e sull’ala di re.',
+    line: 'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7 Re1 b5 Bb3 O-O c3 d5 exd5 Nxd5 Nxe5 Nxe5 Rxe5 c6 d4 Bd6 Re1 Qh4 g3 Qh3',
+    notes: {
+      15: 'Il sacrificio Marshall: si offre un pedone per aprire le linee verso il re.',
+      19: 'La sequenza è forzata: il nero recupera un pezzo.',
+      21: 'Sostiene il cavallo in d5: senza questa mossa il sacrificio non funziona.',
+      23: 'L’alfiere prende la diagonale verso h2: comincia l’attacco.',
+      25: 'La donna entra in gioco con minaccia di matto in h2.',
+      26: 'Obbligata: parare il matto indebolisce le case chiare.',
+      27: 'La donna si installa in h3 e il bianco resta paralizzato per decine di mosse.',
+    },
+  },
+  {
+    id: 'meran',
+    name: 'Semi-Slava Variante Meran',
+    eco: 'D47',
+    level: 3,
+    side: 'b',
+    family: 'Aperture chiuse · 1.d4',
+    summary:
+      'Il nero prende in c4 e lancia i pedoni sull’ala di donna: una delle strutture più ricche della teoria moderna.',
+    plan:
+      'Espansione con ...b5, ...a6 e ...c5 per aprire la diagonale dell’alfiere in b7; il bianco risponde con e4-e5 al centro.',
+    line: 'd4 d5 c4 c6 Nf3 Nf6 Nc3 e6 e3 Nbd7 Bd3 dxc4 Bxc4 b5 Bd3 Bb7 O-O a6 e4 c5',
+    notes: {
+      7: 'Semi-Slava: il nero sostiene d5 sia con c6 sia con e6.',
+      8: 'Il bianco chiude l’alfiere in c1 ma consolida il centro.',
+      11: 'Il momento giusto per prendere: si guadagna un tempo sull’alfiere.',
+      13: 'La mossa Meran: si guadagna spazio e si prepara ...b4.',
+      15: 'La grande diagonale è la vita di tutti i pezzi neri.',
+      18: 'Il bianco rivendica il centro prima che il nero completi lo sviluppo.',
+      19: 'Contrattacco immediato: la partita diventa concreta.',
+    },
+  },
+  {
+    id: 'catalana',
+    name: 'Apertura Catalana',
+    eco: 'E04',
+    level: 3,
+    side: 'w',
+    family: 'Aperture chiuse · 1.d4',
+    summary:
+      'Un Gambetto di Donna con il fianchetto: l’alfiere in g2 esercita una pressione eterna sulla lunga diagonale.',
+    plan:
+      'Recuperare il pedone c4 con Qa4, Ne5 o a4 e poi giocare su e4/d5 con la pressione a lungo termine dell’alfiere in g2.',
+    line: 'd4 Nf6 c4 e6 g3 d5 Bg2 dxc4 Nf3 a6 O-O Nc6 e3 Bd7 Qe2 Bd6',
+    notes: {
+      4: 'La firma della Catalana: l’alfiere andrà in g2, non in e2 o d3.',
+      7: 'La Catalana Aperta: il nero prende il pedone e cerca di tenerlo.',
+      8: 'Il bianco non ha fretta: sviluppa e recupererà il pedone.',
+      9: 'Prepara ...b5 per sostenere il pedone in più.',
+      12: 'Rinforza d4 e apre la strada al recupero del pedone.',
+      14: 'La donna sostiene il recupero in c4 e collega le torri.',
+    },
+  },
+  {
+    id: 'jugoslavo',
+    name: 'Drago — Attacco Jugoslavo',
+    eco: 'B76',
+    level: 3,
+    side: 'b',
+    family: 'Siciliana',
+    summary:
+      '"Arrocca lungo e spingi h": la linea più violenta della teoria. Chi conosce meglio le mosse, vince.',
+    plan:
+      'Il bianco apre la colonna h con h4-h5 e scambia l’alfiere drago con Bh6; il nero sacrifica in c3 per aprire le linee verso il re bianco.',
+    line: 'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 g6 Be3 Bg7 f3 O-O Qd2 Nc6 O-O-O d5 exd5 Nxd5 Nxc6 bxc6 Bd4',
+    notes: {
+      16: 'Arrocco lungo: comincia la corsa fra i due attacchi.',
+      17: 'La rottura liberatoria del nero: bisogna giocarla al momento esatto.',
+      19: 'Il centro si apre proprio quando i re sono su ali opposte.',
+      21: 'La struttura nera si rovina, ma la colonna b punta al re bianco.',
+      22: 'Il bianco cerca lo scambio dell’alfiere drago, difensore chiave del re nero.',
+    },
+  },
+  {
+    id: 'mar-del-plata',
+    name: 'Est-Indiana — Mar del Plata',
+    eco: 'E97',
+    level: 3,
+    side: 'b',
+    family: 'Difese indiane · 1.d4',
+    summary:
+      'La variante più feroce dell’Est-Indiana: attacchi su ali opposte, senza possibilità di tornare indietro.',
+    plan:
+      'Il nero spinge ...f5-f4, ...g5-g4 e cerca il matto; il bianco apre la colonna c e penetra in c7. Non esistono mosse difensive: si va fino in fondo.',
+    line: 'd4 Nf6 c4 g6 Nc3 Bg7 e4 d6 Nf3 O-O Be2 e5 O-O Nc6 d5 Ne7 Ne1 Nd7 Nd3 f5',
+    notes: {
+      13: 'Provoca la chiusura del centro: è quello che il nero vuole.',
+      14: 'Il centro si blocca: da qui in poi si gioca solo sulle ali.',
+      15: 'Il cavallo lascia la strada al pedone f.',
+      16: 'Il cavallo va verso c2-b5 o sostiene f2 e la spinta c5.',
+      17: 'Sostiene ...f5 e libera la diagonale dell’alfiere in g7.',
+      19: 'Comincia l’assalto: seguiranno ...f4, ...g5, ...Rf6-h6.',
+    },
+  },
+  {
+    id: 'leningrado',
+    name: 'Difesa Olandese Variante Leningrado',
+    eco: 'A87',
+    level: 3,
+    side: 'b',
+    family: 'Aperture chiuse · 1.d4',
+    summary:
+      'Un’Est-Indiana con ...f5 al posto di ...d6: il nero gioca per l’attacco fin dalla prima mossa.',
+    plan:
+      'Manovra ...Qe8-h5 (o ...Qe8-g6) e rottura ...e5. Struttura ambiziosa ma con il re leggermente scoperto.',
+    line: 'd4 f5 g3 Nf6 Bg2 g6 Nf3 Bg7 O-O O-O c4 d6 Nc3 Qe8 d5 a5',
+    notes: {
+      1: 'Controlla e4 e prepara un attacco sull’ala di re: apertura molto combattiva.',
+      5: 'Il fianchetto rende il Leningrado diverso dalle altre Olandesi.',
+      11: 'Prepara la rottura ...e5, la chiave della struttura.',
+      13: 'La manovra tipica: la donna lascia la colonna d e punta verso h5.',
+      15: 'Fissa l’ala di donna e crea la casa c5 per i pezzi neri.',
+    },
+  },
+  {
+    id: 'samisch',
+    name: 'Est-Indiana — Variante Sämisch',
+    eco: 'E81',
+    level: 3,
+    side: 'w',
+    family: 'Difese indiane · 1.d4',
+    summary:
+      'Il bianco sostiene il centro con f3 e prepara un attacco diretto con Qd2, Bh6 e g4-h4.',
+    plan:
+      'Struttura granitica: f3 blinda e4 e toglie g4 ai cavalli neri. Poi arrocco lungo e assalto sull’ala di re.',
+    line: 'd4 Nf6 c4 g6 Nc3 Bg7 e4 d6 f3 O-O Be3 e5 d5 Nh5 Qd2 f5',
+    notes: {
+      8: 'La mossa Sämisch: blinda e4 e prepara g4, ma toglie f3 al cavallo.',
+      10: 'Sostiene d4 e prepara Qd2-Bh6 per scambiare l’alfiere nero.',
+      12: 'Chiude il centro: ora il bianco attacca sull’ala di donna o di re.',
+      13: 'Il nero libera immediatamente la spinta ...f5.',
+      14: 'Collega le torri e prepara l’arrocco lungo.',
+    },
+  },
+];
+
+const byLevel = (level) => OPENINGS.filter((o) => o.level === level);
+const byId = (id) => OPENINGS.find((o) => o.id === id) || null;
+const plies = (opening) => opening.line.trim().split(/\s+/);
+
+/* progressi */
+
+/*
+ * store.js — progressi e impostazioni salvati sul dispositivo (localStorage).
+ */
+
+const KEY = 'aperture-scacchi/v1';
+
+const DEFAULTS = {
+  progress: {},       // id apertura -> { stars, best, attempts, lastAt }
+  settings: { notation: 'it', sounds: true, showMoves: true },
+  lastOpening: null,
+  trainings: 0,
+};
+
+const EMPTY_PROGRESS = { stars: 0, best: 0, attempts: 0, lastAt: null };
+
+function read() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return structuredClone(DEFAULTS);
+    const parsed = JSON.parse(raw);
+    return {
+      ...structuredClone(DEFAULTS),
+      ...parsed,
+      settings: { ...DEFAULTS.settings, ...(parsed.settings || {}) },
+      progress: parsed.progress || {},
+    };
+  } catch {
+    return structuredClone(DEFAULTS);
+  }
+}
+
+function write(state) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+  } catch {
+    /* memoria piena o modalità privata: si continua senza salvare */
+  }
+  return state;
+}
+
+function getSettings() {
+  return read().settings;
+}
+
+function setSetting(key, value) {
+  const state = read();
+  state.settings[key] = value;
+  write(state);
+  return state.settings;
+}
+
+function getProgress(id) {
+  return { ...EMPTY_PROGRESS, ...(read().progress[id] || {}) };
+}
+
+function allProgress() {
+  return read().progress;
+}
+
+function getLastOpening() {
+  return read().lastOpening;
+}
+
+function setLastOpening(id) {
+  const state = read();
+  state.lastOpening = id;
+  write(state);
+}
+
+/** Registra il risultato di un allenamento tenendo il migliore. */
+function saveResult(id, { stars, accuracy }) {
+  const state = read();
+  const prev = { ...EMPTY_PROGRESS, ...(state.progress[id] || {}) };
+  state.progress[id] = {
+    stars: Math.max(prev.stars, stars),
+    best: Math.max(prev.best, accuracy),
+    attempts: prev.attempts + 1,
+    lastAt: Date.now(),
+  };
+  state.trainings += 1;
+  state.lastOpening = id;
+  write(state);
+  return state.progress[id];
+}
+
+/** Statistiche aggregate su un elenco di aperture. */
+function summarize(openings) {
+  const progress = read().progress;
+  const stars = openings.reduce((sum, o) => sum + (progress[o.id]?.stars || 0), 0);
+  const started = openings.filter((o) => progress[o.id]?.attempts).length;
+  const mastered = openings.filter((o) => (progress[o.id]?.stars || 0) === 3).length;
+  const max = openings.length * 3;
+  return {
+    stars,
+    max,
+    started,
+    mastered,
+    total: openings.length,
+    percent: max ? Math.round((stars / max) * 100) : 0,
+  };
+}
+
+function totalTrainings() {
+  return read().trainings;
+}
+
+function reset() {
+  const state = read();
+  write({ ...structuredClone(DEFAULTS), settings: state.settings });
+}
+
+
+const Store = {
+  getSettings, setSetting, getProgress, allProgress, getLastOpening,
+  setLastOpening, saveResult, summarize, totalTrainings, reset,
+};
+
+/* scacchiera */
+
+/*
+ * board.js — scacchiera interattiva (tocca il pezzo, tocca la destinazione)
+ */
+
+// Il selettore di variante testuale (U+FE0E) evita che iOS renda i pezzi come emoji.
+const GLYPH = { K: '♚︎', Q: '♛︎', R: '♜︎', B: '♝︎', N: '♞︎', P: '♟︎' };
+
+class Board {
+  constructor({ onMove } = {}) {
+    this.el = document.createElement('div');
+    this.el.className = 'board';
+    this.el.setAttribute('role', 'grid');
+    this.el.setAttribute('aria-label', 'Scacchiera');
+
+    this.onMove = onMove || (() => {});
+    this.orientation = 'w';
+    this.state = null;
+    this.lastMove = null;
+    this.interactive = false;
+    this.selected = null;
+    this.candidates = [];
+    this.squares = [];
+    this.pieces = [];
+
+    this.buildSquares();
+    this.el.addEventListener('click', (e) => {
+      const sq = e.target.closest('.sq');
+      if (sq) this.handleTap(Number(sq.dataset.i));
+    });
+  }
+
+  buildSquares() {
+    this.el.textContent = '';
+    this.squares = new Array(64);
+    this.pieces = new Array(64);
+
+    const order = [];
+    for (let i = 0; i < 64; i++) order.push(i);
+    if (this.orientation === 'b') order.reverse();
+
+    for (const i of order) {
+      const r = rowOf(i);
+      const c = colOf(i);
+      const sq = document.createElement('div');
+      sq.className = `sq${(r + c) % 2 ? ' sq--dark' : ''}`;
+      sq.dataset.i = String(i);
+
+      const piece = document.createElement('span');
+      piece.className = 'piece';
+      sq.appendChild(piece);
+      this.pieces[i] = piece;
+
+      const lastRow = this.orientation === 'w' ? 7 : 0;
+      const firstCol = this.orientation === 'w' ? 0 : 7;
+      if (r === lastRow) sq.appendChild(coord('file', FILES[c]));
+      if (c === firstCol) sq.appendChild(coord('rank', String(8 - r)));
+
+      this.el.appendChild(sq);
+      this.squares[i] = sq;
+    }
+  }
+
+  setOrientation(color) {
+    if (color === this.orientation) return;
+    this.orientation = color;
+    this.buildSquares();
+    this.render();
+  }
+
+  flip() {
+    this.setOrientation(this.orientation === 'w' ? 'b' : 'w');
+  }
+
+  setPosition(state, lastMove = null) {
+    this.state = state;
+    this.lastMove = lastMove;
+    this.selected = null;
+    this.candidates = [];
+    this.render();
+  }
+
+  setInteractive(on) {
+    this.interactive = on;
+    this.el.classList.toggle('board--locked', !on);
+    if (!on) {
+      this.selected = null;
+      this.candidates = [];
+      this.render();
+    }
+  }
+
+  render() {
+    if (!this.state) return;
+    const check = inCheck(this.state) ? kingSquare(this.state.board, this.state.turn) : -1;
+
+    for (let i = 0; i < 64; i++) {
+      const sq = this.squares[i];
+      const p = this.state.board[i];
+      const span = this.pieces[i];
+
+      if (p) {
+        span.textContent = GLYPH[p.toUpperCase()];
+        span.className = `piece piece--${colorOf(p)}`;
+      } else {
+        span.textContent = '';
+        span.className = 'piece';
+      }
+
+      sq.classList.toggle('sq--sel', this.selected === i);
+      sq.classList.toggle('sq--last', !!this.lastMove && (this.lastMove.from === i || this.lastMove.to === i));
+      sq.classList.toggle('sq--check', check === i);
+
+      const dest = this.candidates.find((m) => m.to === i);
+      sq.classList.toggle('sq--dest', !!dest);
+      sq.classList.toggle('sq--capture', !!dest && (!!dest.capture || dest.enPassant));
+    }
+  }
+
+  handleTap(i) {
+    if (!this.interactive || !this.state) return;
+
+    if (this.selected !== null) {
+      const moves = this.candidates.filter((m) => m.to === i);
+      if (moves.length) {
+        // Nelle aperture non si promuove mai: in caso di promozione si sceglie la donna.
+        const move = moves.find((m) => !m.promo || m.promo.toUpperCase() === 'Q') || moves[0];
+        this.selected = null;
+        this.candidates = [];
+        this.render();
+        this.onMove(move);
+        return;
+      }
+      if (this.selected === i) {
+        this.selected = null;
+        this.candidates = [];
+        this.render();
+        return;
+      }
+    }
+
+    const piece = this.state.board[i];
+    if (piece && colorOf(piece) === this.state.turn) {
+      const moves = legalMoves(this.state).filter((m) => m.from === i);
+      this.selected = moves.length ? i : null;
+      this.candidates = moves;
+    } else {
+      this.selected = null;
+      this.candidates = [];
+    }
+    this.render();
+  }
+
+  /** Effetto temporaneo su una casa (`good`, `wrong`, `hint`). */
+  flash(square, kind, ms = 600) {
+    const sq = this.squares[square];
+    if (!sq) return;
+    const cls = `sq--${kind}`;
+    sq.classList.remove(cls);
+    void sq.offsetWidth; // forza il restart dell'animazione
+    sq.classList.add(cls);
+    if (ms) window.setTimeout(() => sq.classList.remove(cls), ms);
+  }
+
+  clearFlash(kind) {
+    const cls = `sq--${kind}`;
+    this.squares.forEach((sq) => sq.classList.remove(cls));
+  }
+}
+
+function coord(kind, text) {
+  const el = document.createElement('span');
+  el.className = `sq__coord sq__coord--${kind}`;
+  el.textContent = text;
+  return el;
+}
+
+/* applicazione */
+
+/*
+ * app.js — navigazione, modalità "Impara" e modalità "Allena".
+ */
+
+/* ------------------------------- utilità ------------------------------- */
+
+const PIECE_IT = { P: 'il pedone', N: 'il cavallo', B: 'l’alfiere', R: 'la torre', Q: 'la donna', K: 'il re' };
+const SAN_IT = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
+const COLOR_IT = { w: 'Bianco', b: 'Nero' };
+
+const app = document.getElementById('view');
+const barBack = document.getElementById('bar-back');
+const barTitle = document.getElementById('bar-title');
+const barAction = document.getElementById('bar-action');
+
+const board = new Board({ onMove: (move) => session && session.onMove(move) });
+
+let session = null;      // allenamento in corso
+let timers = [];         // timer da ripulire al cambio schermata
+
+const h = (html) => {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html.trim();
+  return tpl.content.firstElementChild;
+};
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const later = (fn, ms) => {
+  const id = window.setTimeout(fn, ms);
+  timers.push(id);
+  return id;
+};
+
+const clearTimers = () => {
+  timers.forEach(window.clearTimeout);
+  timers.forEach(window.clearInterval);
+  timers = [];
+};
+
+/** Traduce la notazione inglese in italiana, se richiesto dalle impostazioni. */
+function san(text) {
+  if (Store.getSettings().notation !== 'it') return text;
+  return text.replace(/^([KQRBN])/, (_, l) => SAN_IT[l]).replace(/=([QRBN])/, (_, l) => `=${SAN_IT[l]}`);
+}
+
+function sanChip(index, text) {
+  const n = moveNumber(index);
+  return index % 2 === 0 ? `${n}. ${san(text)}` : `${n}… ${san(text)}`;
+}
+
+function starsHtml(count, total = 3) {
+  return Array.from({ length: total }, (_, i) => `<span class="star${i < count ? ' star--on' : ''}">★</span>`).join('');
+}
+
+function line(opening) {
+  return playLine(plies(opening));
+}
+
+function userPlyIndexes(opening, total) {
+  const out = [];
+  for (let i = 0; i < total; i++) if ((i % 2 === 0 ? 'w' : 'b') === opening.side) out.push(i);
+  return out;
+}
+
+/* --------------------------------- audio -------------------------------- */
+
+let audio = null;
+
+function beep(kind) {
+  if (!Store.getSettings().sounds) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audio = audio || new Ctx();
+    if (audio.state === 'suspended') audio.resume();
+    const notes = { move: [520], ok: [660, 880], err: [190, 150], win: [660, 880, 1180] }[kind] || [440];
+    notes.forEach((freq, i) => {
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = kind === 'err' ? 'sawtooth' : 'sine';
+      osc.frequency.value = freq;
+      const start = audio.currentTime + i * 0.09;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(kind === 'err' ? 0.09 : 0.14, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(start);
+      osc.stop(start + 0.18);
+    });
+  } catch {
+    /* audio non disponibile: si prosegue in silenzio */
+  }
+}
+
+/* ------------------------------- barra alta ----------------------------- */
+
+function setBar({ title, back = null, action = null }) {
+  barTitle.textContent = title;
+  if (back) {
+    barBack.hidden = false;
+    barBack.onclick = () => { location.hash = back; };
+  } else {
+    barBack.hidden = true;
+    barBack.onclick = null;
+  }
+  if (action) {
+    barAction.hidden = false;
+    barAction.textContent = action.label;
+    barAction.setAttribute('aria-label', action.aria || action.label);
+    barAction.onclick = action.onClick;
+  } else {
+    barAction.hidden = true;
+    barAction.onclick = null;
+  }
+}
+
+/* ------------------------------- schermate ------------------------------ */
+
+function renderHome() {
+  const all = Store.summarize(OPENINGS);
+  const last = Store.getLastOpening() && byId(Store.getLastOpening());
+
+  setBar({ title: 'Aperture di Scacchi', action: { label: '⚙︎', aria: 'Impostazioni', onClick: () => { location.hash = '#/impostazioni'; } } });
+
+  const view = h(`<div class="stack">
+    <div class="hero">
+      <h1>Impara le aperture</h1>
+      <p>Studia le linee principali mossa dopo mossa, poi giocale a memoria sulla scacchiera. Tre livelli, ${OPENINGS.length} aperture.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat__value stat__value--gold">${all.stars}</div><div class="stat__label">Stelle</div></div>
+      <div class="stat"><div class="stat__value">${all.mastered}</div><div class="stat__label">Padroneggiate</div></div>
+      <div class="stat"><div class="stat__value">${all.percent}%</div><div class="stat__label">Completato</div></div>
+    </div>
+    ${last ? `<button class="card" data-go="#/apertura/${last.id}">
+      <div class="row"><span class="tag tag--gold">Riprendi</span><span class="spacer"></span><span class="level-card__chevron">›</span></div>
+      <div class="level-card__name" style="margin-top:8px">${esc(last.name)}</div>
+      <div class="opening-card__meta">${esc(last.family)}</div>
+    </button>` : ''}
+    <div class="section-title">Livelli</div>
+    <div class="stack" id="levels"></div>
+    <p class="hint-text">Suggerimento: da Safari tocca <strong>Condividi ▸ Aggiungi a Home</strong> per usare l’app a schermo intero, anche offline.</p>
+  </div>`);
+
+  const levels = view.querySelector('#levels');
+  for (const level of LEVELS) {
+    const stats = Store.summarize(byLevel(level.id));
+    levels.appendChild(h(`<button class="card level-card" data-go="#/livello/${level.id}">
+      <div class="level-card__badge">${level.icon}</div>
+      <div class="level-card__body">
+        <div class="level-card__name">${esc(level.name)}</div>
+        <div class="level-card__tag">${esc(level.tagline)}</div>
+        <div class="bar"><div class="bar__fill" style="width:${stats.percent}%"></div></div>
+        <div class="bar__label">${stats.stars}/${stats.max} stelle · ${stats.total} aperture</div>
+      </div>
+      <div class="level-card__chevron">›</div>
+    </button>`));
+  }
+
+  mount(view);
+}
+
+function renderLevel(id) {
+  const level = LEVELS.find((l) => l.id === id);
+  if (!level) return renderHome();
+
+  const openings = byLevel(level.id);
+  const stats = Store.summarize(openings);
+  setBar({ title: level.name, back: '#/' });
+
+  const view = h(`<div class="stack">
+    <div class="hero">
+      <h1>${esc(level.name)}</h1>
+      <p>${esc(level.description)}</p>
+      <div class="bar"><div class="bar__fill" style="width:${stats.percent}%"></div></div>
+      <div class="bar__label">${stats.stars}/${stats.max} stelle · ${stats.mastered} su ${stats.total} padroneggiate</div>
+    </div>
+    <button class="btn btn--primary" data-go="#/allenamento/${level.id}">⚡ Allenamento del livello</button>
+    <div class="section-title">Aperture</div>
+    <div class="stack" id="list"></div>
+  </div>`);
+
+  const list = view.querySelector('#list');
+  for (const opening of openings) {
+    const p = Store.getProgress(opening.id);
+    list.appendChild(h(`<button class="card opening-card" data-go="#/apertura/${opening.id}">
+      <div class="opening-card__top">
+        <span class="opening-card__name">${esc(opening.name)}</span>
+        <span class="tag">${esc(opening.eco)}</span>
+      </div>
+      <div class="opening-card__meta">${esc(opening.family)} · si gioca con il <strong>${COLOR_IT[opening.side]}</strong></div>
+      <div class="row">
+        <div class="stars">${starsHtml(p.stars)}</div>
+        <span class="spacer"></span>
+        <span class="tag tag--${opening.side}">${p.attempts ? `${p.best}% al meglio` : 'da iniziare'}</span>
+      </div>
+    </button>`));
+  }
+
+  mount(view);
+}
+
+/* ------------------------------ modalità studio ------------------------- */
+
+function renderStudy(id) {
+  const opening = byId(id);
+  if (!opening) return renderHome();
+
+  Store.setLastOpening(opening.id);
+  const { states, moves, sans } = line(opening);
+  const progress = Store.getProgress(opening.id);
+  let ply = 0;
+  let playing = null;
+
+  setBar({ title: opening.name, back: `#/livello/${opening.level}`, action: { label: '⇅', aria: 'Gira la scacchiera', onClick: () => board.flip() } });
+
+  const view = h(`<div class="stack">
+    <div class="opening-head">
+      <h2>${esc(opening.name)}</h2>
+      <p>${esc(opening.family)} · ${esc(opening.eco)} · giochi con il ${COLOR_IT[opening.side]}</p>
+      <div class="row" style="margin-top:8px">
+        <div class="stars">${starsHtml(progress.stars)}</div>
+        <span class="spacer"></span>
+        <span class="tag">${progress.attempts ? `record ${progress.best}%` : 'mai allenata'}</span>
+      </div>
+    </div>
+    <div class="segmented" role="tablist">
+      <button role="tab" aria-selected="true">Impara</button>
+      <button role="tab" aria-selected="false" data-go="#/apertura/${opening.id}/allena">Allena</button>
+    </div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="controls">
+      <button id="first" aria-label="Inizio">⏮</button>
+      <button id="prev" aria-label="Mossa precedente">‹</button>
+      <button id="play" aria-label="Riproduci la variante">▶</button>
+      <button id="next" aria-label="Mossa successiva">›</button>
+      <button id="last" aria-label="Fine">⏭</button>
+    </div>
+    <div class="moves" id="moves"></div>
+    <div class="note" id="note"></div>
+    <div class="note" style="border-left-color:var(--blue)">
+      <div class="note__label" style="color:var(--blue)">Piano di gioco</div>
+      ${esc(opening.plan)}
+    </div>
+    <button class="btn btn--primary" data-go="#/apertura/${opening.id}/allena">Allena questa apertura</button>
+  </div>`);
+
+  const movesEl = view.querySelector('#moves');
+  const noteEl = view.querySelector('#note');
+  const playBtn = view.querySelector('#play');
+
+  sans.forEach((text, i) => {
+    const chip = h(`<button class="move-chip">${esc(sanChip(i, text))}</button>`);
+    chip.onclick = () => { stop(); goTo(i + 1); };
+    movesEl.appendChild(chip);
+  });
+
+  function goTo(target) {
+    ply = Math.max(0, Math.min(sans.length, target));
+    board.setPosition(states[ply], ply > 0 ? moves[ply - 1] : null);
+
+    Array.from(movesEl.children).forEach((chip, i) => {
+      chip.classList.toggle('move-chip--done', i < ply);
+      chip.classList.toggle('move-chip--current', i === ply - 1);
+    });
+    const current = movesEl.children[ply - 1];
+    if (current) current.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+
+    const note = ply > 0 ? opening.notes?.[ply - 1] : null;
+    if (ply === 0) {
+      noteEl.innerHTML = `<div class="note__label">L’idea</div>${esc(opening.summary)}`;
+    } else {
+      const label = `${sanChip(ply - 1, sans[ply - 1])} · ${COLOR_IT[(ply - 1) % 2 === 0 ? 'w' : 'b']}`;
+      noteEl.innerHTML = `<div class="note__label">${esc(label)}</div>${esc(note || 'Prosegui: la variante continua.')}`;
+    }
+
+    view.querySelector('#first').disabled = ply === 0;
+    view.querySelector('#prev').disabled = ply === 0;
+    view.querySelector('#next').disabled = ply === sans.length;
+    view.querySelector('#last').disabled = ply === sans.length;
+  }
+
+  function stop() {
+    if (playing) window.clearInterval(playing);
+    playing = null;
+    playBtn.textContent = '▶';
+  }
+
+  playBtn.onclick = () => {
+    if (playing) return stop();
+    if (ply === sans.length) goTo(0);
+    playBtn.textContent = '⏸';
+    playing = window.setInterval(() => {
+      if (ply >= sans.length) return stop();
+      goTo(ply + 1);
+      beep('move');
+    }, 1100);
+    timers.push(playing);
+  };
+
+  view.querySelector('#first').onclick = () => { stop(); goTo(0); };
+  view.querySelector('#prev').onclick = () => { stop(); goTo(ply - 1); };
+  view.querySelector('#next').onclick = () => { stop(); goTo(ply + 1); };
+  view.querySelector('#last').onclick = () => { stop(); goTo(sans.length); };
+
+  board.setInteractive(false);
+  board.setOrientation(opening.side);
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  goTo(0);
+}
+
+/* ---------------------------- modalità allenamento ---------------------- */
+
+function renderTraining(queue, backHash, title) {
+  const openings = queue.map(byId).filter(Boolean);
+  if (!openings.length) return renderHome();
+
+  setBar({ title, back: backHash, action: { label: '⇅', aria: 'Gira la scacchiera', onClick: () => board.flip() } });
+
+  const results = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <div class="moves" id="moves"></div>
+    <div class="btn-row">
+      <button class="btn" id="hint">💡 Aiuto</button>
+      <button class="btn" id="reveal">👁 Mostra</button>
+    </div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci dall’allenamento</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptDot = promptEl.querySelector('.prompt__dot');
+  const promptText = promptEl.querySelector('.prompt__text');
+  const movesEl = view.querySelector('#moves');
+
+  function setPrompt(text, kind = '') {
+    promptEl.className = `prompt${kind ? ` prompt--${kind}` : ''}`;
+    promptText.innerHTML = text;
+  }
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    current.userPlies.forEach((plyIndex, i) => {
+      const span = document.createElement('span');
+      const state = current.marks[i];
+      if (state) span.className = state;
+      else if (plyIndex === current.ply) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function drawMoves() {
+    movesEl.hidden = !Store.getSettings().showMoves;
+    movesEl.textContent = '';
+    current.sans.forEach((text, i) => {
+      const done = i < current.ply;
+      const chip = h(`<span class="move-chip ${done ? 'move-chip--done' : 'move-chip--hidden'}">${
+        esc(done ? sanChip(i, text) : `${moveNumber(i)}${i % 2 === 0 ? '.' : '…'} ???`)
+      }</span>`);
+      movesEl.appendChild(chip);
+    });
+    const last = movesEl.children[Math.max(0, current.ply - 1)];
+    if (last) last.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
+  function loadOpening(index) {
+    const opening = openings[index];
+    const { states, moves, sans } = line(opening);
+    current = {
+      opening,
+      index,
+      states,
+      moves,
+      sans,
+      ply: 0,
+      userPlies: userPlyIndexes(opening, sans.length),
+      marks: [],
+      attempts: 0,
+      hints: 0,
+      failed: false,
+      start: Date.now(),
+    };
+    current.marks = current.userPlies.map(() => null);
+
+    Store.setLastOpening(opening.id);
+    headEl.innerHTML = `<h2>${esc(opening.name)}</h2><p>${
+      openings.length > 1 ? `Apertura ${index + 1} di ${openings.length} · ` : ''
+    }giochi con il ${COLOR_IT[opening.side]}</p>`;
+    promptDot.className = `prompt__dot prompt__dot--${opening.side}`;
+
+    board.setOrientation(opening.side);
+    board.setPosition(states[0], null);
+    drawProgress();
+    drawMoves();
+    step();
+  }
+
+  function step() {
+    board.clearFlash('hint');
+    if (current.ply >= current.moves.length) return finish();
+
+    const turn = current.ply % 2 === 0 ? 'w' : 'b';
+    if (turn !== current.opening.side) {
+      board.setInteractive(false);
+      setPrompt(`Il ${COLOR_IT[turn]} risponde…`);
+      later(() => {
+        playMove(current.moves[current.ply]);
+        beep('move');
+        step();
+      }, 650);
+      return;
+    }
+
+    board.setInteractive(true);
+    current.failed = false;
+    current.attempts = 0;
+    const n = moveNumber(current.ply);
+    setPrompt(`Tocca a te: <strong>mossa ${n} del ${COLOR_IT[turn]}</strong>. Qual è la continuazione?`);
+  }
+
+  function playMove(move) {
+    current.ply += 1;
+    board.setPosition(current.states[current.ply], move);
+    drawProgress();
+    drawMoves();
+  }
+
+  function markCurrent(value) {
+    const i = current.userPlies.indexOf(current.ply);
+    if (i >= 0 && current.marks[i] !== 'err') current.marks[i] = value;
+  }
+
+  function onMove(move) {
+    const expected = current.moves[current.ply];
+    if (!expected) return;
+
+    if (sameMove(move, expected)) {
+      // Si blocca subito la scacchiera: durante il riscontro e la risposta
+      // avversaria nessun tocco deve poter registrare un'altra mossa.
+      board.setInteractive(false);
+      markCurrent(current.failed ? 'err' : 'ok');
+      board.flash(move.to, 'good', 700);
+      beep('ok');
+      const text = sanChip(current.ply, current.sans[current.ply]);
+      playMove(expected);
+      setPrompt(`<strong>${esc(text)}</strong> — esatto!`, 'good');
+      later(step, 520);
+      return;
+    }
+
+    current.attempts += 1;
+    current.failed = true;
+    markCurrent('err');
+    drawProgress();
+    board.flash(move.to, 'wrong', 500);
+    beep('err');
+
+    if (current.attempts === 1) {
+      setPrompt('Non è la mossa della variante. Riprova.', 'bad');
+    } else {
+      const piece = PIECE_IT[expected.piece.toUpperCase()];
+      board.flash(expected.from, 'hint', 2600);
+      setPrompt(`Non ancora. Muovi <strong>${piece}</strong> che si trova in ${esc(nameOf(expected.from))}.`, 'bad');
+    }
+  }
+
+  function finish() {
+    board.setInteractive(false);
+    const total = current.userPlies.length;
+    const ok = current.marks.filter((m) => m === 'ok').length;
+    const accuracy = Math.round((ok / total) * 100);
+    const stars = accuracy === 100 && current.hints === 0 ? 3 : accuracy >= 80 ? 2 : 1;
+    const seconds = Math.round((Date.now() - current.start) / 1000);
+
+    const saved = Store.saveResult(current.opening.id, { stars, accuracy });
+    results.push({ opening: current.opening, accuracy, stars, seconds });
+    beep(stars === 3 ? 'win' : 'ok');
+
+    const isLast = current.index === openings.length - 1;
+    renderResult({ accuracy, stars, seconds, ok, total, saved, isLast, index: current.index });
+  }
+
+  function renderResult({ accuracy, stars, seconds, ok, total, saved, isLast, index }) {
+    const titles = { 3: 'Perfetto!', 2: 'Ci siamo quasi', 1: 'Apertura completata' };
+    const panel = h(`<div class="stack">
+      <div class="result">
+        <div class="result__stars">${starsHtml(stars)}</div>
+        <div class="result__title">${titles[stars]}</div>
+        <div class="result__sub">${esc(current.opening.name)}<br>${ok} mosse su ${total} indovinate al primo colpo${
+          current.hints ? ` · ${current.hints} aiuti usati` : ''
+        }</div>
+        <div class="result__grid">
+          <div class="stat"><div class="stat__value stat__value--gold">${accuracy}%</div><div class="stat__label">Precisione</div></div>
+          <div class="stat"><div class="stat__value">${seconds}s</div><div class="stat__label">Tempo</div></div>
+          <div class="stat"><div class="stat__value">${saved.best}%</div><div class="stat__label">Record</div></div>
+        </div>
+      </div>
+      ${isLast ? '' : '<button class="btn btn--primary" id="next-op">Prossima apertura ›</button>'}
+      <button class="btn ${isLast ? 'btn--primary' : ''}" id="again">↻ Ripeti questa apertura</button>
+      <button class="btn btn--ghost" data-go="#/apertura/${current.opening.id}">Rivedi la variante</button>
+      <button class="btn btn--ghost" data-go="${backHash}">Torna indietro</button>
+    </div>`);
+
+    if (isLast && results.length > 1) {
+      const totalStars = results.reduce((sum, r) => sum + r.stars, 0);
+      const avg = Math.round(results.reduce((sum, r) => sum + r.accuracy, 0) / results.length);
+      panel.insertBefore(
+        h(`<div class="note"><div class="note__label">Sessione completata</div>${results.length} aperture allenate · precisione media ${avg}% · ${totalStars} stelle in questa sessione.</div>`),
+        panel.children[1] || null,
+      );
+    }
+
+    mount(panel);
+    const next = panel.querySelector('#next-op');
+    if (next) next.onclick = () => { mount(view); attachBoard(); loadOpening(index + 1); };
+    panel.querySelector('#again').onclick = () => { mount(view); attachBoard(); loadOpening(index); };
+  }
+
+  function attachBoard() {
+    view.querySelector('#board-host').appendChild(board.el);
+  }
+
+  view.querySelector('#hint').onclick = () => {
+    if (!board.interactive) return;
+    const expected = current.moves[current.ply];
+    if (!expected) return;
+    current.hints += 1;
+    current.failed = true;
+    markCurrent('err');
+    drawProgress();
+    board.flash(expected.from, 'hint', 2600);
+    setPrompt(`Muovi <strong>${PIECE_IT[expected.piece.toUpperCase()]}</strong> che si trova in ${esc(nameOf(expected.from))}.`);
+  };
+
+  view.querySelector('#reveal').onclick = () => {
+    if (!board.interactive) return;
+    const expected = current.moves[current.ply];
+    if (!expected) return;
+    current.hints += 1;
+    markCurrent('err');
+    const text = sanChip(current.ply, current.sans[current.ply]);
+    playMove(expected);
+    setPrompt(`La mossa era <strong>${esc(text)}</strong>. Memorizzala!`, 'bad');
+    later(step, 900);
+  };
+
+  view.querySelector('#quit').onclick = () => { location.hash = backHash; };
+
+  session = { onMove: (move) => onMove(move) };
+  mount(view);
+  attachBoard();
+  loadOpening(0);
+}
+
+/* ------------------------------ impostazioni ---------------------------- */
+
+function renderSettings() {
+  const settings = Store.getSettings();
+  setBar({ title: 'Impostazioni', back: '#/' });
+
+  const view = h(`<div class="stack">
+    <div class="section-title">Preferenze</div>
+    <div class="setting">
+      <div class="setting__label">Notazione italiana
+        <div class="setting__hint">R, D, T, A, C invece di K, Q, R, B, N</div>
+      </div>
+      <button class="switch" id="notation" role="switch" aria-checked="${settings.notation === 'it'}" aria-label="Notazione italiana"></button>
+    </div>
+    <div class="setting">
+      <div class="setting__label">Suoni
+        <div class="setting__hint">Un segnale per mosse giuste e sbagliate</div>
+      </div>
+      <button class="switch" id="sounds" role="switch" aria-checked="${settings.sounds}" aria-label="Suoni"></button>
+    </div>
+    <div class="setting">
+      <div class="setting__label">Elenco mosse durante l’allenamento
+        <div class="setting__hint">Mostra le mosse già giocate sotto la scacchiera</div>
+      </div>
+      <button class="switch" id="showMoves" role="switch" aria-checked="${settings.showMoves}" aria-label="Elenco mosse"></button>
+    </div>
+    <div class="section-title">Dati</div>
+    <div class="note">
+      Allenamenti completati: <strong>${Store.totalTrainings()}</strong> · stelle totali: <strong>${Store.summarize(OPENINGS).stars}</strong>.
+      I progressi restano su questo dispositivo.
+    </div>
+    <button class="btn btn--ghost btn--danger" id="reset">Azzera i progressi</button>
+    <p class="hint-text">Aperture: ${OPENINGS.length} su ${LEVELS.length} livelli. Notazione, commenti e piani sono in italiano.</p>
+  </div>`);
+
+  const toggle = (id, read, write) => {
+    const el = view.querySelector(`#${id}`);
+    el.onclick = () => {
+      const next = !read();
+      write(next);
+      el.setAttribute('aria-checked', String(next));
+      beep('move');
+    };
+  };
+
+  toggle('notation', () => Store.getSettings().notation === 'it', (v) => Store.setSetting('notation', v ? 'it' : 'en'));
+  toggle('sounds', () => Store.getSettings().sounds, (v) => Store.setSetting('sounds', v));
+  toggle('showMoves', () => Store.getSettings().showMoves, (v) => Store.setSetting('showMoves', v));
+
+  view.querySelector('#reset').onclick = () => {
+    if (window.confirm('Azzerare stelle e statistiche di tutte le aperture?')) {
+      Store.reset();
+      renderSettings();
+    }
+  };
+
+  mount(view);
+}
+
+/* -------------------------------- routing ------------------------------- */
+
+function mount(node) {
+  app.textContent = '';
+  app.appendChild(node);
+  window.scrollTo(0, 0);
+}
+
+function pickQueue(level) {
+  const openings = byLevel(level);
+  const sorted = [...openings]
+    .map((o) => ({ o, p: Store.getProgress(o.id), r: Math.random() }))
+    .sort((a, b) => a.p.stars - b.p.stars || a.r - b.r);
+  return sorted.slice(0, Math.min(4, sorted.length)).map((x) => x.o.id);
+}
+
+function route() {
+  clearTimers();
+  session = null;
+  board.setInteractive(false);
+
+  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const [screen, param, sub] = parts;
+
+  if (screen === 'livello') return renderLevel(Number(param));
+  if (screen === 'apertura' && byId(param)) {
+    if (sub === 'allena') {
+      const opening = byId(param);
+      return renderTraining([param], `#/apertura/${param}`, opening.name);
+    }
+    return renderStudy(param);
+  }
+  if (screen === 'allenamento') {
+    const level = LEVELS.find((l) => l.id === Number(param));
+    if (level) return renderTraining(pickQueue(level.id), `#/livello/${level.id}`, `Allenamento ${level.name}`);
+  }
+  if (screen === 'impostazioni') return renderSettings();
+  return renderHome();
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target.closest('[data-go]');
+  if (target) {
+    e.preventDefault();
+    location.hash = target.dataset.go;
+  }
+});
+
+window.addEventListener('hashchange', route);
+route();
+</script>
