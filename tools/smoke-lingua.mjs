@@ -208,6 +208,8 @@ check('backup esportabile', (await page.locator('[data-act="export"]').count()) 
 check('si può scegliere che cosa allenare', (await page.locator('[data-dir]').count()) === 2);
 check('parlare è la scelta di partenza', (await page.locator('[data-dir="produce"].chip-card--on').count()) === 1);
 check('la velocità della lingua è spiegata', (await page.textContent('section')).includes('di questa velocità'));
+check('il tono è regolabile', (await page.locator('[data-set="ttsPitch"]').count()) === 1);
+check('l’ascolto parola per parola è spiegato', (await page.textContent('section')).includes('Parola per parola'));
 const voiceUi = await page.textContent('section');
 check('la scelta della voce è offerta o spiegata', (await page.locator('[data-voice]').count()) === 1
   || voiceUi.includes('voci installate') || voiceUi.includes('Nessuna voce'), voiceUi.slice(0, 80));
@@ -257,8 +259,9 @@ await page.fill('.input', 'Wie heisst du');
 await tap('[data-act="check"]');
 check('accenti e punteggiatura perdonati', (await page.locator('.check--ok').count()) === 1);
 check('parole tutte confermate', (await page.locator('.w--ok').count()) === 3);
-check('ascolto normale e scandito', (await page.locator('[data-act="say"]').count()) === 1
-  && (await page.locator('[data-act="slow"]').count()) === 1);
+check('ascolto intero e parola per parola', (await page.locator('[data-act="say"]').count()) === 1
+  && (await page.locator('[data-act="guided"]').count()) === 1);
+check('ogni parola è toccabile', (await page.locator('.solution [data-tok]').count()) === 3);
 check('la frase giusta viene ripetuta', (await page.textContent('.solution')).includes('Wie heißt du?'));
 check('voto automatico su Bene', (await page.textContent('[data-act="next"]')).includes('Bene'));
 await shot('13-produci');
@@ -283,6 +286,8 @@ check('un solo buco sulla carta nuova', (await page.locator('[data-blank]').coun
 await page.fill('[data-blank="0"]', 'heisst');
 await tap('[data-act="check"]');
 check('buco riempito correttamente', (await page.locator('.slot--ok').count()) === 1);
+check('anche il cloze diventa toccabile parola per parola', (await page.locator('.target--cloze [data-tok]').count()) === 3);
+check('una sola riga toccabile per schermata', (await page.locator('[data-tok]').count()) === 3);
 await shot('15-completa');
 
 console.log('\n▸ Svizzero tedesco');
@@ -340,6 +345,9 @@ const pron = await page.textContent('.bridge');
 // l'accento arriva come segno combinante: si confronta in forma composta
 check('riga di pronuncia mostrata', pron.includes('Pronuncia') && pron.normalize('NFC').includes('znáiu'), pron);
 check('accento tonico visibile nella soluzione', (await page.textContent('.solution')).includes('\u0301'));
+check('le parole russe si possono toccare una a una', (await page.locator('.solution [data-tok]').count()) === 3);
+await page.click('.solution [data-tok="1"]');
+check('toccare una parola non rompe niente', errors.length === 0, errors.join(' | '));
 await shot('17-russo');
 
 console.log('\n▸ Taratura del modello');

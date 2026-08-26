@@ -19,6 +19,7 @@ const DEFAULTS = {
     retention: 0.9,
     tts: true,
     ttsRate: 0.85,
+    ttsPitch: 1,
     autoGrade: true,
     speechInput: true,
     voices: {},       // lingua -> voce scelta a mano fra quelle del dispositivo

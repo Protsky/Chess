@@ -91,25 +91,90 @@ if (window.speechSynthesis) {
 /*
  * La velocità non è la stessa per tutte le lingue: il russo letto a ritmo
  * pieno, con le sue vocali ridotte, è illeggibile per chi comincia. Ogni
- * lingua ha il suo moltiplicatore, e la lettura lenta separa le parole con
- * una virgola per costringere la sintesi a staccarle una dall'altra.
+ * lingua ha il suo moltiplicatore, sopra quello scelto nelle impostazioni.
  */
+function utterance(text, { slow = false } = {}) {
+  const cfg = settings();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = lang.locale;
+  u.rate = Math.min(1.6, Math.max(0.3, cfg.ttsRate * (lang.rate ?? 1) * (slow ? 0.7 : 1)));
+  u.pitch = cfg.ttsPitch ?? 1;
+  const voice = Voices.pick(voices, lang.locale, cfg.voices?.[lang.code]);
+  if (voice) u.voice = voice;
+  return u;
+}
+
 function speak(text, { force = false, slow = false } = {}) {
   if (!window.speechSynthesis || !lang) return;
   if (!force && !settings().tts) return;
   try {
-    window.speechSynthesis.cancel();
-    const spoken = slow ? text.split(/\s+/).filter(Boolean).join(', ') : text;
-    const u = new SpeechSynthesisUtterance(spoken);
-    u.lang = lang.locale;
-    u.rate = Math.min(1.6, Math.max(0.3, settings().ttsRate * (lang.rate ?? 1) * (slow ? 0.65 : 1)));
-    const voice = Voices.pick(voices, lang.locale, settings().voices?.[lang.code]);
-    if (voice) u.voice = voice;
-    window.speechSynthesis.speak(u);
+    stopSpeaking();
+    window.speechSynthesis.speak(utterance(text, { slow }));
   } catch {
     /* qualche browser blocca la sintesi finché non c'è un tocco: pazienza */
   }
 }
+
+let guided = null;
+
+function stopSpeaking() {
+  if (guided) {
+    clearTimeout(guided.timer);
+    guided.tokens.forEach((el) => el.classList.remove('tok--on'));
+    guided = null;
+  }
+  try { window.speechSynthesis.cancel(); } catch { /* niente da fermare */ }
+}
+
+/*
+ * Ascolto guidato: ogni parola come frase a sé, con una pausa vera in mezzo e
+ * la parola illuminata mentre viene letta.
+ *
+ * Non serve a fare bella figura con la sintesi — serve perché su una lingua
+ * nuova il problema non è la naturalezza, è la segmentazione: dentro una frase
+ * letta di fila non si sente dove finisce una parola e comincia l'altra. Il
+ * doppio canale (si sente e si vede allo stesso tempo) aiuta a legare suono e
+ * forma scritta, che in cirillico è metà del lavoro.
+ */
+function speakGuided(root, text) {
+  if (!window.speechSynthesis || !lang) return;
+  const tokens = [...root.querySelectorAll('[data-tok]')];
+  if (!tokens.length) return speak(text, { force: true, slow: true });
+
+  stopSpeaking();
+  const words = tokens.map((el) => el.textContent);
+  guided = { tokens, timer: null };
+  const state = guided;
+  let i = 0;
+
+  const step = () => {
+    if (guided !== state) return;
+    tokens.forEach((el) => el.classList.remove('tok--on'));
+    if (i >= words.length) { guided = null; return; }
+    tokens[i].classList.add('tok--on');
+    const u = utterance(words[i], { slow: true });
+    let advanced = false;
+    const advance = () => {
+      if (advanced || guided !== state) return;
+      advanced = true;
+      i += 1;
+      state.timer = window.setTimeout(step, 300);
+    };
+    u.onend = advance;
+    u.onerror = advance;
+    // rete di sicurezza: su iOS onend a volte non arriva
+    state.timer = window.setTimeout(advance, 1200 + words[i].length * 130);
+    try { window.speechSynthesis.speak(u); } catch { advance(); }
+  };
+  step();
+}
+
+/** La frase come parole toccabili: un tocco legge solo quella. */
+const sentenceTokens = (text) => text
+  .split(/\s+/)
+  .filter(Boolean)
+  .map((w, i) => `<span class="tok" data-tok="${i}">${esc(w)}</span>`)
+  .join(' ');
 
 /* ------------------------------ navigazione ----------------------------- */
 
@@ -612,12 +677,15 @@ function paintStudy() {
   ({ comp: askComp, build: askBuild, cloze: askCloze, prod: askProd }[type])(body, foot, sentence, done);
 
   if (done) {
-    // la traduzione è già nella domanda in ogni esercizio: qui non si ripete,
-    // e la frase giusta torna solo dove non è già sotto gli occhi
-    const repeat = type === 'build' || type === 'prod';
+    /*
+     * La frase giusta compare qui salvo dove è già sotto gli occhi e toccabile:
+     * in ogni schermata dev'esserci una sola riga di parole toccabili, altrimenti
+     * l'ascolto guidato non saprebbe quale leggere.
+     */
+    const shown = (type === 'comp' && !session.ex.reversed) || type === 'cloze';
     body.append(h(`
       <div class="reveal">
-        ${repeat ? `<p class="solution">${esc(sentence.text)}</p>` : ''}
+        ${shown ? '' : `<p class="solution">${sentenceTokens(sentence.text)}</p>`}
         ${sentence.bridge ? `<p class="bridge"><span>${esc(lang.bridge)}</span>${esc(sentence.bridge)}</p>` : ''}
         <p class="note"><b>${esc(sentence.g)}</b> — ${esc(sentence.note)}</p>
         <div class="tags">${sentence.dom.map((d) => `<span class="tag">${esc(DOMAINS.find((x) => x.id === d)?.label || d)}</span>`).join('')}</div>
@@ -627,18 +695,22 @@ function paintStudy() {
   }
 
   on(el, '[data-act="say"]', 'click', () => speak(sentence.text, { force: true }));
-  on(el, '[data-act="slow"]', 'click', () => speak(sentence.text, { force: true, slow: true }));
+  on(el, '[data-act="guided"]', 'click', () => speakGuided(body, sentence.text));
+  on(el, '[data-tok]', 'click', (e) => {
+    stopSpeaking();
+    speak(e.currentTarget.textContent, { force: true, slow: true });
+  });
   on(el, '[data-act="check"]', 'click', () => check());
   on(el, '[data-act="next"]', 'click', () => commit(session.grade));
   on(el, '[data-act="other"]', 'click', () => { session.showGrades = true; render(); });
   on(el, '[data-grade]', 'click', (e) => commit(Number(e.currentTarget.dataset.grade)));
 }
 
-/** Ascolto a velocità normale e scandito: due bottoni, non uno. */
-const audioButtons = (label = 'Ascolta') => `
+/** Frase intera oppure parola per parola. Toccando una parola si sente solo quella. */
+const audioButtons = () => `
   <div class="audio">
-    <button class="btn btn--icon" data-act="say">🔊 ${label}</button>
-    <button class="btn btn--icon" data-act="slow">🐢 Lento</button>
+    <button class="btn btn--icon" data-act="say">🔊 Ascolta</button>
+    <button class="btn btn--icon" data-act="guided">👣 Parola per parola</button>
   </div>`;
 
 /** Riga dei voti: uno solo, già deciso, salvo ripensamenti. */
@@ -681,8 +753,8 @@ function askComp(body, foot, sentence, done) {
   } else {
     body.append(h(`
       <div class="stack center">
-        <p class="target">${esc(sentence.text)}</p>
-        ${audioButtons('Riascolta')}
+        <p class="target">${sentenceTokens(sentence.text)}</p>
+        ${audioButtons()}
         ${done ? '' : '<p class="muted small">Quale traduzione è la sua?</p>'}
       </div>`));
     speak(sentence.text);
@@ -739,12 +811,13 @@ function askBuild(body, foot, sentence, done) {
 
 function askCloze(body, foot, sentence, done) {
   let blank = -1;
+  let tok = -1;
   const line = h(`<p class="target target--cloze">${session.ex.parts.map((p) => {
-    if (!p.blank) return `<span>${esc(p.text)}</span>`;
+    if (!p.blank) return done ? `<span class="tok" data-tok="${++tok}">${esc(p.text)}</span>` : `<span>${esc(p.text)}</span>`;
     blank += 1;
     const row = done ? session.result.rows[blank] : null;
     if (done) {
-      return `<span class="slot slot--${row.correct ? 'ok' : 'ko'}">${esc(p.answer)}</span>`;
+      return `<span class="slot slot--${row.correct ? 'ok' : 'ko'} tok" data-tok="${++tok}">${esc(p.answer)}</span>`;
     }
     return `<input class="slot slot--in" data-blank="${blank}" size="${Math.max(4, p.answer.length)}"
       inputmode="text" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false"
@@ -831,6 +904,7 @@ function marksBlock(result) {
 /* ------------------------------- avanzamento ----------------------------- */
 
 function commit(grade) {
+  stopSpeaking();
   const card = currentCard();
   const sch = scheduler();
   const now = Date.now();
@@ -880,6 +954,7 @@ function commit(grade) {
 
 function endSession() {
   stopMic?.();
+  stopSpeaking();
   if (!session) return go('home');
   go(session.done ? 'done' : 'home');
 }
@@ -1311,10 +1386,15 @@ function paintSettings() {
           <span>Velocità della voce <b class="val">${cfg.ttsRate.toFixed(2)}×</b></span>
           <input type="range" min="50" max="120" step="5" value="${Math.round(cfg.ttsRate * 100)}" data-set="ttsRate" data-scale="100">
         </label>
+        <label class="field">
+          <span>Tono <b class="val">${(cfg.ttsPitch ?? 1).toFixed(2)}</b></span>
+          <input type="range" min="70" max="140" step="5" value="${Math.round((cfg.ttsPitch ?? 1) * 100)}" data-set="ttsPitch" data-scale="100">
+        </label>
         <p class="small muted">
           Ogni lingua ha poi il suo ritmo: ${esc(lang.name)} viene letto al ${Math.round((lang.rate ?? 1) * 100)}% di questa velocità
-          (${(cfg.ttsRate * (lang.rate ?? 1)).toFixed(2)}× in tutto). Il bottone 🐢 <b>Lento</b>, durante lo studio, scende
-          ancora e stacca una parola dall’altra.
+          (${(cfg.ttsRate * (lang.rate ?? 1)).toFixed(2)}× in tutto). Durante lo studio il bottone
+          👣 <b>Parola per parola</b> legge una parola alla volta, con una pausa vera in mezzo e la
+          parola illuminata: e toccando una parola qualsiasi della frase si sente solo quella.
         </p>
       </div>
 
@@ -1339,7 +1419,8 @@ function paintSettings() {
     if (label) {
       label.textContent = el2.dataset.set === 'retention' ? `${el2.value}%`
         : el2.dataset.set === 'ttsRate' ? `${value.toFixed(2)}×`
-          : el2.value;
+          : el2.dataset.set === 'ttsPitch' ? value.toFixed(2)
+            : el2.value;
     }
   });
   on(el, '[data-toggle]', 'change', (e) => Store.setSetting(e.currentTarget.dataset.toggle, e.currentTarget.checked));
@@ -1416,13 +1497,15 @@ function voiceChooser(cfg) {
     ${Voices.onlyPoor(voices, lang.locale) ? `
       <p class="small muted">
         Qui c’è solo la voce di base, quella scarna. ${Voices.isApple()
-          ? 'Da <b>Impostazioni ▸ Accessibilità ▸ Contenuto letto ▸ Voci</b> si scarica la versione migliorata della stessa lingua: cambia parecchio, e poi ricompare qui.'
+          ? 'Su iPhone le voci migliorate scaricate da Impostazioni ▸ Accessibilità ▸ Contenuto letto <b>quasi mai arrivano al browser</b>: Safari resta sulla voce compatta, e non c’è modo di forzarlo da qui.'
           : 'Le voci si installano dal sistema operativo: una volta aggiunte compaiono in questo elenco.'}
       </p>` : ''}
     <p class="small muted">
-      La sintesi è quella del tuo dispositivo: l’app sceglie la migliore fra quelle che trova, ma
-      non può fare di meglio di quello che c’è. Una voce davvero naturale richiederebbe un servizio
-      esterno e una connessione, cioè il contrario di un’app che funziona offline.
+      La sintesi è quella del tuo dispositivo e l’app non può fare meglio di quello che c’è.
+      Quando la voce non basta, serve a poco alzarla o rallentarla: usa
+      👣 <b>Parola per parola</b>, che stacca una parola dall’altra e la illumina mentre la legge,
+      e tocca le singole parole per risentirle. Su una lingua nuova il problema è capire dove
+      finisce una parola, più che quanto suona naturale.
     </p>`;
 }
 

@@ -40,6 +40,9 @@ for (const lang of LANGS) {
     if (normalize(s.text) === normalize(s.key)) fail(`${tag}: il cloze nasconde tutta la frase`);
     if (!s.it || !s.it.trim()) fail(`${tag}: manca la traduzione`);
     if (!s.note || s.note.length < 20) fail(`${tag}: nota troppo scarna`);
+    for (const [field, value] of [['frase', s.text], ['chiave', s.key], ['nota', s.note], ['traduzione', s.it]]) {
+      if (value.includes('*')) fail(`${tag}: asterisco non convertito nella ${field}`);
+    }
     if (!s.dom.length) fail(`${tag}: nessun settore`);
     if (lang.bridge && !s.bridge) fail(`${tag}: manca la riga di riscontro (${lang.bridge})`);
     if (!lang.bridge && s.bridge) fail(`${tag}: riga di riscontro su una lingua che non la dichiara`);

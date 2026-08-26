@@ -1,5 +1,5 @@
 /* Service worker: l'app resta utilizzabile offline dopo la prima visita. */
-const CACHE = 'frasi-v7';
+const CACHE = 'frasi-v8';
 
 const ASSETS = [
   './',

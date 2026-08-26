@@ -277,22 +277,39 @@ Durante lo studio ogni frase ha due bottoni: **🔊 Ascolta** a velocità normal
 costringere la sintesi a staccarle.
 
 **La qualità, però, non dipende dall'app.** `speechSynthesis` legge con le voci
-installate sul dispositivo, e su iOS convive spesso una voce "compatta" — piccola
-e molto sintetica, quella che il browser propone per prima — con una versione
-migliorata che va scaricata a parte. Quindi:
+installate sul dispositivo. L'app le ordina per qualità probabile (voci di rete,
+nomi con *neural*, *enhanced*, *premium*, *Google*; in fondo quelle *compact*),
+usa la migliore e lascia scegliere a mano da *Impostazioni ▸ Voce*.
 
-- l'app ordina le voci disponibili per qualità probabile (voci di rete, nomi che
-  contengono *neural*, *enhanced*, *premium*, *Google*; in fondo quelle
-  *compact*) e usa la migliore;
-- da *Impostazioni ▸ Voce* si sceglie a mano fra tutte quelle installate, con un
-  bottone per provarle;
-- se ci sono solo voci di base, l'app lo dice e indica dove si scarica quella
-  migliorata (su iOS: **Impostazioni ▸ Accessibilità ▸ Contenuto letto ▸ Voci**).
-  Per il russo il salto di qualità è netto.
+Su iPhone, però, va detto com'è: per molte lingue Safari espone **una sola
+voce**, quella compatta, e le versioni migliorate scaricate da *Accessibilità ▸
+Contenuto letto* quasi mai arrivano al browser. Per il russo questo significa
+Milena compatta, che suona sintetica, e non c'è niente da fare dal lato del
+codice.
 
-Oltre questo non si può andare senza una sintesi lato server: cioè un servizio
-esterno, una connessione e una dipendenza, il contrario di un'app che funziona
-offline. È un limite dichiarato, non un difetto nascosto. Per il dialetto non esiste una voce
+### Ascolto guidato: la risposta vera al problema
+
+Quando la voce non basta, alzarla o rallentarla non serve. Serve cambiare
+l'unità di ascolto, e questo si può fare:
+
+- **👣 Parola per parola** legge una parola alla volta, ognuna come frase a sé,
+  con una pausa vera in mezzo, e **illumina la parola mentre la pronuncia**;
+- **toccando una parola qualsiasi** della frase si sente solo quella, quante
+  volte si vuole.
+
+Non è un ripiego estetico. Su una lingua nuova — a maggior ragione in un altro
+alfabeto — il problema non è che la voce suoni artificiale: è la
+**segmentazione**, cioè sentire dove finisce una parola e comincia l'altra
+dentro una frase letta di fila. Un canale doppio, che si sente e si vede allo
+stesso tempo, lega il suono alla forma scritta, che in cirillico è metà del
+lavoro. Una Milena compatta che dice una parola alla volta insegna più di una
+voce naturale che le impasta tutte.
+
+Restano regolabili velocità (con il moltiplicatore per lingua) e **tono**.
+
+Oltre questo non si va senza una sintesi lato server o un audio registrato:
+servizio esterno e connessione nel primo caso, decine di megabyte nel
+repository nel secondo. È un limite dichiarato, non un difetto nascosto. Per il dialetto non esiste una voce
 sintetica: si ripiega sul tedesco svizzero standard.
 
 ## Strumenti

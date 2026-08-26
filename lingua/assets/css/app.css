@@ -755,3 +755,20 @@ ul { margin: 0; padding-left: 1.1em; }
 .levels__row--on .levels__lv { color: var(--accent); }
 
 .card--flat .row { gap: 8px; }
+
+/* --------------------------- ascolto guidato ---------------------------- */
+
+/* Ogni parola è toccabile: un tocco legge solo quella. */
+.tok {
+  display: inline-block;
+  padding: 1px 3px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tok:active { background: var(--surface-2); }
+.tok--on {
+  background: var(--accent);
+  color: #06231c;
+}
+.solution .tok { font-size: inherit; }

@@ -200,7 +200,8 @@ export const SENTENCES = RAW.map(([id, lv, text, it, g, key, dom, note]) => ({
   g,
   key: stress(key),
   dom,
-  note,
+  // anche le note citano parole russe: gli accenti vanno segnati pure lì
+  note: stress(note),
   bridge: toLatinPretty(stress(text)),
 }));
 
