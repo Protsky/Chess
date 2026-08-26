@@ -84,14 +84,21 @@ if (window.speechSynthesis) {
   window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
 }
 
-function speak(text, force = false) {
+/*
+ * La velocità non è la stessa per tutte le lingue: il russo letto a ritmo
+ * pieno, con le sue vocali ridotte, è illeggibile per chi comincia. Ogni
+ * lingua ha il suo moltiplicatore, e la lettura lenta separa le parole con
+ * una virgola per costringere la sintesi a staccarle una dall'altra.
+ */
+function speak(text, { force = false, slow = false } = {}) {
   if (!window.speechSynthesis || !lang) return;
   if (!force && !settings().tts) return;
   try {
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
+    const spoken = slow ? text.split(/\s+/).filter(Boolean).join(', ') : text;
+    const u = new SpeechSynthesisUtterance(spoken);
     u.lang = lang.locale;
-    u.rate = settings().ttsRate;
+    u.rate = Math.min(1.6, Math.max(0.3, settings().ttsRate * (lang.rate ?? 1) * (slow ? 0.65 : 1)));
     const base = lang.locale.slice(0, 2);
     const voice = voices.find((v) => v.lang === lang.locale) || voices.find((v) => v.lang.startsWith(base));
     if (voice) u.voice = voice;
@@ -180,6 +187,7 @@ function paintWelcome() {
       <ul class="points">
         <li><b>Un test adattivo</b> stima il tuo livello in poche domande, come un esame computerizzato vero.</li>
         <li><b>Quattro esercizi per frase</b>: riconoscerla, comporla, completarla, produrla. Uno alla volta, quando il precedente regge.</li>
+        <li><b>Nel verso che ti serve</b>: se vuoi parlare, parti dall’italiano e tiri fuori tu la frase, fin dal primo giorno.</li>
         <li><b>Niente autovalutazione</b>: ogni risposta viene corretta dalla macchina, e il voto scende da lì.</li>
         <li><b>Un algoritmo di ripetizione</b> (FSRS, lo stesso principio di Anki) decide quando rivedere ogni frase.</li>
         <li><b>Il tuo settore</b>: lavoro, viaggi, tecnologia, salute, ricerca.</li>
@@ -463,7 +471,7 @@ function prepare() {
   session.listening = false;
   session.shownAt = Date.now(); // serve a misurare quanto costa davvero un ripasso
 
-  if (type === 'comp') session.ex = Ex.buildChoice(sentence, lang, seed);
+  if (type === 'comp') session.ex = Ex.buildChoice(sentence, lang, seed, settings().direction);
   else if (type === 'build') {
     session.ex = Ex.buildTiles(sentence, lang, seed);
     session.picked = [];
@@ -610,17 +618,25 @@ function paintStudy() {
         ${sentence.bridge ? `<p class="bridge"><span>${esc(lang.bridge)}</span>${esc(sentence.bridge)}</p>` : ''}
         <p class="note"><b>${esc(sentence.g)}</b> — ${esc(sentence.note)}</p>
         <div class="tags">${sentence.dom.map((d) => `<span class="tag">${esc(DOMAINS.find((x) => x.id === d)?.label || d)}</span>`).join('')}</div>
-        ${type === 'comp' ? '' : '<button class="btn btn--icon" data-act="say">🔊 Ascolta</button>'}
+        ${type === 'comp' && !session.ex?.reversed ? '' : audioButtons()}
       </div>`));
     foot.append(gradeBar(card));
   }
 
-  on(el, '[data-act="say"]', 'click', () => speak(sentence.text, true));
+  on(el, '[data-act="say"]', 'click', () => speak(sentence.text, { force: true }));
+  on(el, '[data-act="slow"]', 'click', () => speak(sentence.text, { force: true, slow: true }));
   on(el, '[data-act="check"]', 'click', () => check());
   on(el, '[data-act="next"]', 'click', () => commit(session.grade));
   on(el, '[data-act="other"]', 'click', () => { session.showGrades = true; render(); });
   on(el, '[data-grade]', 'click', (e) => commit(Number(e.currentTarget.dataset.grade)));
 }
+
+/** Ascolto a velocità normale e scandito: due bottoni, non uno. */
+const audioButtons = (label = 'Ascolta') => `
+  <div class="audio">
+    <button class="btn btn--icon" data-act="say">🔊 ${label}</button>
+    <button class="btn btn--icon" data-act="slow">🐢 Lento</button>
+  </div>`;
 
 /** Riga dei voti: uno solo, già deciso, salvo ripensamenti. */
 function gradeBar(card) {
@@ -648,13 +664,26 @@ function gradeBar(card) {
 /* ---------------------- 1. riconosci: quattro scelte --------------------- */
 
 function askComp(body, foot, sentence, done) {
-  body.append(h(`
-    <div class="stack center">
-      <p class="target">${esc(sentence.text)}</p>
-      <button class="btn btn--icon" data-act="say">🔊 Riascolta</button>
-      ${done ? '' : '<p class="muted small">Quale traduzione è la sua?</p>'}
-    </div>`));
-  speak(sentence.text);
+  const reversed = session.ex.reversed;
+
+  if (reversed) {
+    // si parte dall'italiano: la frase nella lingua è la risposta, non la domanda,
+    // quindi non la si legge ad alta voce prima che sia stata scelta
+    body.append(h(`
+      <div class="stack center">
+        <p class="hint hint--big">${esc(sentence.it)}</p>
+        ${done ? '' : '<p class="muted small">Come si dice?</p>'}
+      </div>`));
+    if (done) speak(sentence.text);
+  } else {
+    body.append(h(`
+      <div class="stack center">
+        <p class="target">${esc(sentence.text)}</p>
+        ${audioButtons('Riascolta')}
+        ${done ? '' : '<p class="muted small">Quale traduzione è la sua?</p>'}
+      </div>`));
+    speak(sentence.text);
+  }
 
   const list = h(`
     <div class="stack">
@@ -918,7 +947,7 @@ function paintExplore() {
   });
   on(el, '[data-lv]', 'click', (e) => { filter.lv = e.currentTarget.dataset.lv; render(); });
   on(el, '[data-dom]', 'click', (e) => { filter.dom = e.currentTarget.dataset.dom; render(); });
-  on(el, '[data-say]', 'click', (e) => speak(e.currentTarget.dataset.say, true));
+  on(el, '[data-say]', 'click', (e) => speak(e.currentTarget.dataset.say, { force: true }));
   view.append(el);
 }
 
@@ -1224,6 +1253,25 @@ function paintSettings() {
       </div>
 
       <div class="card card--flat">
+        <div class="card__head"><b>Che cosa vuoi saper fare</b></div>
+        <div class="grid">
+          <button class="chip-card${cfg.direction === 'produce' ? ' chip-card--on' : ''}" data-dir="produce">
+            <span class="chip-card__icon">🗣️</span><span>Parlare</span>
+          </button>
+          <button class="chip-card${cfg.direction === 'understand' ? ' chip-card--on' : ''}" data-dir="understand">
+            <span class="chip-card__icon">👂</span><span>Capire</span>
+          </button>
+        </div>
+        <p class="small muted">
+          Con <b>Parlare</b> parti sempre dall’italiano e devi tirare fuori tu la frase, e la
+          produzione è il secondo gradino invece dell’ultimo: si ricorda meglio quando
+          l’esercizio somiglia a quello che dovrai fare davvero. Con <b>Capire</b> parti dalla
+          frase e ne cerchi il senso, e la produzione arriva alla fine.
+        </p>
+        <p class="small muted">Vale da qui in avanti: le carte già avviate restano dove sono.</p>
+      </div>
+
+      <div class="card card--flat">
         <div class="card__head"><b>Correzione</b></div>
         <label class="switch">
           <span>Voto automatico</span>
@@ -1247,8 +1295,13 @@ function paintSettings() {
         </label>
         <label class="field">
           <span>Velocità della voce <b class="val">${cfg.ttsRate.toFixed(2)}×</b></span>
-          <input type="range" min="60" max="120" step="5" value="${Math.round(cfg.ttsRate * 100)}" data-set="ttsRate" data-scale="100">
+          <input type="range" min="50" max="120" step="5" value="${Math.round(cfg.ttsRate * 100)}" data-set="ttsRate" data-scale="100">
         </label>
+        <p class="small muted">
+          Ogni lingua ha poi il suo ritmo: ${esc(lang.name)} viene letto al ${Math.round((lang.rate ?? 1) * 100)}% di questa velocità
+          (${(cfg.ttsRate * (lang.rate ?? 1)).toFixed(2)}× in tutto). Il bottone 🐢 <b>Lento</b>, durante lo studio, scende
+          ancora e stacca una parola dall’altra.
+        </p>
       </div>
 
       <div class="card card--flat">
@@ -1276,6 +1329,10 @@ function paintSettings() {
     }
   });
   on(el, '[data-toggle]', 'change', (e) => Store.setSetting(e.currentTarget.dataset.toggle, e.currentTarget.checked));
+  on(el, '[data-dir]', 'click', (e) => {
+    Store.setSetting('direction', e.currentTarget.dataset.dir);
+    render();
+  });
   on(el, '[data-dom]', 'click', (e) => {
     const id = e.currentTarget.dataset.dom;
     const next = new Set(settings().domains);
@@ -1328,7 +1385,8 @@ const PAPERS = [
   ['Una previsione va misurata, non creduta', 'La qualità di un modello probabilistico si giudica con la log-loss e con la calibrazione: se dice “85%” deve azzeccarci l’85% delle volte. Il grafico in Progressi mette il previsto accanto all’accaduto, fascia per fascia.'],
   ['Input comprensibile appena sopra il livello', 'Krashen (1985), ipotesi dell’input "i+1": le frasi nuove vengono pescate poco sopra il livello stimato, non a caso.'],
   ['Si impara a blocchi, non a parole', 'Wray (2002) e Ellis (2012) sulle formulaic sequences: le sequenze fisse si recuperano intere e portano con sé collocazioni e ordine delle parole.'],
-  ['Prima si riconosce, poi si produce', 'Nation (2001): la conoscenza ricettiva precede quella produttiva. Le tre carte per frase seguono questa scala.'],
+  ['Prima si riconosce, poi si produce', 'Nation (2001): la conoscenza ricettiva precede quella produttiva. È la scala che segui se scegli "capire".'],
+  ['L’esercizio deve somigliare a quello che vuoi saper fare', 'Morris, Bransford & Franks (1977), transfer-appropriate processing: si ricorda meglio quando le condizioni dello studio somigliano a quelle dell’uso. Se l’obiettivo è parlare, l’esercizio parte dall’italiano e chiede di tirare fuori la frase — non il contrario. È la scala "parlare", quella di partenza.'],
   ['Mescolare gli argomenti conviene', 'Rohrer & Taylor (2007), interleaving: alternare tipi diversi di esercizio peggiora la sensazione immediata e migliora il risultato a distanza.'],
   ['Misurare il livello con poche domande giuste', 'Lord (1980) e van der Linden & Glas (2000), test adattivi su modello IRT: ogni domanda è scelta per essere massimamente informativa sul tuo θ.'],
   ['Una scala condivisa', 'Consiglio d’Europa, QCER (2001, aggiornato 2020): A1-C2 come riferimento per livelli e descrittori.'],

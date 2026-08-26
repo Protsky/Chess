@@ -21,6 +21,7 @@ const DEFAULTS = {
     ttsRate: 0.85,
     autoGrade: true,
     speechInput: true,
+    direction: 'produce',   // 'produce' = dall'italiano alla lingua; 'understand' = il contrario
     w: null,          // pesi FSRS tarati sui propri ripassi, se calcolati
     domains: [],
   },

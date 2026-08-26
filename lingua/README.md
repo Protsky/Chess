@@ -24,10 +24,29 @@ frase di sei parole sì, e resta comunque dentro la memoria di lavoro. Quindi:
 
 | | Esercizio | Come si corregge |
 | --- | --- | --- |
-| 👂 | **Riconosci** — la frase, quattro traduzioni | scelta giusta o sbagliata |
+| 👂 | **Riconosci** — quattro possibilità, una giusta | scelta giusta o sbagliata |
 | 🧩 | **Componi** — tessere da rimettere in fila, due di troppo | ordine esatto |
 | ✏️ | **Completa** — buchi che aumentano col consolidarsi della carta | parola per parola |
 | 🗣️ | **Produci** — la frase intera, scritta o dettata a voce | confronto completo |
+
+### Il verso conta più di quanto sembri
+
+In *Impostazioni* si sceglie che cosa si vuole saper fare, e cambia sia la
+domanda sia l'ordine dei gradini:
+
+| | **Parlare** (di partenza) | **Capire** |
+| --- | --- | --- |
+| Riconosci | vedi l'italiano, scegli fra quattro frasi nella lingua | vedi la frase, scegli fra quattro traduzioni |
+| Scala | comp → **prod** → build → cloze | comp → build → cloze → **prod** |
+
+Non è una preferenza estetica. Con *Capire* la produzione è il quarto gradino:
+arriva dopo settimane, e nel frattempo si pratica solo il verso opposto a quello
+che serve. Con *Parlare* si parte sempre dall'italiano e la produzione è il
+secondo gradino, quindi arriva al secondo giro. È il principio del
+**transfer-appropriate processing** (Morris, Bransford & Franks, 1977): si
+ricorda meglio quando le condizioni dello studio somigliano a quelle dell'uso.
+Chi punta a capire il parlato ha la scala classica di Nation, che per quel-
+l'obiettivo resta la più sensata.
 
 Il punto non è la varietà: è che **nessuno di questi esercizi può essere
 corretto da chi studia**. Chiedere "l'avevi indovinata?" dopo aver mostrato la
@@ -229,14 +248,25 @@ python3 -m http.server 8080     # poi apri http://localhost:8080/lingua/
 2. Apri l'indirizzo in Safari.
 3. *Condividi ▸ Aggiungi a Home*: da lì parte a schermo intero e funziona offline.
 
+### La voce
+
 La voce sintetica usa `speechSynthesis` del sistema: su iOS le voci tedesca,
-russa, inglese e spagnola sono già installate. Per il dialetto non esiste una voce
+russa, inglese e spagnola sono già installate.
+
+Ogni lingua ha il proprio **ritmo**, perché non si leggono tutte alla stessa
+velocità: il russo sta al 72% della velocità impostata (a ritmo pieno, con le
+vocali ridotte, è illeggibile per chi comincia), tedesco e svizzero tedesco
+all'85%, inglese e spagnolo al 95%. Sopra c'è il moltiplicatore scelto da te.
+
+Durante lo studio ogni frase ha due bottoni: **🔊 Ascolta** a velocità normale e
+**🐢 Lento**, che scende ancora di un terzo e separa le parole una dall'altra per
+costringere la sintesi a staccarle. Per il dialetto non esiste una voce
 sintetica: si ripiega sul tedesco svizzero standard.
 
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura: 255 controlli
+node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura: 271 controlli
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```

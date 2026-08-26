@@ -123,7 +123,10 @@ console.log('\n▸ Sessione di studio');
 await tap('[data-act="study"]');
 await page.waitForSelector('.study');
 check('la prima carta è un riconoscimento', (await page.textContent('.pill--comp')).includes('Riconosci'));
-check('quattro traduzioni fra cui scegliere', (await page.locator('[data-choice]').count()) === 4);
+check('quattro possibilità fra cui scegliere', (await page.locator('[data-choice]').count()) === 4);
+check('si parte dall’italiano', (await page.locator('.hint--big').count()) === 1 && (await page.locator('.target').count()) === 0);
+const firstOptions = await page.locator('[data-choice]').allTextContents();
+check('le opzioni sono nella lingua studiata', firstOptions.every((o) => /[A-Za-zÄÖÜäöüß]/.test(o)) && !firstOptions[0].includes('  '), firstOptions[0]);
 check('nessun voto da dare prima di rispondere', (await page.locator('[data-grade], [data-act="next"]').count()) === 0);
 await shot('6-studio');
 
@@ -131,7 +134,7 @@ await shot('6-studio');
 // volta che una carta torna, la prova risponde bene e la sessione converge
 const known = new Map();
 const pickChoice = async () => {
-  const target = (await page.textContent('.target')).trim();
+  const target = (await page.textContent('.hint--big, .target')).trim();
   const want = known.get(target);
   if (want) {
     const i = await page.evaluate((w) => [...document.querySelectorAll('[data-choice]')]
@@ -202,6 +205,9 @@ await page.locator('[data-set="newPerDay"]').fill('12');
 await page.waitForTimeout(150);
 check('frasi nuove al giorno aggiornate', (await page.textContent('.val')).includes('12'));
 check('backup esportabile', (await page.locator('[data-act="export"]').count()) === 1);
+check('si può scegliere che cosa allenare', (await page.locator('[data-dir]').count()) === 2);
+check('parlare è la scelta di partenza', (await page.locator('[data-dir="produce"].chip-card--on').count()) === 1);
+check('la velocità della lingua è spiegata', (await page.textContent('section')).includes('di questa velocità'));
 await shot('11-impostazioni');
 
 console.log('\n▸ Persistenza');
@@ -237,8 +243,23 @@ const seed = async (ladder) => {
   await page.waitForSelector('.study');
 };
 
+// con l'obiettivo "parlare" la scala è comp → prod → build → cloze
 await seed(['comp']);
-check('dopo il riconoscimento arriva la composizione', (await page.locator('.pill--build').count()) === 1);
+check('dopo il riconoscimento arriva la produzione', (await page.locator('.pill--prod').count()) === 1);
+check('si parte dall’italiano', (await page.textContent('.hint--big')).includes('Come ti chiami'));
+check('si può scrivere la frase intera', (await page.locator('.input').count()) === 1);
+await page.fill('.input', 'Wie heisst du');
+await tap('[data-act="check"]');
+check('accenti e punteggiatura perdonati', (await page.locator('.check--ok').count()) === 1);
+check('parole tutte confermate', (await page.locator('.w--ok').count()) === 3);
+check('ascolto normale e scandito', (await page.locator('[data-act="say"]').count()) === 1
+  && (await page.locator('[data-act="slow"]').count()) === 1);
+check('la frase giusta viene ripetuta', (await page.textContent('.solution')).includes('Wie heißt du?'));
+check('voto automatico su Bene', (await page.textContent('[data-act="next"]')).includes('Bene'));
+await shot('13-produci');
+
+await seed(['comp', 'prod']);
+check('poi tocca alla composizione', (await page.locator('.pill--build').count()) === 1);
 check('le tessere sono più delle parole della frase', (await page.locator('[data-tile]').count()) === 5);
 const order = await page.evaluate((want) => {
   const tiles = [...document.querySelectorAll('[data-tile]')];
@@ -246,30 +267,18 @@ const order = await page.evaluate((want) => {
 }, ['Wie', 'heißt', 'du?']);
 check('le tessere contengono la frase intera', order.every((i) => i !== undefined), JSON.stringify(order));
 for (const i of order) await tap(`[data-tile="${i}"]`);
-await shot('13-componi');
 await tap('[data-act="check"]');
 check('ordine giusto riconosciuto', (await page.locator('.tray--ok').count()) === 1);
-check('la frase giusta viene ripetuta', (await page.textContent('.solution')).includes('Wie heißt du?'));
-check('voto automatico su Bene', (await page.textContent('[data-act="next"]')).includes('Bene'));
+await shot('14-componi');
 
-await seed(['comp', 'build']);
-check('poi tocca al cloze', (await page.locator('.pill--cloze').count()) === 1);
+await seed(['comp', 'prod', 'build']);
+check('l’ultimo gradino è il cloze', (await page.locator('.pill--cloze').count()) === 1);
 check('un solo buco sulla carta nuova', (await page.locator('[data-blank]').count()) === 1);
-check('la traduzione fa da appoggio', (await page.textContent('.hint')).includes('Come ti chiami'));
 // la ß non si digita su una tastiera italiana: "heisst" deve bastare
 await page.fill('[data-blank="0"]', 'heisst');
 await tap('[data-act="check"]');
 check('buco riempito correttamente', (await page.locator('.slot--ok').count()) === 1);
-await shot('14-completa');
-
-await seed(['comp', 'build', 'cloze']);
-check('l’ultimo gradino è la produzione', (await page.locator('.pill--prod').count()) === 1);
-check('si può scrivere la frase intera', (await page.locator('.input').count()) === 1);
-await page.fill('.input', 'Wie heisst du');
-await tap('[data-act="check"]');
-check('accenti e punteggiatura perdonati', (await page.locator('.check--ok').count()) === 1);
-check('parole tutte confermate', (await page.locator('.w--ok').count()) === 3);
-await shot('15-produci');
+await shot('15-completa');
 
 console.log('\n▸ Svizzero tedesco');
 await page.evaluate(() => {

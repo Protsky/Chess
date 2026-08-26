@@ -343,6 +343,7 @@ export const EN = {
   name: 'Inglese',
   flag: '🇬🇧',
   locale: 'en-GB',
+  rate: 0.95,
   dir: 'ltr',
   sentences: SENTENCES,
   placement: PLACEMENT,

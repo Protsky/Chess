@@ -62,21 +62,29 @@ function neighbours(lang, sentence, rnd, limit = 24) {
 /* ------------------------ 1. riconosci il senso ------------------------- */
 
 /**
- * Quattro traduzioni, una giusta. Sostituisce il vecchio "mostra e dimmi se
+ * Quattro possibilità, una giusta. Sostituisce il vecchio "mostra e dimmi se
  * l'avevi indovinata": qui la risposta è un dato.
+ *
+ * Il verso conta. Chi punta a capire vede la frase e sceglie fra quattro
+ * traduzioni; chi punta a parlare vede l'italiano e sceglie fra quattro frasi
+ * nella lingua che studia — stesso esercizio, ma nella direzione in cui poi
+ * dovrà usarla.
  */
-export function buildChoice(sentence, lang, seed) {
+export function buildChoice(sentence, lang, seed, direction = 'understand') {
   const rnd = seeded(`${seed}|choice`);
-  const used = new Set([sentence.it]);
+  const pick = direction === 'produce' ? (s) => s.text : (s) => s.it;
+  const answer = pick(sentence);
+  const used = new Set([answer]);
   const wrong = [];
   for (const s of neighbours(lang, sentence, rnd, 40)) {
     if (wrong.length === 3) break;
-    if (used.has(s.it)) continue;
-    used.add(s.it);
-    wrong.push(s.it);
+    const option = pick(s);
+    if (used.has(option)) continue;
+    used.add(option);
+    wrong.push(option);
   }
-  const options = shuffle([sentence.it, ...wrong], rnd);
-  return { options, correct: options.indexOf(sentence.it) };
+  const options = shuffle([answer, ...wrong], rnd);
+  return { options, correct: options.indexOf(answer), reversed: direction === 'produce' };
 }
 
 /* --------------------------- 2. componi ---------------------------------- */

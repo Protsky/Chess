@@ -187,6 +187,9 @@ ul { margin: 0; padding-left: 1.1em; }
 .btn--danger { background: transparent; border-color: #4a2b2b; color: var(--red); }
 .btn--icon { flex-direction: row; gap: 8px; min-height: 40px; background: transparent; color: var(--muted); font-weight: 500; }
 
+.audio { display: flex; gap: 8px; justify-content: center; }
+.audio .btn { flex: 1; max-width: 190px; }
+
 .btn--option { align-items: flex-start; text-align: left; font-weight: 500; }
 .btn--right { background: rgba(111, 202, 134, 0.16); border-color: var(--green); color: #cdf3d7; }
 .btn--wrong { background: rgba(236, 106, 99, 0.14); border-color: var(--red); color: #f6cfcc; }

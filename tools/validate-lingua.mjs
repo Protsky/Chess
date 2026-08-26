@@ -8,7 +8,7 @@ import { LANGS, DOMAINS, LEVELS } from '../lingua/assets/js/corpus.js';
 import * as Fsrs from '../lingua/assets/js/fsrs.js';
 import * as Irt from '../lingua/assets/js/irt.js';
 import { diff, suggestGrade, normalize } from '../lingua/assets/js/check.js';
-import { buildQueue, cardId, unlocked, TYPES } from '../lingua/assets/js/scheduler.js';
+import { buildQueue, cardId, unlocked, ladder, TYPES } from '../lingua/assets/js/scheduler.js';
 import * as Ex from '../lingua/assets/js/exercises.js';
 import * as Tr from '../lingua/assets/js/translit.js';
 import * as Opt from '../lingua/assets/js/optimizer.js';
@@ -74,6 +74,8 @@ for (const lang of LANGS) {
     expect(n >= 4, `[${lang.code}] test: solo ${n} item di livello ${lv}`);
   }
   ok('banca del test distribuita su tutti i livelli');
+
+  expect(lang.rate > 0.5 && lang.rate <= 1, `[${lang.code}] velocità di lettura implausibile (${lang.rate})`);
 }
 
 /* -------------------------------- FSRS --------------------------------- */
@@ -300,10 +302,13 @@ console.log('\n[exercises] esercizi che si correggono da soli');
   for (const s of lang.sentences) {
     const seed = `${s.id}|0`;
 
-    const choice = Ex.buildChoice(s, lang, seed);
-    if (choice.options.length !== 4) fail(`${s.id}: ${choice.options.length} scelte invece di 4`);
-    if (new Set(choice.options).size !== 4) fail(`${s.id}: due scelte identiche`);
-    if (choice.options[choice.correct] !== s.it) fail(`${s.id}: la scelta giusta non è la traduzione`);
+    for (const [direction, right] of [['understand', s.it], ['produce', s.text]]) {
+      const choice = Ex.buildChoice(s, lang, seed, direction);
+      if (choice.options.length !== 4) fail(`${s.id}: ${choice.options.length} scelte invece di 4`);
+      if (new Set(choice.options).size !== 4) fail(`${s.id}: due scelte identiche`);
+      if (choice.options[choice.correct] !== right) fail(`${s.id}: la scelta giusta non è quella attesa (${direction})`);
+      if (choice.reversed !== (direction === 'produce')) fail(`${s.id}: verso non segnalato`);
+    }
 
     const tiles = Ex.buildTiles(s, lang, seed);
     if (tiles.answer.join(' ') !== s.text) fail(`${s.id}: le tessere non ricompongono la frase`);
@@ -320,7 +325,7 @@ console.log('\n[exercises] esercizi che si correggono da soli');
       fail(`${s.id}: il primo buco non cade sulla chiave (${holes} contro ${norm(s.key)})`);
     }
   }
-  ok(`${lang.sentences.length} frasi: scelte, tessere e buchi coerenti su tutte`);
+  ok(`${lang.sentences.length} frasi: scelte nei due versi, tessere e buchi coerenti su tutte`);
 
   // l'impalcatura si ritira: più la carta è solida, più pezzi spariscono
   let regressions = 0;
@@ -473,18 +478,40 @@ console.log('\n[scheduler] costruzione della sessione');
 
   // la scala si sale un gradino alla volta, e solo su un gradino consolidato
   const sid = lang.sentences[0].id;
-  const ladder = TYPES.map((x) => x.id);
-  expect(ladder.join(' → ') === 'comp → build → cloze → prod', `scala inattesa: ${ladder}`);
-
   const mature = (id) => ({ ...Fsrs.newCard(id), state: 'review', reps: 2, s: 6 });
-  deck.cards[cardId(sid, 'comp')] = { ...Fsrs.newCard(cardId(sid, 'comp')), state: 'learning', reps: 1, s: 0.4 };
-  expect(!unlocked(deck, sid, 'build'), 'la composizione si sblocca prima che il riconoscimento sia maturo');
-  for (let i = 1; i < ladder.length; i++) {
-    deck.cards[cardId(sid, ladder[i - 1])] = mature(cardId(sid, ladder[i - 1]));
-    expect(unlocked(deck, sid, ladder[i]), `${ladder[i]} non si sblocca dopo ${ladder[i - 1]}`);
-    if (i + 1 < ladder.length) expect(!unlocked(deck, sid, ladder[i + 1]), `${ladder[i + 1]} salta un gradino`);
+
+  expect(ladder('understand').join(' ') === 'comp build cloze prod', `scala "capire" inattesa: ${ladder('understand')}`);
+  expect(ladder('produce').join(' ') === 'comp prod build cloze', `scala "parlare" inattesa: ${ladder('produce')}`);
+  expect(new Set(ladder('produce')).size === TYPES.length, 'la scala "parlare" non contiene tutti i tipi');
+
+  for (const direction of ['understand', 'produce']) {
+    const order = ladder(direction);
+    const own = { ...deck, cards: {} };
+    own.cards[cardId(sid, 'comp')] = { ...Fsrs.newCard(cardId(sid, 'comp')), state: 'learning', reps: 1, s: 0.4 };
+    expect(!unlocked(own, sid, order[1], direction), `[${direction}] il secondo gradino si sblocca troppo presto`);
+    for (let i = 1; i < order.length; i++) {
+      own.cards[cardId(sid, order[i - 1])] = mature(cardId(sid, order[i - 1]));
+      expect(unlocked(own, sid, order[i], direction), `[${direction}] ${order[i]} non si sblocca dopo ${order[i - 1]}`);
+      if (i + 1 < order.length) {
+        expect(!unlocked(own, sid, order[i + 1], direction), `[${direction}] ${order[i + 1]} salta un gradino`);
+      }
+    }
+    ok(`${direction === 'produce' ? 'parlare' : 'capire'}: ${order.join(' → ')}, un gradino alla volta`);
   }
-  ok(`${ladder.join(' → ')}: un gradino alla volta`);
+
+  // chi punta a parlare arriva alla produzione al secondo giro, non al quarto
+  const spoken = { profile: { theta: 0 }, cards: {}, log: [] };
+  // il riconoscimento è maturo e non in scadenza oggi: altrimenti la frase resta
+  // occupata e il gradino successivo aspetta domani, com'è giusto che sia
+  spoken.cards[cardId(sid, 'comp')] = { ...mature(cardId(sid, 'comp')), due: Date.now() + 5 * 86400000 };
+  const nextUp = buildQueue({
+    lang,
+    deck: spoken,
+    settings: { ...settings, direction: 'produce', newPerDay: 1 },
+    random: () => 0.5,
+  }).queue.map((c) => c.id.split('|')[1]);
+  expect(nextUp.includes('prod'), `dopo il riconoscimento non arriva la produzione: ${nextUp}`);
+  ok('con l’obiettivo "parlare" la produzione è il secondo gradino');
 
   // i ripassi in scadenza precedono le novità e restano mescolati
   const deck2 = { profile: { theta: 0 }, cards: {}, log: [] };

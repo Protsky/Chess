@@ -271,6 +271,7 @@ export const RU = {
   name: 'Russo',
   flag: '🇷🇺',
   locale: 'ru-RU',
+  rate: 0.72,   // il russo letto a velocità piena non si segue
   dir: 'ltr',
   script: 'cirillico',
   blurb: 'Alfabeto cirillico, con accento tonico segnato e pronuncia in caratteri latini.',

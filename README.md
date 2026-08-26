@@ -111,8 +111,9 @@ adattivo su modello IRT, quattro esercizi che si correggono da soli (niente
 autovalutazione) e uno scheduler FSRS che decide quando riproporre ogni frase. Tedesco (180 frasi), svizzero tedesco di Zurigo (115, ognuna con
 l’equivalente in tedesco standard), russo (150, con accento tonico segnato e
 risposte accettate anche in caratteri latini), inglese (205) e spagnolo (120),
-tutte scritte per italofoni. I pesi dello scheduler si possono rifare sui
-propri ripassi, con la calibrazione a vista.
+tutte scritte per italofoni. Si sceglie se allenarsi a **parlare** (dall’italiano
+alla lingua, con la produzione al secondo gradino) o a **capire**; i pesi dello
+scheduler si possono rifare sui propri ripassi, con la calibrazione a vista.
 
 Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
 

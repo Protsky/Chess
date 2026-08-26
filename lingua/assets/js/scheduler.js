@@ -30,7 +30,24 @@ export const TYPES = [
   { id: 'prod', label: 'Produci', short: 'Produzione', icon: '🗣️', hint: 'Scrivila o dettala per intero' },
 ];
 
-const ORDER = TYPES.map((t) => t.id);
+/*
+ * L'ordine dei gradini dipende da che cosa si vuole saper fare.
+ *
+ * Chi vuole CAPIRE parte dal riconoscere e arriva al produrre: è la scala
+ * classica (Nation 2001, il ricettivo precede il produttivo).
+ *
+ * Chi vuole PARLARE ha bisogno che l'esercizio somigli a ciò che dovrà fare
+ * davvero, e presto: è il principio del transfer-appropriate processing
+ * (Morris, Bransford & Franks 1977) — si ricorda meglio quando le condizioni
+ * dello studio somigliano a quelle dell'uso. Qui la produzione sale al secondo
+ * posto e il riconoscimento parte dall'italiano.
+ */
+const LADDERS = {
+  understand: ['comp', 'build', 'cloze', 'prod'],
+  produce: ['comp', 'prod', 'build', 'cloze'],
+};
+
+export const ladder = (direction) => LADDERS[direction] || LADDERS.understand;
 
 export const cardId = (sid, type) => `${sid}|${type}`;
 export const splitId = (id) => {
@@ -47,10 +64,11 @@ const PEAK = 0.15;
 const SPREAD = 0.9;
 
 /** Un tipo è disponibile solo se il passaggio precedente è già maturo. */
-export function unlocked(deck, sid, type) {
-  const i = ORDER.indexOf(type);
+export function unlocked(deck, sid, type, direction) {
+  const order = ladder(direction);
+  const i = order.indexOf(type);
   if (i <= 0) return i === 0;
-  const c = deck.cards[cardId(sid, ORDER[i - 1])];
+  const c = deck.cards[cardId(sid, order[i - 1])];
   return !!c && c.state === REVIEW && c.reps >= 1;
 }
 
@@ -129,17 +147,18 @@ export function rankNew(lang, deck, settings, theta, random = Math.random) {
 }
 
 /** Carte già introdotte il cui passaggio successivo si è appena sbloccato. */
-export function pendingUnlocks(lang, deck) {
+export function pendingUnlocks(lang, deck, direction) {
+  const order = ladder(direction);
   const out = [];
   const sentences = new Map(lang.sentences.map((s) => [s.id, s]));
   const sids = new Set(Object.keys(deck.cards).map((id) => splitId(id).sid));
   for (const sid of sids) {
     if (!sentences.has(sid)) continue;
-    for (let i = 1; i < ORDER.length; i++) {
-      const t = ORDER[i];
+    for (let i = 1; i < order.length; i++) {
+      const t = order[i];
       if (deck.cards[cardId(sid, t)]) continue;
-      if (!unlocked(deck, sid, t)) continue;
-      out.push({ sid, type: t, strength: deck.cards[cardId(sid, ORDER[i - 1])].s });
+      if (!unlocked(deck, sid, t, direction)) continue;
+      out.push({ sid, type: t, strength: deck.cards[cardId(sid, order[i - 1])].s });
       break; // un passaggio alla volta per frase
     }
   }
@@ -182,7 +201,7 @@ export function buildQueue({ lang, deck, settings, introducedToday = 0, now = Da
   const budget = Math.max(0, settings.newPerDay - introducedToday);
   const busy = new Set(reviews.map((c) => splitId(c.id).sid));
 
-  const unlocks = pendingUnlocks(lang, deck).filter((u) => !busy.has(u.sid));
+  const unlocks = pendingUnlocks(lang, deck, settings.direction).filter((u) => !busy.has(u.sid));
   const deepSlots = Math.min(unlocks.length, Math.ceil(budget * 0.6));
   const fresh = [];
 

@@ -222,6 +222,7 @@ export const ES = {
   name: 'Spagnolo',
   flag: '🇪🇸',
   locale: 'es-ES',
+  rate: 0.95,
   dir: 'ltr',
   sentences: SENTENCES,
   placement: PLACEMENT,

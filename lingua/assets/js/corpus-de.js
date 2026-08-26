@@ -295,6 +295,7 @@ export const DE = {
   name: 'Tedesco',
   flag: '🇩🇪',
   locale: 'de-DE',
+  rate: 0.85,
   dir: 'ltr',
   sentences: SENTENCES,
   placement: PLACEMENT,

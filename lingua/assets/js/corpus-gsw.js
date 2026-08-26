@@ -222,6 +222,7 @@ export const GSW = {
   name: 'Svizzero tedesco',
   flag: '🇨🇭',
   locale: 'de-CH',
+  rate: 0.85,
   dir: 'ltr',
   variant: 'Züridütsch, grafia Dieth',
   blurb: 'Dialetto di Zurigo. Ogni frase porta con sé il tedesco standard di riscontro.',
