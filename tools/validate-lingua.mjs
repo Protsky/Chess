@@ -12,6 +12,7 @@ import { buildQueue, cardId, unlocked, ladder, TYPES } from '../lingua/assets/js
 import * as Ex from '../lingua/assets/js/exercises.js';
 import * as Tr from '../lingua/assets/js/translit.js';
 import * as Opt from '../lingua/assets/js/optimizer.js';
+import * as Tts from '../lingua/assets/js/tts.js';
 
 let errors = 0;
 let checks = 0;
@@ -295,6 +296,34 @@ console.log('\n[translit] cirillico e tastiera italiana');
   const bad = ru.sentences.filter((s) => !s.bridge || Tr.hasCyrillic(s.bridge));
   expect(bad.length === 0, `${bad.length} righe di pronuncia incomplete`);
   ok(`${ru.sentences.length} righe di pronuncia generate dal testo accentato`);
+}
+
+console.log('\n[tts] voce online');
+{
+  for (const l of LANGS) {
+    const sample = l.sentences[0];
+    const url = Tts.url(sample.text, l.locale);
+    expect(url.startsWith('https://'), `[${l.code}] indirizzo non sicuro`);
+    expect(url.includes(`tl=${l.locale.slice(0, 2)}`), `[${l.code}] lingua mancante nell'indirizzo`);
+    expect(decodeURIComponent(url.split('&q=')[1]) === sample.text, `[${l.code}] frase codificata male`);
+  }
+  ok(`${LANGS.length} lingue: indirizzo della voce online ben formato`);
+
+  const slow = Tts.url('Привет', 'ru-RU', { slow: true });
+  expect(slow.includes('ttsspeed=0.24'), 'la lettura scandita non passa il parametro di velocità');
+  expect(!Tts.url('Привет', 'ru-RU').includes('ttsspeed'), 'la lettura normale passa un parametro che non serve');
+  ok('la lettura scandita usa il parlato lento del servizio');
+
+  const long = 'a'.repeat(400);
+  const cut = decodeURIComponent(Tts.url(long, 'ru-RU').split('&q=')[1]);
+  expect(cut.length === Tts.MAX_CHARS, `frase non tagliata al limite: ${cut.length}`);
+  const longest = Math.max(...LANGS.flatMap((l) => l.sentences.map((s) => s.text.length)));
+  expect(longest < Tts.MAX_CHARS, `c'è una frase di ${longest} caratteri, oltre il limite del servizio`);
+  ok(`la frase più lunga del corpus è di ${longest} caratteri, sotto il limite di ${Tts.MAX_CHARS}`);
+
+  const enc = Tts.url('Я не знаю.', 'ru-RU');
+  expect(!/[^\x00-\x7F]/.test(enc), 'indirizzo con caratteri non ASCII: alcuni client lo rifiutano');
+  ok('il cirillico viaggia codificato in percentuale, accenti compresi');
 }
 
 console.log('\n[exercises] esercizi che si correggono da soli');

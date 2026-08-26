@@ -116,6 +116,8 @@ alla lingua, con la produzione al secondo gradino) o a **capire**; i pesi dello
 scheduler si possono rifare sui propri ripassi, con la calibrazione a vista.
 
 Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
+L’unica eccezione è facoltativa: la voce online (la sintesi pubblica di Google
+Translate), accesa di serie sul russo perché le voci di sistema lì non bastano.
 
 - In locale: `python3 -m http.server 8080`, poi <http://localhost:8080/lingua/>
 - In linea: **https://protsky.github.io/Chess/lingua/**

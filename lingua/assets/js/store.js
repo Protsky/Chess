@@ -23,6 +23,7 @@ const DEFAULTS = {
     autoGrade: true,
     speechInput: true,
     voices: {},       // lingua -> voce scelta a mano fra quelle del dispositivo
+    online: { ru: true },  // lingua -> voce online invece di quella del telefono
     direction: 'produce',   // 'produce' = dall'italiano alla lingua; 'understand' = il contrario
     w: null,          // pesi FSRS tarati sui propri ripassi, se calcolati
     domains: [],

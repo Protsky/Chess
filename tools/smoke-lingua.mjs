@@ -348,6 +348,22 @@ check('accento tonico visibile nella soluzione', (await page.textContent('.solut
 check('le parole russe si possono toccare una a una', (await page.locator('.solution [data-tok]').count()) === 3);
 await page.click('.solution [data-tok="1"]');
 check('toccare una parola non rompe niente', errors.length === 0, errors.join(' | '));
+await tap('[data-act="guided"]');
+await page.waitForTimeout(600);
+check('l’ascolto guidato illumina una parola alla volta', (await page.locator('.tok--on').count()) <= 1);
+
+// qui la rete verso l'esterno non c'è: è il modo migliore di provare il ripiego
+console.log('\n▸ Ripiego della voce online');
+await page.reload({ waitUntil: 'networkidle' });   // fuori dalla sessione, senza inseguire schermate
+await tap('[data-go="settings"]');
+await page.waitForSelector('[data-online]');
+check('la voce online è attiva di serie sul russo', await page.isChecked('[data-online]'));
+check('il prezzo della voce online è dichiarato', (await page.textContent('section')).includes('arriva ai server di Google'));
+await tap('[data-act="test-online"]');
+await page.waitForFunction(() => document.body.textContent.includes('Non risponde'), null, { timeout: 25000 });
+check('senza rete lo dice e ripiega sul telefono', (await page.textContent('section')).includes('voce del dispositivo'));
+check('nessun errore JavaScript dal ripiego', errors.length === 0, errors.join(' | '));
+await shot('20-voce-online');
 await shot('17-russo');
 
 console.log('\n▸ Taratura del modello');

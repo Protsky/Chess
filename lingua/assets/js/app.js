@@ -17,6 +17,7 @@ import { diff } from './check.js';
 import * as Ex from './exercises.js';
 import * as Speech from './speech.js';
 import * as Voices from './voices.js';
+import * as Tts from './tts.js';
 
 /* ------------------------------- utilità ------------------------------- */
 
@@ -104,69 +105,105 @@ function utterance(text, { slow = false } = {}) {
   return u;
 }
 
-function speak(text, { force = false, slow = false } = {}) {
-  if (!window.speechSynthesis || !lang) return;
-  if (!force && !settings().tts) return;
-  try {
-    stopSpeaking();
-    window.speechSynthesis.speak(utterance(text, { slow }));
-  } catch {
-    /* qualche browser blocca la sintesi finché non c'è un tocco: pazienza */
+/** La voce del dispositivo, con la promessa di dire quando ha finito. */
+function speakLocal(text, { slow = false } = {}) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis) return resolve();
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    try {
+      const u = utterance(text, { slow });
+      u.onend = finish;
+      u.onerror = finish;
+      // rete di sicurezza: su iOS onend a volte non arriva
+      window.setTimeout(finish, 1500 + text.length * 90);
+      window.speechSynthesis.speak(u);
+    } catch {
+      finish();
+    }
+  });
+}
+
+/*
+ * Stato della voce online per la sessione in corso: al primo fallimento si
+ * smette di provarci, così un endpoint lento non trasforma ogni ascolto in
+ * un'attesa. Si riparte alla prossima apertura dell'app.
+ */
+let onlineVoice = 'unknown';   // 'ok' | 'failed'
+
+const wantsOnline = () =>
+  Tts.supported
+  && Boolean(settings().online?.[lang.code])
+  && navigator.onLine !== false
+  && onlineVoice !== 'failed';
+
+/** Dice una cosa e promette di dire quando ha finito, online o in locale. */
+async function say(text, { slow = false } = {}) {
+  if (wantsOnline()) {
+    try {
+      await Tts.play(Tts.url(text, lang.locale, { slow }));
+      onlineVoice = 'ok';
+      return;
+    } catch {
+      onlineVoice = 'failed';
+      if (screen === 'settings') render();
+    }
   }
+  await speakLocal(text, { slow });
+}
+
+function speak(text, { force = false, slow = false } = {}) {
+  if (!lang) return;
+  if (!force && !settings().tts) return;
+  stopSpeaking();
+  say(text, { slow });
 }
 
 let guided = null;
 
 function stopSpeaking() {
   if (guided) {
-    clearTimeout(guided.timer);
+    window.clearTimeout(guided.timer);
     guided.tokens.forEach((el) => el.classList.remove('tok--on'));
     guided = null;
   }
+  Tts.stop();
   try { window.speechSynthesis.cancel(); } catch { /* niente da fermare */ }
 }
 
 /*
- * Ascolto guidato: ogni parola come frase a sé, con una pausa vera in mezzo e
- * la parola illuminata mentre viene letta.
+ * Ascolto guidato: ogni parola letta a sé, con una pausa vera in mezzo e la
+ * parola illuminata mentre viene pronunciata.
  *
  * Non serve a fare bella figura con la sintesi — serve perché su una lingua
  * nuova il problema non è la naturalezza, è la segmentazione: dentro una frase
  * letta di fila non si sente dove finisce una parola e comincia l'altra. Il
- * doppio canale (si sente e si vede allo stesso tempo) aiuta a legare suono e
+ * doppio canale (si sente e si vede allo stesso tempo) lega il suono alla
  * forma scritta, che in cirillico è metà del lavoro.
  */
 function speakGuided(root, text) {
-  if (!window.speechSynthesis || !lang) return;
   const tokens = [...root.querySelectorAll('[data-tok]')];
   if (!tokens.length) return speak(text, { force: true, slow: true });
 
   stopSpeaking();
   const words = tokens.map((el) => el.textContent);
-  guided = { tokens, timer: null };
-  const state = guided;
-  let i = 0;
+  const state = { tokens, timer: null };
+  guided = state;
 
-  const step = () => {
-    if (guided !== state) return;
-    tokens.forEach((el) => el.classList.remove('tok--on'));
-    if (i >= words.length) { guided = null; return; }
-    tokens[i].classList.add('tok--on');
-    const u = utterance(words[i], { slow: true });
-    let advanced = false;
-    const advance = () => {
-      if (advanced || guided !== state) return;
-      advanced = true;
-      i += 1;
-      state.timer = window.setTimeout(step, 300);
-    };
-    u.onend = advance;
-    u.onerror = advance;
-    // rete di sicurezza: su iOS onend a volte non arriva
-    state.timer = window.setTimeout(advance, 1200 + words[i].length * 130);
-    try { window.speechSynthesis.speak(u); } catch { advance(); }
-  };
-  step();
+  (async () => {
+    for (let i = 0; i < words.length; i++) {
+      if (guided !== state) return;
+      tokens.forEach((el) => el.classList.remove('tok--on'));
+      tokens[i].classList.add('tok--on');
+      await say(words[i], { slow: true });
+      if (guided !== state) return;
+      await new Promise((r) => { state.timer = window.setTimeout(r, 280); });
+    }
+    if (guided === state) {
+      tokens.forEach((el) => el.classList.remove('tok--on'));
+      guided = null;
+    }
+  })();
 }
 
 /** La frase come parole toccabili: un tocco legge solo quella. */
@@ -1370,6 +1407,8 @@ function paintSettings() {
 
       <div class="card card--flat">
         <div class="card__head"><b>Voce</b></div>
+        ${onlineVoiceRow(cfg)}
+        <div class="card__head"><b>Voce del dispositivo</b><span class="muted small">di riserva</span></div>
         ${voiceChooser(cfg)}
         <label class="switch">
           <span>Dettare le risposte${Speech.supported ? '' : ' <em class="muted small">(non disponibile qui)</em>'}</span>
@@ -1424,6 +1463,13 @@ function paintSettings() {
     }
   });
   on(el, '[data-toggle]', 'change', (e) => Store.setSetting(e.currentTarget.dataset.toggle, e.currentTarget.checked));
+  on(el, '[data-online]', 'change', (e) => {
+    Store.setSetting('online', { ...(settings().online || {}), [lang.code]: e.currentTarget.checked });
+    onlineVoice = 'unknown';
+    render();
+    if (e.currentTarget.checked) testOnlineVoice();
+  });
+  on(el, '[data-act="test-online"]', 'click', () => testOnlineVoice());
   on(el, '[data-voice]', 'change', (e) => {
     const next = { ...(settings().voices || {}), [lang.code]: e.currentTarget.value };
     Store.setSetting('voices', next);
@@ -1472,6 +1518,42 @@ function paintSettings() {
   });
   on(el, '[data-act="why"]', 'click', () => go('science'));
   view.append(el);
+}
+
+/** Fa sentire una frase e mostra da dove è arrivata: online o dal telefono. */
+async function testOnlineVoice() {
+  const sample = lang.sentences.find((s) => s.lv === 'A1');
+  if (!sample) return;
+  stopSpeaking();
+  await say(sample.text, {});
+  if (screen === 'settings') render();
+}
+
+/** Voce online: una sintesi neurale gratuita al posto di quella del telefono. */
+function onlineVoiceRow(cfg) {
+  const on = Boolean(cfg.online?.[lang.code]);
+  return `
+    <label class="switch">
+      <span>Voce online per ${esc(lang.name.toLowerCase())}</span>
+      <input type="checkbox" ${on ? 'checked' : ''} data-online>
+    </label>
+    <p class="small muted">
+      Usa la sintesi pubblica di Google Translate — la stessa che pronuncia le traduzioni sul
+      loro sito — invece della voce installata sul telefono. È gratuita, non serve registrarsi,
+      ed è una voce neurale: per il russo la differenza con la Milena compatta è netta.
+      ${on ? `<br><b>${{
+        failed: 'Non risponde: sto usando la voce del dispositivo. Riprovo alla prossima apertura.',
+        ok: 'Funziona: l’ultimo ascolto è arrivato da lì.',
+        unknown: 'Non l’ho ancora sentita: provala qui sotto.',
+      }[onlineVoice]}</b>` : ''}
+    </p>
+    ${on ? '<button class="btn btn--icon" data-act="test-online">🔊 Prova la voce online</button>' : ''}
+    <p class="small muted">
+      Il prezzo, per intero: serve la connessione (senza rete si torna alla voce del telefono),
+      la frase da leggere arriva ai server di Google, e non è un servizio documentato — può
+      rallentare o smettere di funzionare, e in quel caso l’app ripiega da sola senza farti
+      aspettare.
+    </p>`;
 }
 
 /** Scelta della voce fra quelle installate sul dispositivo. */

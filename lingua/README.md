@@ -244,7 +244,8 @@ dialetto abbia il suo equivalente standard.
 
 ## I dati
 
-Tutto resta su questo dispositivo, in `localStorage`. Da *Impostazioni* si
+Tutto resta su questo dispositivo, in `localStorage`. L'unica cosa che esce è
+la frase da leggere ad alta voce, e solo se la voce online è accesa. Da *Impostazioni* si
 esporta e si reimporta un backup JSON: conviene farlo prima di cambiare
 telefono o svuotare i dati del browser.
 
@@ -276,46 +277,72 @@ Durante lo studio ogni frase ha due bottoni: **🔊 Ascolta** a velocità normal
 **🐢 Lento**, che scende ancora di un terzo e separa le parole una dall'altra per
 costringere la sintesi a staccarle.
 
-**La qualità, però, non dipende dall'app.** `speechSynthesis` legge con le voci
-installate sul dispositivo. L'app le ordina per qualità probabile (voci di rete,
-nomi con *neural*, *enhanced*, *premium*, *Google*; in fondo quelle *compact*),
-usa la migliore e lascia scegliere a mano da *Impostazioni ▸ Voce*.
+### Voce online, quando quella del telefono non basta
 
-Su iPhone, però, va detto com'è: per molte lingue Safari espone **una sola
-voce**, quella compatta, e le versioni migliorate scaricate da *Accessibilità ▸
-Contenuto letto* quasi mai arrivano al browser. Per il russo questo significa
-Milena compatta, che suona sintetica, e non c'è niente da fare dal lato del
-codice.
+`speechSynthesis` legge con le voci installate sul dispositivo, e su iPhone
+Safari per il russo ne espone **una sola**: la Milena compatta. Le versioni
+migliorate scaricate da *Accessibilità ▸ Contenuto letto* quasi mai arrivano al
+browser, e dal lato del codice non c'è modo di forzarle.
 
-### Ascolto guidato: la risposta vera al problema
+Quindi si prende la voce da un'altra parte. Google Translate espone un endpoint
+di sintesi **pubblico e senza chiave** — lo stesso che pronuncia le traduzioni
+sul loro sito — che restituisce un mp3 di una voce neurale:
 
-Quando la voce non basta, alzarla o rallentarla non serve. Serve cambiare
-l'unità di ascolto, e questo si può fare:
+```
+https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ru&q=…
+```
+
+Non serve libreria né registrazione: basta un `<audio>` che punti lì. È attivo
+di serie sul **russo** e si può accendere su qualunque lingua da *Impostazioni
+▸ Voce*, con un bottone per provarlo e vedere subito se risponde.
+
+Il prezzo, per intero:
+
+- **serve la connessione.** Senza rete l'app continua a funzionare con la voce
+  del telefono;
+- **la frase viaggia fino a Google.** Sono frasi di un corpus pubblico, non
+  roba tua, ma va detto. La pagina è servita con `referrer: no-referrer`, così
+  non parte nemmeno l'indirizzo da cui arriva la richiesta;
+- **non è un servizio documentato.** Può rallentare, limitare le richieste o
+  sparire. Per questo ogni riproduzione ha un ripiego immediato: al primo
+  fallimento l'online si spegne per il resto della sessione e si torna alla
+  voce locale, senza attese;
+- **non essendoci CORS** l'mp3 non si può leggere via `fetch`, quindi non
+  finisce nella cache offline dell'app: resta la cache HTTP del browser, che
+  copre i riascolti ravvicinati.
+
+Questa parte è l'unica del progetto che dipende da un servizio esterno, e
+l'unica che le prove automatiche non possono verificare fino in fondo: si
+controlla che l'indirizzo sia ben formato, che il cirillico sopravviva alla
+codifica, che le frasi stiano sotto il limite di caratteri del servizio e —
+questo sì, per davvero, perché nell'ambiente di prova la rete non c'è — che
+**il ripiego funzioni**: senza connessione l'app lo dice e continua con la voce
+del telefono, senza errori.
+
+### Ascolto guidato
+
+Vale con qualunque voce, ed è complementare:
 
 - **👣 Parola per parola** legge una parola alla volta, ognuna come frase a sé,
   con una pausa vera in mezzo, e **illumina la parola mentre la pronuncia**;
 - **toccando una parola qualsiasi** della frase si sente solo quella, quante
   volte si vuole.
 
-Non è un ripiego estetico. Su una lingua nuova — a maggior ragione in un altro
-alfabeto — il problema non è che la voce suoni artificiale: è la
-**segmentazione**, cioè sentire dove finisce una parola e comincia l'altra
-dentro una frase letta di fila. Un canale doppio, che si sente e si vede allo
-stesso tempo, lega il suono alla forma scritta, che in cirillico è metà del
-lavoro. Una Milena compatta che dice una parola alla volta insegna più di una
-voce naturale che le impasta tutte.
+Su una lingua nuova — a maggior ragione in un altro alfabeto — metà del
+problema non è come suona la voce: è la **segmentazione**, cioè sentire dove
+finisce una parola e comincia l'altra dentro una frase letta di fila. Un canale
+doppio, che si sente e si vede allo stesso tempo, lega il suono alla forma
+scritta.
 
 Restano regolabili velocità (con il moltiplicatore per lingua) e **tono**.
 
-Oltre questo non si va senza una sintesi lato server o un audio registrato:
-servizio esterno e connessione nel primo caso, decine di megabyte nel
-repository nel secondo. È un limite dichiarato, non un difetto nascosto. Per il dialetto non esiste una voce
+ Per il dialetto non esiste una voce
 sintetica: si ripiega sul tedesco svizzero standard.
 
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura: 277 controlli
+node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 301 controlli
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```
