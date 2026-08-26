@@ -21,6 +21,7 @@ const DEFAULTS = {
     ttsRate: 0.85,
     autoGrade: true,
     speechInput: true,
+    w: null,          // pesi FSRS tarati sui propri ripassi, se calcolati
     domains: [],
   },
   decks: {},

@@ -60,6 +60,47 @@ fa ricordare meglio del solo leggerlo (*production effect*, MacLeod et al.
 frase attesa, così un omofono non conta come errore. Dove il browser non
 trascrive (fuori da Safari e Chrome) il microfono non compare nemmeno.
 
+## Tarare il modello sui propri ripassi
+
+I 19 pesi di FSRS vengono di serie dai ripassi di centinaia di milioni di carte
+altrui. Rifarli sui propri è il senso dichiarato dell'algoritmo, non un extra —
+ed è quello che fa **Progressi ▸ Taratura del modello**:
+
+1. dal registro si ricostruisce la storia di ogni carta (voto e giorni
+   trascorsi, in ordine), scartando quelle di cui non si conosce l'inizio;
+2. per una data scelta di pesi si rigioca la storia in avanti e, a ogni ripasso
+   a distanza di almeno un giorno, si confronta la probabilità di ricordare che
+   il modello prevedeva con quello che è successo davvero;
+3. la misura è la **log-loss**, affiancata dall'**RMSE di calibrazione**: la
+   prima dice quanto le previsioni sbagliano, la seconda se sono oneste — un
+   modello che dice "85%" deve azzeccarci l'85% delle volte;
+4. si scende **a coordinate**: un peso alla volta, si prova a spostarlo su e giù
+   e si tiene lo spostamento che abbassa la log-loss. Quattro passate bastano e
+   girano in un browser in un paio di decimi di secondo.
+
+Su dati simulati a partire da pesi diversi da quelli di serie, la procedura
+recupera un modello migliore dei default (log-loss 0,297 → 0,290, calibrazione
+2,8% → 1,0%, in 180 ms). Su dati che seguono già i default il guadagno resta
+trascurabile: è il controllo che impedisce all'ottimizzatore di inventarsi
+miglioramenti che non ci sono.
+
+Sotto i 120 ripassi utilizzabili il bottone resta spento, e fra 120 e 400 l'app
+avverte che la stima è ancora rumorosa.
+
+### Il prezzo della ritenzione
+
+Alzare la ritenzione richiesta accorcia gli intervalli: ricordi di più e ripassi
+di più. Non esiste un numero giusto per tutti, e chi te ne consiglia uno sta
+nascondendo delle ipotesi. L'app mostra invece **quanto costa ognuno**,
+simulando una popolazione di carte per un anno con i tuoi pesi e con i tuoi
+tempi reali per ripasso — misurati dal registro, distinguendo quanto costa
+indovinare da quanto costa sbagliare, perché una carta sbagliata torna più volte
+e riparte da più in basso.
+
+Con i pesi di serie, da 80% a 95% i ripassi passano da 5,4 a 11,6 all'anno per
+carta, più del doppio, a fronte di 8 punti di memoria media in più. La scelta
+resta tua, ma con i numeri davanti.
+
 ## I due motori
 
 ### FSRS — quando ripassare (`assets/js/fsrs.js`)
@@ -102,8 +143,9 @@ in simulazione, l'abilità vera viene recuperata entro ±0.36 su tutta la scala.
 
 | Lingua | Frasi | Item del test | Punti di grammatica |
 | --- | --- | --- | --- |
-| 🇩🇪 Tedesco | 180 | 44 | 46 |
+| 🇩🇪 Tedesco | 180 | 44 | 47 |
 | 🇨🇭 Svizzero tedesco | 115 | 34 | 31 |
+| 🇷🇺 Russo | 150 | 40 | 35 |
 | 🇬🇧 Inglese | 205 | 48 | 46 |
 | 🇪🇸 Spagnolo | 120 | 38 | 32 |
 
@@ -111,6 +153,28 @@ Tutte le frasi sono scritte per italofoni: la nota di ogni frase spiega proprio
 il punto dove l'italiano ci fa sbagliare (la posizione del verbo tedesco,
 `must` contro `have to`, `ser` contro `estar`, il congiuntivo dopo `cuando`).
 Media di sei parole per frase.
+
+### Il russo, e i due problemi che porta
+
+**L'alfabeto.** La frase giusta si scrive in cirillico, che sulla tastiera
+italiana non c'è. Le risposte si accettano in tutti e due i modi: in cirillico
+il confronto è stretto (ь e ъ contano), in caratteri latini entrambe le frasi
+vengono ridotte alla stessa traslitterazione grossolana, così le distinzioni che
+la tastiera non permette di fare (щ contro ш, ы contro и) non ti penalizzano.
+`зову́т`, `zovut`, `zovút`, `zavut`: passano tutte tranne l'ultima, che è
+un'altra parola.
+
+**L'accento tonico.** Non si scrive mai nei testi veri, cambia da forma a forma
+e sposta il suono di tutte le vocali attorno: è l'informazione che manca sempre
+e che serve sempre. Nel corpus si segna con un asterisco davanti alla vocale
+(`теб*я`), diventa `тебя́` quando studi e sparisce nel confronto. Il validatore
+controlla che ogni parola polisillabica ne abbia esattamente uno, che cada su
+una vocale e che non finisca su una ё, che l'accento ce l'ha già per conto suo.
+
+Ogni frase porta con sé una **riga di pronuncia** in caratteri latini, generata
+dal testo accentato: `Как тебя́ зову́т?` diventa `kak tebiá zovút?`. È
+un'approssimazione pensata per un lettore italiano, non una traslitterazione
+scientifica.
 
 ### Lo svizzero tedesco, con tre avvertenze
 
@@ -166,13 +230,13 @@ python3 -m http.server 8080     # poi apri http://localhost:8080/lingua/
 3. *Condividi ▸ Aggiungi a Home*: da lì parte a schermo intero e funziona offline.
 
 La voce sintetica usa `speechSynthesis` del sistema: su iOS le voci tedesca,
-inglese e spagnola sono già installate. Per il dialetto non esiste una voce
+russa, inglese e spagnola sono già installate. Per il dialetto non esiste una voce
 sintetica: si ripiega sul tedesco svizzero standard.
 
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus, motori ed esercizi: 192 controlli
+node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura: 255 controlli
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```
@@ -196,4 +260,5 @@ python3 tools/make_icons_lingua.py # rigenera le icone PNG
 - **Slamecka & Graf (1978)** — effetto generazione: si ricorda ciò che si produce.
 - **Renkl & Atkinson (2003)** — fading: i buchi crescono col consolidarsi.
 - **MacLeod et al. (2010)** — production effect: dirlo ad alta voce aiuta.
-- **Consiglio d'Europa, QCER (2001/2020)** — la scala A1-C2.
+- **Consiglio d'Europa, QCER (2001/2020)** — la scala A1-C2 (che però i
+  dialetti non li copre: per lo svizzero tedesco sono bande di difficoltà).

@@ -11,6 +11,7 @@
 
 import { DE } from './corpus-de.js';
 import { GSW } from './corpus-gsw.js';
+import { RU } from './corpus-ru.js';
 import { EN } from './corpus-en.js';
 import { ES } from './corpus-es.js';
 
@@ -26,7 +27,7 @@ export const DOMAINS = [
   { id: 'accademico', label: 'Studio e ricerca', icon: '🎓' },
 ];
 
-export const LANGS = [DE, GSW, EN, ES];
+export const LANGS = [DE, GSW, RU, EN, ES];
 
 export const byCode = (code) => LANGS.find((l) => l.code === code) || null;
 

@@ -11,8 +11,8 @@
  * Toglie accenti, punteggiatura e differenze di maiuscole. La ß diventa ss:
  * su una tastiera italiana non si digita, e in Svizzera non si scrive proprio.
  */
-export function normalize(text) {
-  return text
+export function normalize(text, fold) {
+  const flat = text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/ß/g, 'ss')
@@ -22,9 +22,11 @@ export function normalize(text) {
     .replace(/[.,!?¿¡;:"()…]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  // fold: metro di confronto proprio della lingua (per il russo, l'alfabeto)
+  return fold ? fold(flat).replace(/\s+/g, ' ').trim() : flat;
 }
 
-export const tokens = (text) => normalize(text).split(' ').filter(Boolean);
+export const tokens = (text, fold) => normalize(text, fold).split(' ').filter(Boolean);
 
 /** Distanza di Levenshtein, per perdonare un refuso dentro una parola. */
 export function editDistance(a, b) {
@@ -59,9 +61,9 @@ const closeEnough = (a, b) => a === b || (a.length > 3 && editDistance(a, b) ===
  * Allinea la risposta alla frase attesa con la classica programmazione
  * dinamica delle differenze, e restituisce i token attesi marcati.
  */
-export function diff(expected, given) {
-  const exp = tokens(expected);
-  const got = tokens(given);
+export function diff(expected, given, fold) {
+  const exp = tokens(expected, fold);
+  const got = tokens(given, fold);
   const m = exp.length;
   const n = got.length;
 
@@ -75,6 +77,7 @@ export function diff(expected, given) {
     }
   }
 
+  const shown = expected.split(/\s+/).filter(Boolean);
   const marks = [];
   const near = [];
   let i = 0;
@@ -87,18 +90,18 @@ export function diff(expected, given) {
         typos++;
         near.push({ written: got[j], expected: exp[i] });
       }
-      marks.push({ word: exp[i], status: typo ? 'typo' : 'ok' });
+      marks.push({ word: shown[i] ?? exp[i], status: typo ? 'typo' : 'ok' });
       i++;
       j++;
     } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-      marks.push({ word: exp[i], status: 'missing' });
+      marks.push({ word: shown[i] ?? exp[i], status: 'missing' });
       i++;
     } else {
       j++; // parola di troppo nella risposta: la si ignora, conta il calo di punteggio
     }
   }
   while (i < m) {
-    marks.push({ word: exp[i], status: 'missing' });
+    marks.push({ word: shown[i] ?? exp[i], status: 'missing' });
     i++;
   }
 
@@ -112,7 +115,7 @@ export function diff(expected, given) {
     score,
     typos,
     extra,
-    perfect: normalize(expected) === normalize(given),
+    perfect: normalize(expected, fold) === normalize(given, fold),
     correct: score >= 0.999 && extra === 0 && typos === 0,
   };
 }

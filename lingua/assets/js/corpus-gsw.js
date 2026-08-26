@@ -158,7 +158,7 @@ const RAW = [
 ];
 
 export const SENTENCES = RAW.map(([id, lv, text, it, g, key, dom, note, de]) => ({
-  id: `gsw-${id}`, lv, text, it, g, key, dom, note, de,
+  id: `gsw-${id}`, lv, text, it, g, key, dom, note, bridge: de,
 }));
 
 /* Banca di item per il test di livello adattivo (vedi corpus-en.js). */

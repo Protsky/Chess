@@ -10,7 +10,8 @@ import { LANGS, DOMAINS, LEVELS, byCode } from './corpus.js';
 import * as Store from './store.js';
 import * as Irt from './irt.js';
 import * as Stats from './stats.js';
-import { createScheduler, GRADES, REVIEW, NEW } from './fsrs.js';
+import { createScheduler, GRADES, REVIEW, NEW, DEFAULT_W } from './fsrs.js';
+import * as Opt from './optimizer.js';
 import { buildQueue, splitId, TYPES, nextDue, targetLevel } from './scheduler.js';
 import { diff } from './check.js';
 import * as Ex from './exercises.js';
@@ -67,7 +68,10 @@ let exam = null;
 let lang = null;
 
 const settings = () => Store.getSettings();
-const scheduler = () => createScheduler({ requestRetention: settings().retention });
+const scheduler = () => {
+  const cfg = settings();
+  return createScheduler({ requestRetention: cfg.retention, w: cfg.w || undefined });
+};
 
 /* --------------------------------- audio -------------------------------- */
 
@@ -457,6 +461,7 @@ function prepare() {
   session.heard = null;
   session.micError = null;
   session.listening = false;
+  session.shownAt = Date.now(); // serve a misurare quanto costa davvero un ripasso
 
   if (type === 'comp') session.ex = Ex.buildChoice(sentence, lang, seed);
   else if (type === 'build') {
@@ -473,10 +478,16 @@ function prepare() {
 
 /* ------------------------------ correzione ------------------------------- */
 
+/** Metro di confronto della lingua: per il russo dipende da come si è risposto. */
+const folded = (answer) => (lang.fold ? lang.fold(answer) : undefined);
+
 /** Confronto di un cloze: ogni buco separato, più un esito complessivo. */
 function checkCloze(parts, filled) {
   const blanks = parts.filter((p) => p.blank);
-  const rows = blanks.map((p, i) => ({ ...diff(p.answer, filled[i] || ''), answer: p.answer, given: filled[i] || '' }));
+  const rows = blanks.map((p, i) => {
+    const given = filled[i] || '';
+    return { ...diff(p.answer, given, folded(given)), answer: p.answer, given };
+  });
   return {
     rows,
     correct: rows.every((r) => r.correct),
@@ -499,11 +510,11 @@ function check() {
   const s = session.sentence;
   if (session.type === 'build') {
     const given = session.picked.map((i) => session.ex.tiles[i]).join(' ');
-    settle(diff(s.text, given));
+    settle(diff(s.text, given, folded(given)));
   } else if (session.type === 'cloze') {
     settle(checkCloze(session.ex.parts, session.filled));
   } else if (session.type === 'prod') {
-    settle(diff(s.text, session.answer));
+    settle(diff(s.text, session.answer, folded(session.answer)));
   }
 }
 
@@ -531,7 +542,7 @@ function toggleMic() {
   stopMic = Speech.listen({
     locale: lang.locale,
     onResult: (alternatives) => {
-      const best = Speech.bestOf(alternatives, (text) => diff(target, text));
+      const best = Speech.bestOf(alternatives, (text) => diff(target, text, folded(text)));
       if (!best) return;
       session.heard = best.text;
       session.answer = best.text;
@@ -596,7 +607,7 @@ function paintStudy() {
     body.append(h(`
       <div class="reveal">
         ${repeat ? `<p class="solution">${esc(sentence.text)}</p>` : ''}
-        ${sentence.de ? `<p class="bridge"><span>${esc(lang.bridge || 'Standard')}</span>${esc(sentence.de)}</p>` : ''}
+        ${sentence.bridge ? `<p class="bridge"><span>${esc(lang.bridge)}</span>${esc(sentence.bridge)}</p>` : ''}
         <p class="note"><b>${esc(sentence.g)}</b> — ${esc(sentence.note)}</p>
         <div class="tags">${sentence.dom.map((d) => `<span class="tag">${esc(DOMAINS.find((x) => x.id === d)?.label || d)}</span>`).join('')}</div>
         ${type === 'comp' ? '' : '<button class="btn btn--icon" data-act="say">🔊 Ascolta</button>'}
@@ -716,7 +727,8 @@ function askCloze(body, foot, sentence, done) {
   if (!done) {
     body.append(h(`<p class="muted small center">${session.ex.blanks === 1
       ? 'Manca un pezzo. Crescono man mano che la frase si consolida.'
-      : `Mancano ${session.ex.blanks} pezzi su ${session.ex.total} parole.`}</p>`));
+      : `Mancano ${session.ex.blanks} pezzi su ${session.ex.total} parole.`}${
+      lang.script ? ' Puoi scrivere anche in caratteri latini.' : ''}</p>`));
     const inputs = [...line.querySelectorAll('[data-blank]')];
     inputs.forEach((input, i) => {
       input.addEventListener('input', () => { session.filled[i] = input.value; });
@@ -745,12 +757,12 @@ function askProd(body, foot, sentence, done) {
   body.append(h(`
     <div class="stack center">
       <p class="hint hint--big">${esc(sentence.it)}</p>
-      ${done ? '' : '<p class="muted small">Scrivila per intero, o dettala.</p>'}
+      ${done ? '' : `<p class="muted small">Scrivila per intero, o dettala.${lang.script ? ` In ${esc(lang.script)} o in caratteri latini: vanno bene entrambi.` : ''}</p>`}
     </div>`));
 
   if (!done) {
     const input = h(`<input class="input" type="text" inputmode="text" autocapitalize="none" autocomplete="off"
-      autocorrect="off" spellcheck="false" placeholder="scrivi la frase" value="${esc(session.answer)}">`);
+      autocorrect="off" spellcheck="false" placeholder="${lang.script ? 'scrivi la frase, anche in latino' : 'scrivi la frase'}" value="${esc(session.answer)}">`);
     body.append(input);
     input.addEventListener('input', () => { session.answer = input.value; });
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
@@ -804,6 +816,7 @@ function commit(grade) {
     wasReview,
     isNew,
     ivl: next.ivl,
+    ms: Math.min(600000, now - (session.shownAt || now)),
     s: Number(next.s.toFixed(3)),
     d: Number(next.d.toFixed(2)),
   }, lang.code);
@@ -997,6 +1010,8 @@ function paintStats() {
           </div>`).join('') : '<p class="muted small">Ancora niente: comincia una sessione.</p>'}
       </div>
 
+      <div id="tuning-slot"></div>
+
       ${trouble.length ? `
       <div class="card card--flat">
         <div class="card__head"><b>Le più ostiche</b></div>
@@ -1010,7 +1025,167 @@ function paintStats() {
       </div>` : ''}
     </section>`);
   on(el, '[data-act="retest"]', 'click', () => startExam());
+  const slot = el.querySelector('#tuning-slot');
+  paintTuning(slot, deck, cfg);
+  paintRetention(slot, deck, cfg);
   view.append(el);
+}
+
+
+/* ---------------------- taratura del modello di memoria ------------------ */
+
+let tuning = null;   // esito dell'ultima ottimizzazione, in attesa di conferma
+
+/** Riga della curva di calibrazione: previsto contro accaduto. */
+function calibrationRows(bins) {
+  const max = Math.max(...bins.map((b) => b.n));
+  return bins.map((b) => `
+    <div class="calib">
+      <span class="calib__band">${Math.round(b.from * 100)}–${Math.round(b.to * 100)}%</span>
+      <span class="calib__bars">
+        <i class="calib__bar calib__bar--pred" style="width:${Math.round(b.predicted * 100)}%"></i>
+        <i class="calib__bar calib__bar--obs" style="width:${Math.round(b.observed * 100)}%"></i>
+      </span>
+      <span class="calib__n muted small" style="opacity:${0.35 + 0.65 * (b.n / max)}">${b.n}</span>
+    </div>`).join('');
+}
+
+function paintTuning(container, deck, cfg) {
+  const sequences = Opt.replay(deck.log);
+  const current = cfg.w || DEFAULT_W;
+  const now = Opt.score(sequences, current);
+  const personal = Boolean(cfg.w);
+  const enough = now.n >= Opt.MIN_REVIEWS;
+
+  const card = h(`
+    <div class="card card--flat">
+      <div class="card__head">
+        <b>Taratura del modello</b>
+        <span class="pill">${personal ? 'pesi tuoi' : 'pesi di serie'}</span>
+      </div>
+      <p class="small muted">
+        I 19 pesi di FSRS che decidono i tuoi intervalli vengono, di serie, dai ripassi di
+        centinaia di milioni di carte altrui. Si possono rifare sui tuoi: è il senso
+        dichiarato dell’algoritmo, non un extra.
+      </p>
+      <div class="row">
+        <div class="stat">
+          <div class="stat__n">${now.n}</div>
+          <div class="stat__l">ripassi utilizzabili</div>
+        </div>
+        <div class="stat">
+          <div class="stat__n">${now.rmse === null ? '—' : (now.rmse * 100).toFixed(1) + '%'}</div>
+          <div class="stat__l">errore di calibrazione</div>
+        </div>
+        <div class="stat">
+          <div class="stat__n">${Number.isFinite(now.logLoss) ? now.logLoss.toFixed(3) : '—'}</div>
+          <div class="stat__l">log-loss</div>
+        </div>
+      </div>
+      <div id="tuning-body"></div>
+    </div>`);
+  container.append(card);
+  const body = card.querySelector('#tuning-body');
+
+  if (!now.n) {
+    body.append(h('<p class="small muted">La taratura compare dopo i primi ripassi arrivati a scadenza: prima non c’è niente da misurare.</p>'));
+    return;
+  }
+
+  const bins = Opt.calibration(now.rows);
+  body.append(h(`
+    <div class="stack">
+      <p class="small muted">
+        Quando il modello dice “te la ricordi all’85%”, dovrebbe azzeccarci l’85% delle volte.
+        La barra chiara è quello che prevedeva, quella piena quello che è successo davvero.
+      </p>
+      <div class="calibs">${calibrationRows(bins)}</div>
+      <div class="legend">
+        <span><i class="dot dot--pred"></i>previsto</span>
+        <span><i class="dot dot--obs"></i>accaduto</span>
+      </div>
+    </div>`));
+
+  if (tuning) {
+    const better = tuning.after.logLoss < tuning.before.logLoss;
+    body.append(h(`
+      <div class="card card--flat">
+        <p class="small"><b>${better ? 'Trovati pesi migliori dei tuoi attuali.' : 'I pesi attuali reggono: non ho trovato di meglio.'}</b></p>
+        <p class="small muted">
+          log-loss ${tuning.before.logLoss.toFixed(4)} → <b>${tuning.after.logLoss.toFixed(4)}</b> ·
+          calibrazione ${(tuning.before.rmse * 100).toFixed(1)}% → <b>${(tuning.after.rmse * 100).toFixed(1)}%</b>
+          ${tuning.n < Opt.GOOD_REVIEWS ? '<br>Con meno di ' + Opt.GOOD_REVIEWS + ' ripassi la stima è ancora rumorosa: rifalla più avanti.' : ''}
+        </p>
+        <div class="row">
+          <button class="btn btn--primary" data-act="apply"${better ? '' : ' disabled'}>Usa questi pesi</button>
+          <button class="btn btn--ghost" data-act="discard">Lascia stare</button>
+        </div>
+      </div>`));
+  } else {
+    body.append(h(`
+      <div class="stack">
+        <button class="btn btn--ghost" data-act="fit"${enough ? '' : ' disabled'}>
+          Ricalcola i pesi sui miei ripassi
+        </button>
+        ${enough ? '' : `<p class="small muted">Servono almeno ${Opt.MIN_REVIEWS} ripassi a scadenza: ne hai ${now.n}. Sotto quella soglia si starebbe tarando sul rumore.</p>`}
+        ${personal ? '<button class="btn btn--ghost small" data-act="reset-w">Torna ai pesi di serie</button>' : ''}
+      </div>`));
+  }
+
+  on(card, '[data-act="fit"]', 'click', (e) => {
+    const btn = e.currentTarget;
+    btn.textContent = 'Sto rigiocando i tuoi ripassi…';
+    btn.disabled = true;
+    setTimeout(() => {
+      const result = Opt.optimize(sequences, { start: current });
+      tuning = { w: result.w, before: now, after: Opt.score(sequences, result.w), n: now.n };
+      render();
+    }, 30);
+  });
+  on(card, '[data-act="apply"]', 'click', () => {
+    Store.setSetting('w', tuning.w);
+    tuning = null;
+    render();
+  });
+  on(card, '[data-act="discard"]', 'click', () => { tuning = null; render(); });
+  on(card, '[data-act="reset-w"]', 'click', () => { Store.setSetting('w', null); render(); });
+}
+
+/** Quanto costa la ritenzione che hai chiesto, e quanto costerebbero le altre. */
+function paintRetention(container, deck, cfg) {
+  const cost = Opt.measuredCost(deck.log);
+  const curve = Opt.retentionCurve(cfg.w || DEFAULT_W, { cost });
+  const here = curve.find((p) => Math.abs(p.retention - cfg.retention) < 0.005) || curve[10];
+  const low = curve[0];
+  const high = curve[curve.length - 1];
+  const maxReviews = Math.max(...curve.map((p) => p.reviews));
+
+  container.append(h(`
+    <div class="card card--flat">
+      <div class="card__head"><b>Il prezzo della ritenzione</b><span class="pill">${Math.round(cfg.retention * 100)}%</span></div>
+      <p class="small muted">
+        Alzare la ritenzione richiesta accorcia gli intervalli: ricordi di più e ripassi di più.
+        Non esiste un numero giusto per tutti — dipende da quanto tempo hai — quindi invece di
+        consigliartene uno, ecco quanto costa ognuno, simulato con i tuoi pesi
+        ${cost.measured ? `e con i tuoi tempi reali (${cost.pass.toFixed(0)} s se indovini, ${cost.fail.toFixed(0)} s se sbagli)` : 'e con tempi di riferimento, finché non ne avrai di tuoi'}.
+      </p>
+      <div class="levels">
+        ${curve.filter((p) => [80, 85, 88, 90, 92, 95].includes(Math.round(p.retention * 100))).map((p) => `
+          <div class="levels__row${Math.abs(p.retention - cfg.retention) < 0.005 ? ' levels__row--on' : ''}">
+            <span class="levels__lv">${Math.round(p.retention * 100)}%</span>
+            <span class="levels__bar"><i style="width:${Math.round((p.reviews / maxReviews) * 100)}%"></i></span>
+            <span class="levels__n muted small">${p.reviews.toFixed(1)} rip.</span>
+            <span class="levels__n muted small">${Math.round(p.knowledge * 100)}%</span>
+          </div>`).join('')}
+      </div>
+      <p class="small muted">
+        Per carta e per anno: ripassi a sinistra, memoria media a destra. Fra
+        ${Math.round(low.retention * 100)}% e ${Math.round(high.retention * 100)}% i ripassi passano da
+        ${low.reviews.toFixed(1)} a ${high.reviews.toFixed(1)} — ${(high.reviews / low.reviews).toFixed(1)} volte tanti —
+        per ${Math.round((high.knowledge - low.knowledge) * 100)} punti di memoria in più.
+        ${here ? `Al ${Math.round(here.retention * 100)}% che hai adesso: ${here.reviews.toFixed(1)} ripassi l’anno.` : ''}
+      </p>
+    </div>`));
 }
 
 /* ------------------------------ impostazioni ----------------------------- */
@@ -1149,6 +1324,8 @@ const PAPERS = [
   ['Dirlo ad alta voce lo fissa meglio', 'MacLeod, Gopie, Hourihan, Neary & Ozubko (2010), production effect: pronunciare quello che si studia lo rende più memorabile del solo leggerlo. Per questo la produzione si può dettare, non solo scrivere.'],
   ['La difficoltà giusta è quella che costa', 'Bjork, desirable difficulties: la carta torna quando la probabilità di ricordarla è scesa intorno al 90%, non prima.'],
   ['Il modello della memoria a tre variabili', 'Ye et al. (2022-2024), FSRS: stabilità, difficoltà e recuperabilità, con curva di oblio a legge di potenza. È l’algoritmo che decide qui ogni intervallo.'],
+  ['I parametri si rifanno sui tuoi dati, non restano quelli di tutti', 'Sempre FSRS: i 19 pesi di serie vengono da centinaia di milioni di ripetizioni altrui e sono pensati per essere riottimizzati sulla cronologia di chi studia. Da Progressi si rigioca il proprio registro e si cercano i pesi che spiegano meglio i propri ripassi.'],
+  ['Una previsione va misurata, non creduta', 'La qualità di un modello probabilistico si giudica con la log-loss e con la calibrazione: se dice “85%” deve azzeccarci l’85% delle volte. Il grafico in Progressi mette il previsto accanto all’accaduto, fascia per fascia.'],
   ['Input comprensibile appena sopra il livello', 'Krashen (1985), ipotesi dell’input "i+1": le frasi nuove vengono pescate poco sopra il livello stimato, non a caso.'],
   ['Si impara a blocchi, non a parole', 'Wray (2002) e Ellis (2012) sulle formulaic sequences: le sequenze fisse si recuperano intere e portano con sé collocazioni e ordine delle parole.'],
   ['Prima si riconosce, poi si produce', 'Nation (2001): la conoscenza ricettiva precede quella produttiva. Le tre carte per frase seguono questa scala.'],
@@ -1169,7 +1346,7 @@ function paintScience() {
             <p class="paper__b">${esc(b)}</p>
           </div>`).join('')}
       </div>
-      <p class="small muted">I parametri di FSRS usati qui sono quelli di default della versione 5, ottimizzati su dati aggregati: valgono come punto di partenza per chiunque. Un algoritmo tarato sulla tua cronologia richiederebbe qualche migliaio di ripassi tuoi.</p>
+      <p class="small muted">I parametri di FSRS partono da quelli di default della versione 5, ottimizzati su dati aggregati. Da <b>Progressi ▸ Taratura del modello</b> si rifanno sui tuoi ripassi: sotto qualche centinaio la stima è rumorosa, e l’app lo dice invece di nasconderlo.</p>
     </section>`);
   view.append(el);
 }

@@ -109,8 +109,10 @@ In `lingua/` c’è una seconda app, indipendente dalla prima: **impara una ling
 memorizzando frasi corte** invece di parole singole, con un test di livello
 adattivo su modello IRT, quattro esercizi che si correggono da soli (niente
 autovalutazione) e uno scheduler FSRS che decide quando riproporre ogni frase. Tedesco (180 frasi), svizzero tedesco di Zurigo (115, ognuna con
-l’equivalente in tedesco standard), inglese (205) e spagnolo (120), tutte
-scritte per italofoni.
+l’equivalente in tedesco standard), russo (150, con accento tonico segnato e
+risposte accettate anche in caratteri latini), inglese (205) e spagnolo (120),
+tutte scritte per italofoni. I pesi dello scheduler si possono rifare sui
+propri ripassi, con la calibrazione a vista.
 
 Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
 

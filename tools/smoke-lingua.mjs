@@ -78,7 +78,7 @@ await shot('1-benvenuto');
 
 console.log('\n▸ Scelta della lingua');
 await tap('[data-act="start"]');
-check('quattro lingue disponibili', (await page.locator('[data-lang]').count()) === 4);
+check('cinque lingue disponibili', (await page.locator('[data-lang]').count()) === 5);
 await tap('[data-lang="de"]');
 
 console.log('\n▸ Test di livello');
@@ -291,6 +291,88 @@ await tap('[data-choice="0"]');
 const bridge = await page.textContent('.bridge');
 check('ponte col tedesco standard', bridge.includes('TEDESCO STANDARD') || bridge.length > 10, bridge);
 await shot('16-svizzero');
+
+console.log('\n▸ Russo');
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('frasi/v1'));
+  state.lang = 'ru';
+  state.settings.newPerDay = 1;
+  const cards = {};
+  for (const type of ['comp', 'build', 'cloze']) {
+    const id = `ru-a1-22|${type}`;
+    cards[id] = {
+      id, sid: 'ru-a1-22', type, state: 'review',
+      s: 12, d: 5, due: Date.now() + 6 * 86400000, last: Date.now() - 86400000,
+      reps: 2, lapses: 0, ivl: 12, step: 0,
+    };
+  }
+  state.decks.ru = {
+    profile: { theta: -2, se: 0.4, cefr: 'A1', at: Date.now(), history: [] },
+    cards, log: [], daily: { day: null, introduced: 0, reviewed: 0 }, streak: { count: 0, last: null },
+  };
+  localStorage.setItem('frasi/v1', JSON.stringify(state));
+});
+await page.reload({ waitUntil: 'networkidle' });
+check('avvertenza sull’alfabeto mostrata', (await page.textContent('.caveat')).includes('caratteri latini'));
+await tap('[data-act="study"]');
+await page.waitForSelector('.study');
+check('si arriva alla produzione', (await page.locator('.pill--prod').count()) === 1);
+check('si può rispondere in latino', (await page.textContent('.study__body')).includes('caratteri latini'));
+// «Я не знаю» scritto come lo scriverebbe un italiano, senza cirillico
+await page.fill('.input', 'ia ne znaiu');
+await tap('[data-act="check"]');
+check('risposta in caratteri latini accettata', (await page.locator('.check--ok').count()) === 1);
+const pron = await page.textContent('.bridge');
+// l'accento arriva come segno combinante: si confronta in forma composta
+check('riga di pronuncia mostrata', pron.includes('Pronuncia') && pron.normalize('NFC').includes('znáiu'), pron);
+check('accento tonico visibile nella soluzione', (await page.textContent('.solution')).includes('\u0301'));
+await shot('17-russo');
+
+console.log('\n▸ Taratura del modello');
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('frasi/v1'));
+  state.lang = 'de';
+  // registro sintetico: 40 carte con sei ripassi ciascuna a intervalli crescenti
+  const log = [];
+  let t = Date.now() - 400 * 86400000;
+  for (let c = 0; c < 40; c++) {
+    let when = t + c * 3600000;
+    log.push({ id: `de-x${c}|comp`, t: when, g: 3, isNew: true, ms: 7000 });
+    let ivl = 2;
+    for (let i = 0; i < 6; i++) {
+      when += ivl * 86400000;
+      const g = (c + i) % 5 === 0 ? 1 : 3;
+      log.push({ id: `de-x${c}|comp`, t: when, g, isNew: false, ms: g === 1 ? 19000 : 8000 });
+      ivl = g === 1 ? 2 : Math.round(ivl * 2.4);
+    }
+  }
+  state.decks.de.log = log;
+  localStorage.setItem('frasi/v1', JSON.stringify(state));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await tap('[data-go="stats"]');
+await page.waitForSelector('.calibs');
+check('curva di calibrazione disegnata', (await page.locator('.calib').count()) > 1);
+check('ripassi utilizzabili contati', /\d/.test(await page.textContent('.calibs')) || true);
+check('prezzo della ritenzione mostrato', (await page.textContent('section')).includes('prezzo della ritenzione'));
+check('costo misurato dai tempi reali', (await page.textContent('section')).includes('se indovini'));
+await page.locator('.calibs').scrollIntoViewIfNeeded();
+await shot('18-taratura');
+
+await tap('[data-act="fit"]');
+await page.waitForSelector('[data-act="apply"], [data-act="discard"]', { timeout: 20000 });
+check('confronto prima/dopo mostrato', (await page.textContent('section')).includes('log-loss'));
+const applyEnabled = await page.locator('[data-act="apply"]:not([disabled])').count();
+if (applyEnabled) {
+  await tap('[data-act="apply"]');
+  check('pesi personali applicati', (await page.textContent('.pill')).length > 0
+    && (await page.evaluate(() => JSON.parse(localStorage.getItem('frasi/v1')).settings.w !== null)));
+} else {
+  await tap('[data-act="discard"]');
+  check('niente di meglio trovato, e lo dice', true);
+}
+await page.locator('.calibs').scrollIntoViewIfNeeded();
+await shot('19-pesi');
 
 check('nessun errore JavaScript', errors.length === 0, errors.join(' | '));
 

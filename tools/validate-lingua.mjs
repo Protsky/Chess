@@ -10,6 +10,8 @@ import * as Irt from '../lingua/assets/js/irt.js';
 import { diff, suggestGrade, normalize } from '../lingua/assets/js/check.js';
 import { buildQueue, cardId, unlocked, TYPES } from '../lingua/assets/js/scheduler.js';
 import * as Ex from '../lingua/assets/js/exercises.js';
+import * as Tr from '../lingua/assets/js/translit.js';
+import * as Opt from '../lingua/assets/js/optimizer.js';
 
 let errors = 0;
 let checks = 0;
@@ -39,13 +41,13 @@ for (const lang of LANGS) {
     if (!s.it || !s.it.trim()) fail(`${tag}: manca la traduzione`);
     if (!s.note || s.note.length < 20) fail(`${tag}: nota troppo scarna`);
     if (!s.dom.length) fail(`${tag}: nessun settore`);
-    if (lang.bridge && !s.de) fail(`${tag}: manca l'equivalente in ${lang.bridge}`);
-    if (!lang.bridge && s.de) fail(`${tag}: equivalente standard su una lingua che non lo dichiara`);
+    if (lang.bridge && !s.bridge) fail(`${tag}: manca la riga di riscontro (${lang.bridge})`);
+    if (!lang.bridge && s.bridge) fail(`${tag}: riga di riscontro su una lingua che non la dichiara`);
     for (const d of s.dom) if (!DOMAIN_IDS.includes(d)) fail(`${tag}: settore sconosciuto (${d})`);
     const words = s.text.split(/\s+/).length;
     if (words < 2 || words > 12) fail(`${tag}: ${words} parole, fuori dalla finestra 2-12`);
   }
-  ok(`${lang.sentences.length} frasi coerenti${lang.bridge ? `, tutte con l'equivalente in ${lang.bridge.toLowerCase()}` : ''}`);
+  ok(`${lang.sentences.length} frasi coerenti${lang.bridge ? `, tutte con la riga "${lang.bridge.toLowerCase()}"` : ''}`);
 
   for (const lv of LEVELS) {
     const n = lang.sentences.filter((s) => s.lv === lv).length;
@@ -239,6 +241,57 @@ console.log('\n[check] correzione delle risposte');
 
 /* ------------------------------- coda ---------------------------------- */
 
+console.log('\n[translit] cirillico e tastiera italiana');
+{
+  const ru = LANGS.find((l) => l.code === 'ru');
+  const ACUTE = '\u0301';
+  const VOWELS = 'аеиоуыэюяАЕИОУЫЭЮЯ';
+
+  let problems = 0;
+  let marked = 0;
+  for (const s of ru.sentences) {
+    for (const raw of s.text.split(/\s+/)) {
+      const w = raw.replace(/[.,?!]/g, '');
+      const n = (w.match(new RegExp(ACUTE, 'g')) || []).length;
+      const at = w.indexOf(ACUTE);
+      const vowels = (w.match(/[аеёиоуыэюяАЕЁИОУЫЭЮЯ]/g) || []).length;
+      if (n > 1) { fail(`${s.id}: due accenti in "${w}"`); problems++; }
+      if (n && w.includes('ё')) { fail(`${s.id}: accento su una parola con ё ("${w}")`); problems++; }
+      if (n && !VOWELS.includes(w[at - 1] || '')) { fail(`${s.id}: accento non su vocale in "${w}"`); problems++; }
+      if (!n && !w.includes('ё') && vowels > 1) { fail(`${s.id}: "${w}" polisillabica senza accento`); problems++; }
+      if (n) marked++;
+    }
+  }
+  expect(problems === 0, `${problems} anomalie sugli accenti tonici`);
+  ok(`${marked} parole con accento tonico, tutte ben formate`);
+
+  // scrivere in cirillico o in latino deve valere allo stesso modo
+  const pairs = [
+    ['Как тебя зовут?', ['как тебя зовут', 'Kak tebya zovut', 'kak tebja zovut', 'kak tebia zovut'], true],
+    ['Как тебя зовут?', ['как тибя зовут', 'kak tebe zovut'], false],
+    ['Я не знаю.', ['я не знаю', 'ya ne znayu', 'ja ne znaju', 'ia ne znaiu'], true],
+    ['Очень приятно.', ['ochen priyatno', 'очень приятно', 'ochen prijatno'], true],
+  ];
+  for (const [target, answers, shouldPass] of pairs) {
+    for (const given of answers) {
+      const r = diff(target, given, Tr.folderFor(given));
+      expect(r.correct === shouldPass, `"${given}" contro "${target}": atteso ${shouldPass}, ottenuto ${r.correct}`);
+    }
+  }
+  ok('le risposte valgono in cirillico e in caratteri latini, ma non se la parola è sbagliata');
+
+  // in cirillico il metro resta stretto: ь e ъ contano
+  const strict = diff('Мне нужно идти.', 'мне нужно идти', Tr.folderFor('мне нужно идти'));
+  const loose = diff('Мне нужно идти.', 'мне нужно итти', Tr.folderFor('мне нужно итти'));
+  expect(strict.correct && !loose.correct, 'il confronto in cirillico non distingue le consonanti');
+  ok('chi scrive in cirillico viene tenuto sui dettagli');
+
+  // la pronuncia non è vuota e non contiene più cirillico
+  const bad = ru.sentences.filter((s) => !s.bridge || Tr.hasCyrillic(s.bridge));
+  expect(bad.length === 0, `${bad.length} righe di pronuncia incomplete`);
+  ok(`${ru.sentences.length} righe di pronuncia generate dal testo accentato`);
+}
+
 console.log('\n[exercises] esercizi che si correggono da soli');
 {
   const lang = LANGS.find((l) => l.code === 'de');
@@ -299,6 +352,85 @@ console.log('\n[exercises] esercizi che si correggono da soli');
   expect(Ex.autoGrade({ correct: false, score: 0.5, extra: 0 }) === 1, 'risposta incompleta non vale Di nuovo');
   expect(Ex.autoGrade({ correct: false, score: 1, extra: 2 }) === 1, 'parole di troppo non vengono penalizzate');
   ok('il voto scende dall’esito, non da un giudizio');
+}
+
+console.log('\n[optimizer] pesi tarati sui propri ripassi');
+{
+  // si costruisce un utente finto la cui memoria segue pesi diversi dai default,
+  // e si controlla che l'ottimizzatore sappia riconoscerlo dai soli ripassi
+  const truth = Fsrs.DEFAULT_W.map((x, i) => x * (i % 3 === 0 ? 1.4 : 0.75));
+  let rnd = 11;
+  const rand = () => { rnd = (rnd * 1103515245 + 12345) % 2147483648; return rnd / 2147483648; };
+  const t0 = Date.parse('2026-01-01T08:00:00Z');
+  const log = [];
+  for (let c = 0; c < 200; c++) {
+    let state = Fsrs.memoryStep(truth, null, 3, 0);
+    let when = t0 + c * 60000;
+    log.push({ id: `c${c}`, t: when, g: 3, isNew: true });
+    for (let i = 0; i < 8; i++) {
+      const ivl = Math.max(1, Math.round(Fsrs.intervalFor(state.s, 0.9)));
+      const grade = rand() < Fsrs.retrievability(ivl, state.s) ? 3 : 1;
+      when += ivl * 86400000;
+      log.push({ id: `c${c}`, t: when, g: grade, isNew: false });
+      state = Fsrs.memoryStep(truth, state, grade, ivl);
+    }
+  }
+
+  const sequences = Opt.replay(log);
+  expect(sequences.length === 200, `ricostruite ${sequences.length} storie invece di 200`);
+  expect(Opt.replay(log.filter((e) => !e.isNew)).length === 0, 'storie senza inizio non vanno scartate');
+  ok(`${sequences.length} storie ricostruite dal registro, quelle senza inizio scartate`);
+
+  const before = Opt.score(sequences, Fsrs.DEFAULT_W);
+  const started = Date.now();
+  const fitted = Opt.optimize(sequences, { start: Fsrs.DEFAULT_W });
+  const elapsed = Date.now() - started;
+  const after = Opt.score(sequences, fitted.w);
+
+  expect(after.logLoss < before.logLoss, `la log-loss non migliora: ${before.logLoss} → ${after.logLoss}`);
+  expect(after.rmse < before.rmse, `la calibrazione non migliora: ${before.rmse} → ${after.rmse}`);
+  expect(fitted.w.every((x, i) => x >= Fsrs.BOUNDS[i][0] && x <= Fsrs.BOUNDS[i][1]), 'pesi fuori dai limiti');
+  expect(elapsed < 5000, `troppo lento per un telefono: ${elapsed} ms`);
+  ok(`log-loss ${before.logLoss.toFixed(4)} → ${after.logLoss.toFixed(4)}, calibrazione ${(before.rmse * 100).toFixed(1)}% → ${(after.rmse * 100).toFixed(1)}%, in ${elapsed} ms`);
+
+  // su dati generati dai pesi di serie, non deve inventarsi miglioramenti grossi
+  const honest = [];
+  for (let c = 0; c < 120; c++) {
+    let state = Fsrs.memoryStep(Fsrs.DEFAULT_W, null, 3, 0);
+    const steps = [{ grade: 3, elapsed: 0 }];
+    for (let i = 0; i < 8; i++) {
+      const ivl = Math.max(1, Math.round(Fsrs.intervalFor(state.s, 0.9)));
+      const grade = rand() < Fsrs.retrievability(ivl, state.s) ? 3 : 1;
+      steps.push({ grade, elapsed: ivl });
+      state = Fsrs.memoryStep(Fsrs.DEFAULT_W, state, grade, ivl);
+    }
+    honest.push(steps);
+  }
+  const baseline = Opt.score(honest, Fsrs.DEFAULT_W);
+  const refit = Opt.score(honest, Opt.optimize(honest, { start: Fsrs.DEFAULT_W }).w);
+  expect(baseline.logLoss - refit.logLoss < 0.05, `guadagno sospetto su dati già di serie: ${baseline.logLoss - refit.logLoss}`);
+  ok('su dati che seguono già i pesi di serie il guadagno resta trascurabile');
+
+  const bins = Opt.calibration(before.rows);
+  expect(bins.every((b) => b.n > 0 && b.predicted >= b.from - 1e-9 && b.predicted <= b.to + 1e-9), 'fasce di calibrazione incoerenti');
+  expect(Math.abs(bins.reduce((a, b) => a + b.n, 0) - before.n) < 1, 'la calibrazione perde per strada dei ripassi');
+  ok(`${bins.length} fasce di calibrazione, tutte con dentro le previsioni giuste`);
+
+  // la curva del costo deve essere monotona: più ritenzione, più ripassi
+  const curve = Opt.retentionCurve(Fsrs.DEFAULT_W);
+  expect(curve.length === 16, `curva con ${curve.length} punti invece di 16`);
+  expect(curve.every((p, i) => i === 0 || p.reviews >= curve[i - 1].reviews - 0.2), 'i ripassi non crescono con la ritenzione');
+  expect(curve.every((p, i) => i === 0 || p.knowledge >= curve[i - 1].knowledge - 0.01), 'la memoria media non cresce con la ritenzione');
+  expect(curve[15].reviews > curve[0].reviews * 1.5, 'la differenza di carico fra 80% e 95% è troppo piccola per essere vera');
+  ok(`dal 80% al 95%: ${curve[0].reviews.toFixed(1)} → ${curve[15].reviews.toFixed(1)} ripassi l’anno per ${Math.round((curve[15].knowledge - curve[0].knowledge) * 100)} punti di memoria`);
+
+  const cost = Opt.measuredCost([
+    ...Array.from({ length: 30 }, () => ({ g: 3, ms: 8000 })),
+    ...Array.from({ length: 15 }, () => ({ g: 1, ms: 20000 })),
+    { g: 3, ms: 400 }, { g: 3, ms: 999999 },
+  ]);
+  expect(cost.measured && Math.abs(cost.pass - 8) < 0.01 && Math.abs(cost.fail - 20) < 0.01, `tempi misurati male: ${JSON.stringify(cost)}`);
+  ok('i tempi per ripasso si misurano dal registro, scartando le pause');
 }
 
 console.log('\n[scheduler] costruzione della sessione');

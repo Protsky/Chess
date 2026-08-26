@@ -85,11 +85,11 @@ export function newCard(id, extra = {}) {
   };
 }
 
-function initStability(w, grade) {
+export function initStability(w, grade) {
   return clamp(w[grade - 1], S_MIN, S_MAX);
 }
 
-function initDifficulty(w, grade) {
+export function initDifficulty(w, grade) {
   return clamp(w[4] - Math.exp(w[5] * (grade - 1)) + 1, 1, 10);
 }
 
@@ -128,6 +128,36 @@ function stabilityShortTerm(w, s, grade) {
   return clamp(s * Math.exp(w[17] * (grade - 3 + w[18])), S_MIN, S_MAX);
 }
 
+/**
+ * Un passo del modello di memoria, senza scadenze né stato della carta.
+ * È il cuore che serve anche all'ottimizzatore, che lo richiama migliaia di
+ * volte con pesi diversi per vedere quali spiegano meglio i tuoi ripassi.
+ *
+ *   state: null per la prima volta, altrimenti { s, d }
+ *   elapsed: giorni dall'ultimo ripasso
+ */
+export function memoryStep(w, state, grade, elapsed) {
+  if (!state || !(state.s > 0)) {
+    return { s: initStability(w, grade), d: initDifficulty(w, grade) };
+  }
+  const d = nextDifficulty(w, state.d, grade);
+  if (elapsed < 1) return { s: stabilityShortTerm(w, state.s, grade), d };
+  const r = retrievability(elapsed, state.s);
+  const s = grade === AGAIN
+    ? stabilityAfterLapse(w, state.s, state.d, r)
+    : stabilityAfterRecall(w, state.s, state.d, r, grade);
+  return { s, d };
+}
+
+/** Limiti dei 19 pesi: l'ottimizzatore non può uscire da qui. */
+export const BOUNDS = [
+  [0.01, 100], [0.01, 100], [0.01, 100], [0.01, 100],
+  [1, 10], [0.001, 4], [0.001, 4], [0.001, 0.75],
+  [0, 4.5], [0, 0.8], [0.001, 3.5], [0.001, 5],
+  [0.001, 0.25], [0.001, 0.9], [0, 4], [0, 1],
+  [1, 6], [0, 2], [0, 2],
+];
+
 /** Rumore ±5% sugli intervalli lunghi, per non far arrivare tutto lo stesso giorno. */
 function fuzz(days, rnd) {
   if (days < 3) return days;
@@ -146,17 +176,8 @@ export function createScheduler(options = {}) {
 
   /** Stato della memoria dopo aver risposto `grade`, senza toccare le scadenze. */
   function nextMemory(card, grade, now) {
-    if (card.state === NEW || !(card.s > 0)) {
-      return { s: initStability(w, grade), d: initDifficulty(w, grade) };
-    }
-    const t = elapsedDays(card, now);
-    const r = retrievability(t, card.s);
-    const d = nextDifficulty(w, card.d, grade);
-    if (t < 1) return { s: stabilityShortTerm(w, card.s, grade), d };
-    const s = grade === AGAIN
-      ? stabilityAfterLapse(w, card.s, card.d, r)
-      : stabilityAfterRecall(w, card.s, card.d, r, grade);
-    return { s, d };
+    const known = card.state !== NEW && card.s > 0;
+    return memoryStep(w, known ? { s: card.s, d: card.d } : null, grade, elapsedDays(card, now));
   }
 
   /** Intervallo in giorni (arrotondato) suggerito da una stabilità. */

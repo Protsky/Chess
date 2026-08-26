@@ -716,3 +716,30 @@ ul { margin: 0; padding-left: 1.1em; }
   text-align: center;
   line-height: 1.4;
 }
+
+/* ---------------------- taratura del modello di memoria ------------------ */
+
+.calibs { display: flex; flex-direction: column; gap: 6px; }
+
+.calib { display: flex; align-items: center; gap: 8px; }
+.calib__band { width: 62px; font-size: 11px; color: var(--muted); }
+.calib__bars {
+  position: relative;
+  flex: 1;
+  height: 16px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.calib__bar { position: absolute; left: 0; display: block; }
+.calib__bar--pred { top: 0; height: 8px; background: var(--line); }
+.calib__bar--obs { bottom: 0; height: 8px; background: var(--accent-dim); }
+.calib__n { width: 34px; text-align: right; }
+
+.dot--pred { background: var(--line); }
+.dot--obs { background: var(--accent-dim); }
+
+.levels__row--on .levels__bar i { background: var(--accent); }
+.levels__row--on .levels__lv { color: var(--accent); }
+
+.card--flat .row { gap: 8px; }
