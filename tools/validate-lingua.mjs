@@ -343,6 +343,17 @@ console.log('\n[exercises] esercizi che si correggono da soli');
   expect(growth[2] > growth[0], 'i buchi non crescono mai');
   ok(`i buchi passano da ${growth[0]} a ${growth[2]} su una frase di ${sample.text.split(' ').length} parole`);
 
+  // i buchi vanno dove si è già sbagliato
+  const long = lang.sentences.find((s) => s.text.split(' ').length >= 7);
+  const words = long.text.split(' ').filter((w) => !long.key.includes(w));
+  const victim = words[words.length - 1];
+  const blind = Ex.buildCloze(long, { s: 40, reps: 6 }, long.id);
+  const guided = Ex.buildCloze(long, { s: 40, reps: 6, miss: { [victim]: 4 } }, long.id);
+  const hidesIt = (c) => c.parts.some((p) => p.blank && p.answer.split(' ').includes(victim));
+  expect(hidesIt(guided), `la parola sbagliata "${victim}" non finisce nel buco`);
+  expect(guided.hidden === blind.hidden, 'la storia degli errori cambia il numero dei buchi invece della posizione');
+  ok(`i buchi si spostano sulle parole già sbagliate ("${victim}"), a parità di quantità`);
+
   // stesso seme, stesso esercizio: niente sorprese fra un render e l'altro
   const s0 = lang.sentences[3];
   const a1 = Ex.buildTiles(s0, lang, 'x|1').tiles.join('|');
@@ -472,6 +483,36 @@ console.log('\n[scheduler] costruzione della sessione');
 
   expect(domHits / picks > 0.5, `settore scelto poco rispettato: ${Math.round((domHits / picks) * 100)}%`);
   ok(`${Math.round((domHits / picks) * 100)}% delle frasi nuove dal settore richiesto`);
+
+  // un punto grammaticale già visto ma ancora fragile va rivisto in un'ALTRA frase
+  const counts = new Map();
+  for (const s of lang.sentences) counts.set(s.g, (counts.get(s.g) || 0) + 1);
+  const point = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const family = lang.sentences.filter((s) => s.g === point);
+  expect(family.length >= 4, `servono più frasi di "${point}" per la prova`);
+  const withHistory = (stability) => {
+    const cards = {};
+    for (const s of family.slice(0, 2)) {
+      const id = cardId(s.id, 'comp');
+      cards[id] = { ...Fsrs.newCard(id), state: 'review', reps: 3, s: stability, due: Date.now() + 5 * 86400000 };
+    }
+    let hits = 0;
+    let total = 0;
+    for (let k = 0; k < 40; k++) {
+      const q = buildQueue({ lang, deck: { profile: { theta: 0.5 }, cards, log: [] }, settings: { ...settings, domains: [] } });
+      for (const c of q.queue) {
+        if (c.state !== 'new') continue;
+        const s = lang.sentences.find((x) => x.id === c.id.split('|')[0]);
+        total += 1;
+        if (s.g === point) hits += 1;
+      }
+    }
+    return hits / total;
+  };
+  const shaky = withHistory(2);      // punto ancora traballante
+  const solid = withHistory(90);     // punto ormai consolidato
+  expect(shaky > solid, `un punto fragile non viene ripreso più di uno solido: ${shaky.toFixed(3)} contro ${solid.toFixed(3)}`);
+  ok(`un punto grammaticale fragile torna in altre frasi ${(shaky / Math.max(solid, 0.001)).toFixed(1)} volte più spesso di uno consolidato`);
 
   expect(buildQueue({ lang, deck, settings, introducedToday: 8 }).counts.fresh === 0, 'il tetto giornaliero non viene rispettato');
   ok('il tetto di frasi nuove al giorno viene rispettato');

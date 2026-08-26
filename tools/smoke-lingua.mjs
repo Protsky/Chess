@@ -208,6 +208,11 @@ check('backup esportabile', (await page.locator('[data-act="export"]').count()) 
 check('si può scegliere che cosa allenare', (await page.locator('[data-dir]').count()) === 2);
 check('parlare è la scelta di partenza', (await page.locator('[data-dir="produce"].chip-card--on').count()) === 1);
 check('la velocità della lingua è spiegata', (await page.textContent('section')).includes('di questa velocità'));
+const voiceUi = await page.textContent('section');
+check('la scelta della voce è offerta o spiegata', (await page.locator('[data-voice]').count()) === 1
+  || voiceUi.includes('voci installate') || voiceUi.includes('Nessuna voce'), voiceUi.slice(0, 80));
+check('il limite della sintesi è dichiarato', voiceUi.includes('sintesi è quella del tuo dispositivo')
+  || voiceUi.includes('non ne espone') || voiceUi.includes('Nessuna voce'));
 await shot('11-impostazioni');
 
 console.log('\n▸ Persistenza');

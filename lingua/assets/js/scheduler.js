@@ -99,15 +99,27 @@ function domainBonus(sentence, domains) {
   return hit ? 0.4 : sentence.dom.includes('generale') ? 0.08 : 0;
 }
 
-function grammarSets(deck, sentences) {
-  const seen = new Set();
-  for (const id of Object.keys(deck.cards)) {
-    const { sid } = splitId(id);
-    const s = sentences.get(sid);
-    if (s) seen.add(s.g);
+/**
+ * Quanto è solido, per ogni punto grammaticale, ciò che se ne è già visto.
+ * Serve a distinguere "mai incontrato" da "incontrato e ancora traballante":
+ * sono due situazioni diverse e vogliono frasi nuove per motivi diversi.
+ */
+function grammarStrength(deck, sentences) {
+  const map = new Map();
+  for (const [id, card] of Object.entries(deck.cards)) {
+    const s = sentences.get(splitId(id).sid);
+    if (!s) continue;
+    const row = map.get(s.g) || { cards: 0, stability: 0 };
+    row.cards += 1;
+    row.stability += card.s || 0;
+    map.set(s.g, row);
   }
-  return seen;
+  for (const row of map.values()) row.strength = row.stability / row.cards;
+  return map;
 }
+
+/* Sotto questa stabilità media un punto grammaticale è ancora da consolidare. */
+const SHAKY = 7;
 
 /**
  * Estrazione casuale pesata, senza rimpiazzo: la probabilità è proporzionale
@@ -132,17 +144,26 @@ function weightedOrder(rows, random, sharpness = 3) {
 export function rankNew(lang, deck, settings, theta, random = Math.random) {
   const sentences = new Map(lang.sentences.map((s) => [s.id, s]));
   const introduced = new Set(Object.keys(deck.cards).map((id) => splitId(id).sid));
-  const seenGrammar = grammarSets(deck, sentences);
+  const grammar = grammarStrength(deck, sentences);
   const user = levelScore(theta);
 
+  /*
+   * Due spinte diverse, non una sola:
+   *  - una regola mai incontrata allarga il repertorio;
+   *  - una regola già incontrata ma ancora fragile ha bisogno di un ALTRO
+   *    esempio, non di una ripetizione dello stesso. Vedere la stessa
+   *    struttura in contesti diversi è ciò che la rende una regola invece che
+   *    una frase imparata a memoria (variabilità della pratica: Ellis 2012
+   *    sulle sequenze formulaiche, e la letteratura sull'effetto della
+   *    variabilità degli esempi nell'apprendimento di categorie).
+   */
   const scored = lang.sentences
     .filter((s) => !introduced.has(s.id))
-    .map((s) => ({
-      s,
-      score: fit(s.lv, user)
-        + domainBonus(s, settings.domains)
-        + (seenGrammar.has(s.g) ? 0 : 0.18),
-    }));
+    .map((s) => {
+      const known = grammar.get(s.g);
+      const grammarBonus = !known ? 0.15 : known.strength < SHAKY ? 0.14 : 0;
+      return { s, score: fit(s.lv, user) + domainBonus(s, settings.domains) + grammarBonus };
+    });
   return weightedOrder(scored, random).map((x) => x.s);
 }
 

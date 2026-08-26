@@ -61,13 +61,27 @@ sbagliata → *Difficile*, manca qualcosa → *Di nuovo*. Resta un bottone per
 correggerlo a mano — *Facile* nessuna macchina può indovinarlo — ma la
 condizione normale è che tu non debba giudicarti.
 
-### I buchi che crescono
+### I buchi che crescono, e che si spostano
 
 Il cloze non ha un numero fisso di buchi: ne ha **uno** quando la carta è nuova
 e arriva a **metà frase** quando è solida, con il primo buco sempre sulla chiave
 grammaticale. È il *fading* dell'impalcatura di Renkl & Atkinson (2003): l'aiuto
 si ritira mentre la memoria regge da sola, e la stessa frase resta un esercizio
 utile invece di diventare un automatismo.
+
+I buchi in più, però, non cadono a caso: **la carta si ricorda le parole che hai
+sbagliato** e li mette lì. Rendere difficile tutto non serve — serve rendere
+difficile il punto che cede. È il principio delle difficoltà desiderabili
+puntato dove l'errore è già avvenuto, invece che sparso a caso sulla frase.
+
+### La stessa regola in frasi diverse
+
+Quando si sceglie una frase nuova non conta solo il livello e il settore: conta
+anche il punto grammaticale. Una regola **mai incontrata** allarga il repertorio;
+una regola **già incontrata ma ancora fragile** (stabilità media sotto i 7
+giorni) ha bisogno di *un altro esempio*, non della stessa frase ripetuta. È
+così che una struttura diventa una regola invece che una frase imparata a
+memoria — la variabilità degli esempi è ciò che permette di generalizzarla.
 
 ### La voce
 
@@ -260,13 +274,31 @@ all'85%, inglese e spagnolo al 95%. Sopra c'è il moltiplicatore scelto da te.
 
 Durante lo studio ogni frase ha due bottoni: **🔊 Ascolta** a velocità normale e
 **🐢 Lento**, che scende ancora di un terzo e separa le parole una dall'altra per
-costringere la sintesi a staccarle. Per il dialetto non esiste una voce
+costringere la sintesi a staccarle.
+
+**La qualità, però, non dipende dall'app.** `speechSynthesis` legge con le voci
+installate sul dispositivo, e su iOS convive spesso una voce "compatta" — piccola
+e molto sintetica, quella che il browser propone per prima — con una versione
+migliorata che va scaricata a parte. Quindi:
+
+- l'app ordina le voci disponibili per qualità probabile (voci di rete, nomi che
+  contengono *neural*, *enhanced*, *premium*, *Google*; in fondo quelle
+  *compact*) e usa la migliore;
+- da *Impostazioni ▸ Voce* si sceglie a mano fra tutte quelle installate, con un
+  bottone per provarle;
+- se ci sono solo voci di base, l'app lo dice e indica dove si scarica quella
+  migliorata (su iOS: **Impostazioni ▸ Accessibilità ▸ Contenuto letto ▸ Voci**).
+  Per il russo il salto di qualità è netto.
+
+Oltre questo non si può andare senza una sintesi lato server: cioè un servizio
+esterno, una connessione e una dipendenza, il contrario di un'app che funziona
+offline. È un limite dichiarato, non un difetto nascosto. Per il dialetto non esiste una voce
 sintetica: si ripiega sul tedesco svizzero standard.
 
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura: 271 controlli
+node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura: 277 controlli
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```
@@ -277,6 +309,11 @@ python3 tools/make_icons_lingua.py # rigenera le icone PNG
   distribuire le ripetizioni batte concentrarle.
 - **Roediger & Karpicke (2006)** — testing effect: richiamare consolida più che
   rileggere. Per questo qui si scrive prima di vedere.
+- **Richland, Kornell & Kao (2009)**, **Carpenter & Toftness (2017)** —
+  prequestioning: tentare prima di sapere migliora ciò che si impara subito
+  dopo. Una frase nuova non viene mostrata, viene chiesta.
+- **Morris, Bransford & Franks (1977)** — transfer-appropriate processing:
+  l'esercizio deve somigliare all'uso. Da qui la scala "parlare".
 - **Bjork** — desirable difficulties: la carta torna quando ricordarla costa.
 - **Ye et al. (2022-2024)** — FSRS: il modello di memoria usato qui.
 - **Krashen (1985)** — input comprensibile "i+1": le frasi nuove escono appena

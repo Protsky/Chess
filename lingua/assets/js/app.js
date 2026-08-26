@@ -16,6 +16,7 @@ import { buildQueue, splitId, TYPES, nextDue, targetLevel } from './scheduler.js
 import { diff } from './check.js';
 import * as Ex from './exercises.js';
 import * as Speech from './speech.js';
+import * as Voices from './voices.js';
 
 /* ------------------------------- utilità ------------------------------- */
 
@@ -77,7 +78,10 @@ const scheduler = () => {
 
 let voices = [];
 const loadVoices = () => {
+  const before = voices.length;
   voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  // su alcuni browser l'elenco arriva dopo: quando cambia, la schermata si rifà
+  if (!before && voices.length && screen === 'settings') render();
 };
 if (window.speechSynthesis) {
   loadVoices();
@@ -99,8 +103,7 @@ function speak(text, { force = false, slow = false } = {}) {
     const u = new SpeechSynthesisUtterance(spoken);
     u.lang = lang.locale;
     u.rate = Math.min(1.6, Math.max(0.3, settings().ttsRate * (lang.rate ?? 1) * (slow ? 0.65 : 1)));
-    const base = lang.locale.slice(0, 2);
-    const voice = voices.find((v) => v.lang === lang.locale) || voices.find((v) => v.lang.startsWith(base));
+    const voice = Voices.pick(voices, lang.locale, settings().voices?.[lang.code]);
     if (voice) u.voice = voice;
     window.speechSynthesis.speak(u);
   } catch {
@@ -835,6 +838,16 @@ function commit(grade) {
   const isNew = card.state === NEW;
   const next = sch.review(card, grade, now);
 
+  // la carta si tiene le parole che hai sbagliato: i buchi futuri andranno lì
+  if (session.type === 'cloze' && session.result?.rows) {
+    const miss = { ...(card.miss || {}) };
+    for (const row of session.result.rows) {
+      if (row.correct) continue;
+      for (const word of row.answer.split(/\s+/)) miss[word] = (miss[word] || 0) + 1;
+    }
+    if (Object.keys(miss).length) next.miss = miss;
+  }
+
   Store.saveCard(next, lang.code);
   Store.logReview({
     t: now,
@@ -1282,6 +1295,7 @@ function paintSettings() {
 
       <div class="card card--flat">
         <div class="card__head"><b>Voce</b></div>
+        ${voiceChooser(cfg)}
         <label class="switch">
           <span>Dettare le risposte${Speech.supported ? '' : ' <em class="muted small">(non disponibile qui)</em>'}</span>
           <input type="checkbox" ${cfg.speechInput ? 'checked' : ''} ${Speech.supported ? '' : 'disabled'} data-toggle="speechInput">
@@ -1329,6 +1343,15 @@ function paintSettings() {
     }
   });
   on(el, '[data-toggle]', 'change', (e) => Store.setSetting(e.currentTarget.dataset.toggle, e.currentTarget.checked));
+  on(el, '[data-voice]', 'change', (e) => {
+    const next = { ...(settings().voices || {}), [lang.code]: e.currentTarget.value };
+    Store.setSetting('voices', next);
+    speak(lang.sentences.find((s) => s.lv === 'A1')?.text || 'Test', { force: true });
+  });
+  on(el, '[data-act="try-voice"]', 'click', () => {
+    const sample = lang.sentences.find((s) => s.lv === 'A1');
+    speak(sample ? sample.text : 'Test', { force: true });
+  });
   on(el, '[data-dir]', 'click', (e) => {
     Store.setSetting('direction', e.currentTarget.dataset.dir);
     render();
@@ -1370,6 +1393,39 @@ function paintSettings() {
   view.append(el);
 }
 
+/** Scelta della voce fra quelle installate sul dispositivo. */
+function voiceChooser(cfg) {
+  const list = Voices.forLocale(voices, lang.locale);
+  const chosen = Voices.pick(voices, lang.locale, cfg.voices?.[lang.code]);
+
+  if (!voices.length) {
+    return '<p class="small muted">Sto ancora leggendo le voci installate. Se non compaiono, questo browser non ne espone.</p>';
+  }
+  if (!list.length) {
+    return `<p class="small muted">Nessuna voce ${esc(lang.name.toLowerCase())} installata su questo dispositivo. ${
+      Voices.isApple() ? 'Si aggiunge da Impostazioni ▸ Accessibilità ▸ Contenuto letto ▸ Voci.' : 'Dipende dal sistema, non dal browser.'}</p>`;
+  }
+  return `
+    <label class="field">
+      <span>Voce per ${esc(lang.name.toLowerCase())} <b class="val">${list.length} disponibili</b></span>
+      <select class="select" data-voice>
+        ${list.map((v) => `<option value="${esc(v.voiceURI)}"${v.voiceURI === chosen?.voiceURI ? ' selected' : ''}>${esc(Voices.label(v))}</option>`).join('')}
+      </select>
+    </label>
+    <button class="btn btn--icon" data-act="try-voice">🔊 Prova questa voce</button>
+    ${Voices.onlyPoor(voices, lang.locale) ? `
+      <p class="small muted">
+        Qui c’è solo la voce di base, quella scarna. ${Voices.isApple()
+          ? 'Da <b>Impostazioni ▸ Accessibilità ▸ Contenuto letto ▸ Voci</b> si scarica la versione migliorata della stessa lingua: cambia parecchio, e poi ricompare qui.'
+          : 'Le voci si installano dal sistema operativo: una volta aggiunte compaiono in questo elenco.'}
+      </p>` : ''}
+    <p class="small muted">
+      La sintesi è quella del tuo dispositivo: l’app sceglie la migliore fra quelle che trova, ma
+      non può fare di meglio di quello che c’è. Una voce davvero naturale richiederebbe un servizio
+      esterno e una connessione, cioè il contrario di un’app che funziona offline.
+    </p>`;
+}
+
 /* ----------------------------- perché funziona --------------------------- */
 
 const PAPERS = [
@@ -1387,6 +1443,9 @@ const PAPERS = [
   ['Si impara a blocchi, non a parole', 'Wray (2002) e Ellis (2012) sulle formulaic sequences: le sequenze fisse si recuperano intere e portano con sé collocazioni e ordine delle parole.'],
   ['Prima si riconosce, poi si produce', 'Nation (2001): la conoscenza ricettiva precede quella produttiva. È la scala che segui se scegli "capire".'],
   ['L’esercizio deve somigliare a quello che vuoi saper fare', 'Morris, Bransford & Franks (1977), transfer-appropriate processing: si ricorda meglio quando le condizioni dello studio somigliano a quelle dell’uso. Se l’obiettivo è parlare, l’esercizio parte dall’italiano e chiede di tirare fuori la frase — non il contrario. È la scala "parlare", quella di partenza.'],
+  ['Provarci prima di sapere aiuta, anche sbagliando', 'Richland, Kornell & Kao (2009) e Carpenter & Toftness (2017), prequestioning: tentare una risposta che non si può ancora conoscere migliora l’apprendimento di quello che arriva subito dopo. È il motivo per cui una frase nuova non viene mostrata: viene chiesta.'],
+  ['La stessa regola in frasi diverse, non la stessa frase', 'Variabilità della pratica: un punto grammaticale ancora fragile viene ripreso in un’altra frase, non ripetendo quella di prima. È così che diventa una regola invece che una frase imparata a memoria.'],
+  ['La difficoltà va messa dove cede', 'I buchi del cloze si spostano sulle parole che hai già sbagliato su quella carta. Rendere difficile tutto non serve: serve rendere difficile il punto che non regge.'],
   ['Mescolare gli argomenti conviene', 'Rohrer & Taylor (2007), interleaving: alternare tipi diversi di esercizio peggiora la sensazione immediata e migliora il risultato a distanza.'],
   ['Misurare il livello con poche domande giuste', 'Lord (1980) e van der Linden & Glas (2000), test adattivi su modello IRT: ogni domanda è scelta per essere massimamente informativa sul tuo θ.'],
   ['Una scala condivisa', 'Consiglio d’Europa, QCER (2001, aggiornato 2020): A1-C2 come riferimento per livelli e descrittori.'],

@@ -122,9 +122,14 @@ export function blankCount(total, stability = 0, reps = 0) {
 }
 
 /**
- * Il primo buco cade sempre sulla chiave grammaticale; gli altri sulle parole
- * piene, dalla più lunga alla più corta, così restano in piedi gli articoli e
- * la frase continua a essere leggibile.
+ * Il primo buco cade sempre sulla chiave grammaticale. Gli altri vanno dove
+ * servono davvero: prima sulle parole che TU hai già sbagliato su questa carta
+ * (la carta se le ricorda), poi sulle parole piene, dalla più lunga alla più
+ * corta, così restano in piedi gli articoli e la frase resta leggibile.
+ *
+ * Mettere la difficoltà dove l'errore è già avvenuto è il modo più diretto di
+ * applicare il principio delle difficoltà desiderabili: non serve rendere
+ * difficile tutto, serve rendere difficile il punto che cede.
  */
 export function buildCloze(sentence, card, seed) {
   const all = words(sentence.text);
@@ -137,10 +142,11 @@ export function buildCloze(sentence, card, seed) {
 
   const hidden = new Set(keyIdx.filter((i) => i >= 0));
   const wanted = blankCount(all.length, card.s, card.reps);
+  const missed = card.miss || {};
   const rest = all
-    .map((w, i) => ({ w, i }))
+    .map((w, i) => ({ w, i, missed: missed[w] || 0 }))
     .filter(({ i }) => !hidden.has(i))
-    .sort((a, b) => b.w.length - a.w.length || a.i - b.i);
+    .sort((a, b) => b.missed - a.missed || b.w.length - a.w.length || a.i - b.i);
   for (const { i } of rest) {
     if (hidden.size >= wanted + keyIdx.length - 1) break;
     hidden.add(i);
