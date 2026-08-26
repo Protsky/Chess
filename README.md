@@ -100,3 +100,23 @@ Basta una voce in `assets/js/openings.js`:
 ```
 
 Poi `node tools/validate.mjs` per la verifica.
+
+---
+
+## Anche in questo repository: 💬 Frasi
+
+In `lingua/` c’è una seconda app, indipendente dalla prima: **impara una lingua
+memorizzando frasi corte** invece di parole singole, con un test di livello
+adattivo su modello IRT e uno scheduler FSRS che decide quando riproporre ogni
+frase. Inglese (205 frasi) e spagnolo (120), scritte per italofoni.
+
+Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
+
+- In locale: `python3 -m http.server 8080`, poi <http://localhost:8080/lingua/>
+- In linea: **https://protsky.github.io/Chess/lingua/**
+- Dettagli, motori e riferimenti: [`lingua/README.md`](lingua/README.md)
+
+```bash
+node tools/validate-lingua.mjs   # corpus e motori
+node tools/smoke-lingua.mjs      # prova end-to-end
+```

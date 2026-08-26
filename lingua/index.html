@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <title>Frasi — impara una lingua frase per frase</title>
+  <meta name="description" content="Studia una lingua memorizzando frasi corte, con test di livello adattivo e ripetizione dilazionata.">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="color-scheme" content="dark">
+
+  <!-- iPhone: app a schermo intero dopo "Aggiungi a Home" -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Frasi">
+  <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
+  <link rel="icon" href="assets/icons/icon-192.png" sizes="192x192">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+  <header class="bar" id="bar">
+    <button class="icon-btn" id="bar-back" hidden aria-label="Indietro">‹</button>
+    <h1 class="bar__title" id="bar-title">Frasi</h1>
+    <button class="icon-btn" id="bar-action" hidden></button>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabs" id="tabs" hidden></nav>
+
+  <noscript>
+    <p style="padding:24px;color:#93a1b8">Per usare l’app serve JavaScript attivo.</p>
+  </noscript>
+
+  <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

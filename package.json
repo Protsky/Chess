@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Gioco web per memorizzare le aperture di scacchi, ottimizzato per iPhone",
+  "description": "Due app web senza dipendenze: aperture di scacchi e studio di una lingua per frasi",
   "scripts": {
     "validate": "node tools/validate.mjs",
+    "validate:lingua": "node tools/validate-lingua.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "smoke:lingua": "node tools/smoke-lingua.mjs",
     "start": "python3 -m http.server 8080"
   }
 }

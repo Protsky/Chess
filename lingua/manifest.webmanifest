@@ -1,0 +1,16 @@
+{
+  "name": "Frasi — impara per frasi",
+  "short_name": "Frasi",
+  "description": "Studia una lingua memorizzando frasi corte, con test di livello adattivo e ripetizione dilazionata.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
