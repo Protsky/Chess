@@ -38,11 +38,13 @@ for (const lang of LANGS) {
     if (!s.it || !s.it.trim()) fail(`${tag}: manca la traduzione`);
     if (!s.note || s.note.length < 20) fail(`${tag}: nota troppo scarna`);
     if (!s.dom.length) fail(`${tag}: nessun settore`);
+    if (lang.bridge && !s.de) fail(`${tag}: manca l'equivalente in ${lang.bridge}`);
+    if (!lang.bridge && s.de) fail(`${tag}: equivalente standard su una lingua che non lo dichiara`);
     for (const d of s.dom) if (!DOMAIN_IDS.includes(d)) fail(`${tag}: settore sconosciuto (${d})`);
     const words = s.text.split(/\s+/).length;
     if (words < 2 || words > 12) fail(`${tag}: ${words} parole, fuori dalla finestra 2-12`);
   }
-  ok(`${lang.sentences.length} frasi coerenti`);
+  ok(`${lang.sentences.length} frasi coerenti${lang.bridge ? `, tutte con l'equivalente in ${lang.bridge.toLowerCase()}` : ''}`);
 
   for (const lv of LEVELS) {
     const n = lang.sentences.filter((s) => s.lv === lv).length;
@@ -238,7 +240,7 @@ console.log('\n[check] correzione delle risposte');
 
 console.log('\n[scheduler] costruzione della sessione');
 {
-  const lang = LANGS[0];
+  const lang = LANGS.find((l) => l.code === 'en');
   const settings = { newPerDay: 8, maxReviews: 100, retention: 0.9, domains: ['lavoro'] };
   const deck = { profile: { theta: -0.4 }, cards: {}, log: [] };
 

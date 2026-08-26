@@ -63,23 +63,48 @@ in simulazione, l'abilità vera viene recuperata entro ±0.36 su tutta la scala.
 
 | Lingua | Frasi | Item del test | Punti di grammatica |
 | --- | --- | --- | --- |
+| 🇩🇪 Tedesco | 180 | 44 | 46 |
+| 🇨🇭 Svizzero tedesco | 115 | 34 | 31 |
 | 🇬🇧 Inglese | 205 | 48 | 46 |
 | 🇪🇸 Spagnolo | 120 | 38 | 32 |
 
 Tutte le frasi sono scritte per italofoni: la nota di ogni frase spiega proprio
-il punto dove l'italiano ci fa sbagliare (`must` contro `have to`, `ser` contro
-`estar`, il congiuntivo dopo `cuando`). Media di sei parole per frase.
+il punto dove l'italiano ci fa sbagliare (la posizione del verbo tedesco,
+`must` contro `have to`, `ser` contro `estar`, il congiuntivo dopo `cuando`).
+Media di sei parole per frase.
 
-Per aggiungerne, basta una riga in `assets/js/corpus-en.js` o `corpus-es.js`:
+### Lo svizzero tedesco, con tre avvertenze
+
+Il dialetto è un caso a parte e l'app lo dice apertamente, sia in questa pagina
+sia dentro la schermata di studio:
+
+1. **Non esiste un solo svizzero tedesco.** Qui si usa il **züridütsch**, il
+   dialetto di Zurigo: basilese, bernese e vallesano cambiano parecchio.
+2. **Non esiste un'ortografia ufficiale.** Si segue la **grafia Dieth**, quella
+   di SMS e cartelli: si scrive come si sente.
+3. **Il QCER non certifica i dialetti.** I livelli A1-C2 servono solo da bande
+   di difficoltà, per far girare la stessa macchina delle altre lingue.
+
+Ogni frase in dialetto porta con sé **l'equivalente in tedesco standard**, che
+compare accanto alla traduzione: è il ponte che rende visibile la regola —
+`Trotz em Räge` contro `Trotz des Regens` dice in un colpo solo che il genitivo,
+in Svizzera, non c'è. La voce sintetica usa `de-CH`, cioè tedesco standard
+svizzero: va presa come indicazione, non come modello di pronuncia.
+
+Per aggiungerne, basta una riga in `assets/js/corpus-de.js`, `corpus-gsw.js`,
+`corpus-en.js` o `corpus-es.js`:
 
 ```js
 ['b1-46', 'B1', 'She talked us through it.', 'Ci ha spiegato tutto passo passo.',
  'phrasal verb', 'talked us through', ['lavoro'], 'talk somebody through = spiegare passo per passo.'],
 ```
 
+In svizzero tedesco si aggiunge un nono campo con il tedesco standard.
+
 Poi `node tools/validate-lingua.mjs` controlla che la chiave del cloze compaia
 davvero nella frase, che il punto grammaticale sia nell'elenco, che i settori
-esistano e che la lunghezza resti nella finestra 2-12 parole.
+esistano, che la lunghezza resti nella finestra 2-12 parole e che ogni frase in
+dialetto abbia il suo equivalente standard.
 
 ## I dati
 
@@ -101,13 +126,14 @@ python3 -m http.server 8080     # poi apri http://localhost:8080/lingua/
 2. Apri l'indirizzo in Safari.
 3. *Condividi ▸ Aggiungi a Home*: da lì parte a schermo intero e funziona offline.
 
-La voce sintetica usa `speechSynthesis` del sistema: su iOS le voci inglese e
-spagnola sono già installate.
+La voce sintetica usa `speechSynthesis` del sistema: su iOS le voci tedesca,
+inglese e spagnola sono già installate. Per il dialetto non esiste una voce
+sintetica: si ripiega sul tedesco svizzero standard.
 
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus + motori: 131 controlli
+node tools/validate-lingua.mjs     # corpus + motori: 177 controlli
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```

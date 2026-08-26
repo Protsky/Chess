@@ -7,11 +7,15 @@
  * perché vedere *dove* si è sbagliato vale più di un semplice "no".
  */
 
-/** Toglie accenti, punteggiatura e differenze di maiuscole. */
+/**
+ * Toglie accenti, punteggiatura e differenze di maiuscole. La ß diventa ss:
+ * su una tastiera italiana non si digita, e in Svizzera non si scrive proprio.
+ */
 export function normalize(text) {
   return text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ß/g, 'ss')
     .replace(/[’‘]/g, "'")
     .replace(/[“”]/g, '"')
     .toLowerCase()

@@ -49,11 +49,19 @@ if (!process.argv[2]) await new Promise((resolve) => server.listen(PORT, resolve
 else console.log(`Verifica del sito pubblicato: ${BASE}`);
 mkdirSync(SHOTS, { recursive: true });
 
-// CHROMIUM_PATH torna utile dove il browser scaricato da Playwright non c'è
-const browser = await chromium.launch(
-  process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {},
-);
-const context = await browser.newContext({ ...devices['iPhone 14'], hasTouch: true });
+// CHROMIUM_PATH torna utile dove il browser scaricato da Playwright non c'è;
+// HTTPS_PROXY serve quando la rete esce solo attraverso un proxy.
+const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+const browser = await chromium.launch({
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  // il proxy vale per la rete esterna: il server locale della prova va escluso
+  ...(proxy ? { proxy: { server: proxy, bypass: 'localhost,127.0.0.1' } } : {}),
+});
+const context = await browser.newContext({
+  ...devices['iPhone 14'],
+  hasTouch: true,
+  ignoreHTTPSErrors: Boolean(proxy),
+});
 const page = await context.newPage();
 
 const errors = [];
@@ -70,8 +78,8 @@ await shot('1-benvenuto');
 
 console.log('\n▸ Scelta della lingua');
 await tap('[data-act="start"]');
-check('due lingue disponibili', (await page.locator('[data-lang]').count()) === 2);
-await tap('[data-lang="en"]');
+check('quattro lingue disponibili', (await page.locator('[data-lang]').count()) === 4);
+await tap('[data-lang="de"]');
 
 console.log('\n▸ Test di livello');
 await page.waitForSelector('.prompt');
@@ -107,6 +115,7 @@ await page.waitForSelector('[data-act="study"]');
 const queueText = await page.textContent('.queue');
 check('coda del giorno mostrata', queueText.includes('frasi nuove'));
 check('livello in evidenza', (await page.textContent('.stat')).includes(level.trim()));
+check('lingua scelta in barra', (await page.textContent('#bar-title')).includes('Tedesco'));
 check('copertura del corpus mostrata', (await page.locator('.levels__row').count()) === 6);
 await shot('5-home');
 
@@ -148,7 +157,7 @@ console.log('\n▸ Esplora');
 await tap('[data-go="explore"]');
 await page.waitForSelector('#q');
 const before = await page.locator('.row-item').count();
-await page.fill('#q', 'present perfect');
+await page.fill('#q', 'Konjunktiv');
 await page.waitForTimeout(250);
 const after = await page.locator('.row-item').count();
 check('la ricerca filtra', after > 0 && after < before, `(${before} → ${after})`);
@@ -179,17 +188,17 @@ console.log('\n▸ Cloze e produzione');
 // successivo (il cloze) risulta sbloccato senza aspettare giorni veri.
 await page.evaluate(() => {
   const state = JSON.parse(localStorage.getItem('frasi/v1'));
-  const id = 'en-a1-01|comp';
+  const id = 'de-a1-01|comp';
   state.settings.newPerDay = 1;
   state.settings.typing = true;
-  state.decks.en.cards = {
+  state.decks.de.cards = {
     [id]: {
-      id, sid: 'en-a1-01', type: 'comp', state: 'review',
+      id, sid: 'de-a1-01', type: 'comp', state: 'review',
       s: 12, d: 5, due: Date.now() + 6 * 86400000, last: Date.now() - 86400000,
       reps: 2, lapses: 0, ivl: 12, step: 0,
     },
   };
-  state.decks.en.daily = { day: null, introduced: 0, reviewed: 0 };
+  state.decks.de.daily = { day: null, introduced: 0, reviewed: 0 };
   localStorage.setItem('frasi/v1', JSON.stringify(state));
 });
 await page.reload({ waitUntil: 'networkidle' });
@@ -197,8 +206,9 @@ await tap('[data-act="study"]');
 await page.waitForSelector('.study');
 check('il passaggio successivo è il cloze', (await page.locator('.pill--cloze').count()) === 1);
 check('la frase è mostrata con il buco', (await page.textContent('.target')).includes('____'));
-check('la traduzione fa da appoggio', (await page.textContent('.hint')).includes('Di dove sei'));
-await page.fill('.input', 'are');
+check('la traduzione fa da appoggio', (await page.textContent('.hint')).includes('Come ti chiami'));
+// la ß non si digita su una tastiera italiana: "heisst" deve bastare
+await page.fill('.input', 'heisst');
 await tap('[data-act="reveal"]');
 check('risposta giusta riconosciuta', (await page.locator('.check--ok').count()) === 1);
 check('parola confermata', (await page.locator('.w--ok').count()) === 1);
@@ -207,11 +217,32 @@ await shot('13-cloze');
 
 await tap('[data-grade="3"]');
 check('la carta torna nella sessione finché non è imparata', (await page.locator('.study').count()) === 1);
-await page.fill('.input', 'are');
+await page.fill('.input', 'heisst');
 await tap('[data-act="reveal"]');
 await tap('[data-grade="3"]');
 check('sessione conclusa', (await page.locator('.done').count()) === 1);
 await shot('14-cloze-fine');
+
+console.log('\n▸ Svizzero tedesco');
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('frasi/v1'));
+  state.lang = 'gsw';
+  state.settings.newPerDay = 1;
+  state.decks.gsw = {
+    profile: { theta: -1.3, se: 0.4, cefr: 'A2', at: Date.now(), history: [] },
+    cards: {}, log: [], daily: { day: null, introduced: 0, reviewed: 0 }, streak: { count: 0, last: null },
+  };
+  localStorage.setItem('frasi/v1', JSON.stringify(state));
+});
+await page.reload({ waitUntil: 'networkidle' });
+check('avvertenza sul dialetto mostrata', (await page.textContent('.caveat')).includes('ortografia ufficiale'));
+await tap('[data-act="study"]');
+await page.waitForSelector('.study');
+check('variante indicata sulla carta', (await page.textContent('.study__meta')).includes('Züridütsch'));
+await tap('[data-act="reveal"]');
+const bridge = await page.textContent('.bridge');
+check('ponte col tedesco standard', bridge.includes('TEDESCO STANDARD') || bridge.length > 10, bridge);
+await shot('15-svizzero');
 
 check('nessun errore JavaScript', errors.length === 0, errors.join(' | '));
 

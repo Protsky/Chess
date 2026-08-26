@@ -195,8 +195,9 @@ function paintPickLang() {
           <button class="card card--tap" data-lang="${l.code}">
             <span class="card__flag">${l.flag}</span>
             <span class="card__body">
-              <span class="card__title">${esc(l.name)}</span>
+              <span class="card__title">${esc(l.name)}${l.variant ? ` <em class="card__var">${esc(l.variant)}</em>` : ''}</span>
               <span class="card__sub">${l.sentences.length} frasi · ${l.grammar.length} punti di grammatica</span>
+              ${l.blurb ? `<span class="card__sub">${esc(l.blurb)}</span>` : ''}
             </span>
             <span class="card__go">›</span>
           </button>`).join('')}
@@ -396,6 +397,8 @@ function paintHome() {
         </div>
       </div>
 
+      ${lang.caveat ? `<p class="small muted caveat">${esc(lang.caveat)}</p>` : ''}
+
       <button class="btn btn--ghost small" data-act="why">Perché funziona</button>
     </section>`);
 
@@ -455,6 +458,7 @@ function paintStudy() {
       <div class="study__meta">
         <span class="pill pill--${type}">${meta.icon} ${meta.label}</span>
         <span class="pill pill--ghost">${sentence.lv}</span>
+        ${lang.variant ? `<span class="pill pill--ghost">${esc(lang.variant.split(',')[0])}</span>` : ''}
         ${isNew ? '<span class="pill pill--new">nuova</span>' : ''}
         <span class="grow"></span>
         <span class="muted small">${session.index + 1}/${total}</span>
@@ -519,6 +523,7 @@ function paintStudy() {
     body.append(h(`
       <div class="reveal">
         ${type === 'comp' ? `<p class="hint hint--big">${esc(sentence.it)}</p>` : ''}
+        ${sentence.de ? `<p class="bridge"><span>${esc(lang.bridge || 'Standard')}</span>${esc(sentence.de)}</p>` : ''}
         <p class="note"><b>${esc(sentence.g)}</b> — ${esc(sentence.note)}</p>
         <div class="tags">${sentence.dom.map((d) => `<span class="tag">${esc(DOMAINS.find((x) => x.id === d)?.label || d)}</span>`).join('')}</div>
         ${type === 'comp' ? '' : '<button class="btn btn--icon" data-act="say">🔊 Ascolta</button>'}

@@ -108,7 +108,9 @@ Poi `node tools/validate.mjs` per la verifica.
 In `lingua/` c’è una seconda app, indipendente dalla prima: **impara una lingua
 memorizzando frasi corte** invece di parole singole, con un test di livello
 adattivo su modello IRT e uno scheduler FSRS che decide quando riproporre ogni
-frase. Inglese (205 frasi) e spagnolo (120), scritte per italofoni.
+frase. Tedesco (180 frasi), svizzero tedesco di Zurigo (115, ognuna con
+l’equivalente in tedesco standard), inglese (205) e spagnolo (120), tutte
+scritte per italofoni.
 
 Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
 
