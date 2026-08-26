@@ -12,7 +12,9 @@ import * as Irt from './irt.js';
 import * as Stats from './stats.js';
 import { createScheduler, GRADES, REVIEW, NEW } from './fsrs.js';
 import { buildQueue, splitId, TYPES, nextDue, targetLevel } from './scheduler.js';
-import { diff, suggestGrade } from './check.js';
+import { diff } from './check.js';
+import * as Ex from './exercises.js';
+import * as Speech from './speech.js';
 
 /* ------------------------------- utilità ------------------------------- */
 
@@ -173,8 +175,9 @@ function paintWelcome() {
       </div>
       <ul class="points">
         <li><b>Un test adattivo</b> stima il tuo livello in poche domande, come un esame computerizzato vero.</li>
+        <li><b>Quattro esercizi per frase</b>: riconoscerla, comporla, completarla, produrla. Uno alla volta, quando il precedente regge.</li>
+        <li><b>Niente autovalutazione</b>: ogni risposta viene corretta dalla macchina, e il voto scende da lì.</li>
         <li><b>Un algoritmo di ripetizione</b> (FSRS, lo stesso principio di Anki) decide quando rivedere ogni frase.</li>
-        <li><b>Tre passaggi per frase</b>: capirla, completarla, produrla. La produzione arriva quando sei pronto.</li>
         <li><b>Il tuo settore</b>: lavoro, viaggi, tecnologia, salute, ricerca.</li>
       </ul>
       <button class="btn btn--primary" data-act="start">Comincia</button>
@@ -424,27 +427,140 @@ function startSession({ extraNew = 0 } = {}) {
   session = {
     queue,
     index: 0,
-    revealed: false,
-    answer: '',
-    result: null,
-    grade: null,
     done: 0,
     again: 0,
     startedAt: Date.now(),
     sentences: new Map(lang.sentences.map((s) => [s.id, s])),
   };
+  prepare();
   go('study');
 }
 
 const currentCard = () => session.queue[session.index];
 
+/** Prepara l'esercizio della carta corrente e azzera la risposta. */
+function prepare() {
+  const card = currentCard();
+  if (!card) return;
+  const { sid, type } = splitId(card.id);
+  const sentence = session.sentences.get(sid);
+  if (!sentence) return;
+  const seed = `${card.id}|${card.reps}`;
+
+  session.type = type;
+  session.sentence = sentence;
+  session.phase = 'ask';
+  session.result = null;
+  session.grade = null;
+  session.chosen = null;
+  session.showGrades = !settings().autoGrade;
+  session.heard = null;
+  session.micError = null;
+  session.listening = false;
+
+  if (type === 'comp') session.ex = Ex.buildChoice(sentence, lang, seed);
+  else if (type === 'build') {
+    session.ex = Ex.buildTiles(sentence, lang, seed);
+    session.picked = [];
+  } else if (type === 'cloze') {
+    session.ex = Ex.buildCloze(sentence, card, seed);
+    session.filled = session.ex.parts.filter((x) => x.blank).map(() => '');
+  } else {
+    session.ex = null;
+    session.answer = '';
+  }
+}
+
+/* ------------------------------ correzione ------------------------------- */
+
+/** Confronto di un cloze: ogni buco separato, più un esito complessivo. */
+function checkCloze(parts, filled) {
+  const blanks = parts.filter((p) => p.blank);
+  const rows = blanks.map((p, i) => ({ ...diff(p.answer, filled[i] || ''), answer: p.answer, given: filled[i] || '' }));
+  return {
+    rows,
+    correct: rows.every((r) => r.correct),
+    score: rows.reduce((a, r) => a + r.score, 0) / (rows.length || 1),
+    extra: rows.reduce((a, r) => a + r.extra, 0),
+    near: rows.flatMap((r) => r.near),
+    marks: [],
+  };
+}
+
+function settle(result) {
+  session.result = result;
+  session.grade = Ex.autoGrade(result);
+  session.phase = 'done';
+  render();
+  window.scrollTo(0, 0); // la correzione va letta dall'inizio
+}
+
+function check() {
+  const s = session.sentence;
+  if (session.type === 'build') {
+    const given = session.picked.map((i) => session.ex.tiles[i]).join(' ');
+    settle(diff(s.text, given));
+  } else if (session.type === 'cloze') {
+    settle(checkCloze(session.ex.parts, session.filled));
+  } else if (session.type === 'prod') {
+    settle(diff(s.text, session.answer));
+  }
+}
+
+function answerChoice(i) {
+  if (session.phase === 'done') return;
+  session.chosen = i;
+  const ok = i === session.ex.correct;
+  settle({ correct: ok, score: ok ? 1 : 0, extra: 0, marks: [], near: [], rows: [] });
+}
+
+/* --------------------------------- voce ---------------------------------- */
+
+let stopMic = null;
+
+function toggleMic() {
+  if (session.listening) {
+    stopMic?.();
+    session.listening = false;
+    return render();
+  }
+  session.micError = null;
+  session.listening = true;
+  render();
+  const target = session.sentence.text;
+  stopMic = Speech.listen({
+    locale: lang.locale,
+    onResult: (alternatives) => {
+      const best = Speech.bestOf(alternatives, (text) => diff(target, text));
+      if (!best) return;
+      session.heard = best.text;
+      session.answer = best.text;
+      session.listening = false;
+      settle(best.result);
+    },
+    onError: (message) => {
+      session.micError = message;
+      session.listening = false;
+      render();
+    },
+    onEnd: () => {
+      if (!session.listening) return;
+      session.listening = false;
+      render();
+    },
+  });
+}
+
+/* -------------------------------- schermata ------------------------------ */
+
 function paintStudy() {
   if (!session || session.index >= session.queue.length) return go('done');
   const card = currentCard();
-  const sentence = session.sentences.get(splitId(card.id).sid);
-  if (!sentence) { session.index++; return render(); }
+  const sentence = session.sentence;
+  if (!sentence) { session.index++; prepare(); return render(); }
 
-  const type = splitId(card.id).type;
+  const type = session.type;
+  const meta = TYPES.find((t) => t.id === type);
   const isNew = card.state === NEW;
   const total = session.queue.length;
   const progress = Math.round((session.done / (session.done + (total - session.index))) * 100);
@@ -452,7 +568,6 @@ function paintStudy() {
   setBar('', { back: () => endSession() });
   barTitle.innerHTML = `<span class="progress"><i style="width:${progress}%"></i></span>`;
 
-  const meta = TYPES.find((t) => t.id === type);
   const el = h(`
     <section class="study">
       <div class="study__meta">
@@ -470,107 +585,208 @@ function paintStudy() {
 
   const body = el.querySelector('#body');
   const foot = el.querySelector('#foot');
-  const typing = settings().typing;
+  const done = session.phase === 'done';
 
-  /* ---- domanda ---- */
-  if (type === 'comp') {
-    body.append(h(`
-      <div class="stack center">
-        <p class="target">${esc(sentence.text)}</p>
-        <button class="btn btn--icon" data-act="say">🔊 Ascolta</button>
-        ${session.revealed ? '' : '<p class="muted small">Che cosa vuol dire?</p>'}
-      </div>`));
-    speak(sentence.text);
-  } else if (type === 'cloze') {
-    const masked = esc(sentence.text).replace(esc(sentence.key), '<span class="blank">____</span>');
-    const filled = esc(sentence.text).replace(esc(sentence.key), (m) => `<em class="key">${m}</em>`);
-    body.append(h(`
-      <div class="stack center">
-        <p class="target">${session.revealed ? filled : masked}</p>
-        <p class="hint">${esc(sentence.it)}</p>
-        ${session.revealed ? '' : `<p class="muted small">Manca ${plural(sentence.key.split(' ').length, 'una parola', 'qualche parola')}.</p>`}
-      </div>`));
-  } else {
-    body.append(h(`
-      <div class="stack center">
-        <p class="hint hint--big">${esc(sentence.it)}</p>
-        ${session.revealed ? `<p class="target">${esc(sentence.text)}</p>` : '<p class="muted small">Come si dice?</p>'}
-      </div>`));
-  }
+  ({ comp: askComp, build: askBuild, cloze: askCloze, prod: askProd }[type])(body, foot, sentence, done);
 
-  /* ---- risposta scritta ---- */
-  const wantsInput = typing && (type === 'cloze' || type === 'prod');
-  if (wantsInput && !session.revealed) {
-    const input = h(`<input class="input" type="text" inputmode="text" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="${type === 'cloze' ? 'la parola che manca' : 'scrivi la frase'}" value="${esc(session.answer)}">`);
-    body.append(input);
-    input.addEventListener('input', () => { session.answer = input.value; });
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') reveal(); });
-    setTimeout(() => input.focus(), 60);
-  }
-
-  /* ---- correzione ---- */
-  if (session.revealed && session.result) {
-    body.append(h(`
-      <div class="check ${session.result.correct ? 'check--ok' : 'check--ko'}">
-        <div class="check__line">${session.result.marks.map((m) => `<span class="w w--${m.status}">${esc(m.word)}</span>`).join(' ')}</div>
-        ${session.result.near.length
-          ? `<p class="small muted">Hai scritto ${session.result.near.map((n) => `<b>${esc(n.written)}</b> invece di <b>${esc(n.expected)}</b>`).join(', ')}.</p>`
-          : ''}
-      </div>`));
-  }
-
-  if (session.revealed) {
+  if (done) {
+    // la frase giusta si ripete solo dove non è già sotto gli occhi
+    const repeat = type === 'build' || type === 'prod';
     body.append(h(`
       <div class="reveal">
-        ${type === 'comp' ? `<p class="hint hint--big">${esc(sentence.it)}</p>` : ''}
+        ${repeat ? `<p class="solution">${esc(sentence.text)}</p>` : ''}
+        ${type === 'comp' ? '' : `<p class="hint">${esc(sentence.it)}</p>`}
         ${sentence.de ? `<p class="bridge"><span>${esc(lang.bridge || 'Standard')}</span>${esc(sentence.de)}</p>` : ''}
         <p class="note"><b>${esc(sentence.g)}</b> — ${esc(sentence.note)}</p>
         <div class="tags">${sentence.dom.map((d) => `<span class="tag">${esc(DOMAINS.find((x) => x.id === d)?.label || d)}</span>`).join('')}</div>
         ${type === 'comp' ? '' : '<button class="btn btn--icon" data-act="say">🔊 Ascolta</button>'}
       </div>`));
-  }
-
-  /* ---- piede ---- */
-  if (!session.revealed) {
-    foot.append(h(`<button class="btn btn--primary" data-act="reveal">${wantsInput ? 'Controlla' : 'Mostra la risposta'}</button>`));
-  } else {
-    const sch = scheduler();
-    const preview = sch.preview(card);
-    const labels = { 1: 'Di nuovo', 2: 'Difficile', 3: 'Bene', 4: 'Facile' };
-    foot.append(h(`
-      <div class="grades">
-        ${GRADES.map((g) => `
-          <button class="grade grade--${g}${session.grade === g ? ' grade--hint' : ''}" data-grade="${g}">
-            <span class="grade__l">${labels[g]}</span>
-            <span class="grade__i">${labelInterval(preview[g])}</span>
-          </button>`).join('')}
-      </div>`));
+    foot.append(gradeBar(card));
   }
 
   on(el, '[data-act="say"]', 'click', () => speak(sentence.text, true));
-  on(el, '[data-act="reveal"]', 'click', () => reveal());
-  on(el, '[data-grade]', 'click', (e) => answer(Number(e.currentTarget.dataset.grade)));
+  on(el, '[data-act="check"]', 'click', () => check());
+  on(el, '[data-act="next"]', 'click', () => commit(session.grade));
+  on(el, '[data-act="other"]', 'click', () => { session.showGrades = true; render(); });
+  on(el, '[data-grade]', 'click', (e) => commit(Number(e.currentTarget.dataset.grade)));
 }
 
-function reveal() {
-  const card = currentCard();
-  const { type, sid } = splitId(card.id);
-  const sentence = session.sentences.get(sid);
-  const typing = settings().typing;
-
-  if (typing && (type === 'cloze' || type === 'prod')) {
-    const expected = type === 'cloze' ? sentence.key : sentence.text;
-    session.result = diff(expected, session.answer);
-    session.grade = suggestGrade(session.result);
-  } else {
-    session.result = null;
-    session.grade = null;
+/** Riga dei voti: uno solo, già deciso, salvo ripensamenti. */
+function gradeBar(card) {
+  const preview = scheduler().preview(card);
+  const labels = { 1: 'Di nuovo', 2: 'Difficile', 3: 'Bene', 4: 'Facile' };
+  if (!session.showGrades) {
+    return h(`
+      <div class="stack">
+        <button class="btn btn--primary" data-act="next">
+          Avanti<span class="btn__sub">${labels[session.grade]} · fra ${labelInterval(preview[session.grade])}</span>
+        </button>
+        <button class="btn btn--ghost small" data-act="other">Non è andata così: scegli tu il voto</button>
+      </div>`);
   }
-  session.revealed = true;
-  render();
+  return h(`
+    <div class="grades">
+      ${GRADES.map((g) => `
+        <button class="grade grade--${g}${session.grade === g ? ' grade--hint' : ''}" data-grade="${g}">
+          <span class="grade__l">${labels[g]}</span>
+          <span class="grade__i">${labelInterval(preview[g])}</span>
+        </button>`).join('')}
+    </div>`);
 }
 
-function answer(grade) {
+/* ---------------------- 1. riconosci: quattro scelte --------------------- */
+
+function askComp(body, foot, sentence, done) {
+  body.append(h(`
+    <div class="stack center">
+      <p class="target">${esc(sentence.text)}</p>
+      <button class="btn btn--icon" data-act="say">🔊 Riascolta</button>
+      ${done ? '' : '<p class="muted small">Quale traduzione è la sua?</p>'}
+    </div>`));
+  speak(sentence.text);
+
+  const list = h(`
+    <div class="stack">
+      ${session.ex.options.map((o, i) => {
+        let cls = '';
+        if (done && i === session.ex.correct) cls = ' btn--right';
+        else if (done && i === session.chosen) cls = ' btn--wrong';
+        return `<button class="btn btn--option${cls}" data-choice="${i}"${done ? ' disabled' : ''}>${esc(o)}</button>`;
+      }).join('')}
+    </div>`);
+  body.append(list);
+  on(list, '[data-choice]', 'click', (e) => answerChoice(Number(e.currentTarget.dataset.choice)));
+}
+
+/* ------------------------- 2. componi: tessere --------------------------- */
+
+function askBuild(body, foot, sentence, done) {
+  const picked = session.picked;
+  const built = picked.map((i) => session.ex.tiles[i]).join(' ');
+
+  body.append(h(`
+    <div class="stack center">
+      <p class="hint hint--big">${esc(sentence.it)}</p>
+      ${done ? '' : '<p class="muted small">Rimetti in fila le parole. Due non servono.</p>'}
+    </div>`));
+
+  const line = h(`<div class="tray${done ? (session.result.correct ? ' tray--ok' : ' tray--ko') : ''}">
+    ${picked.length
+      ? picked.map((i, pos) => `<button class="tile tile--set" data-drop="${pos}"${done ? ' disabled' : ''}>${esc(session.ex.tiles[i])}</button>`).join('')
+      : '<span class="tray__ghost">tocca le parole qui sotto</span>'}
+  </div>`);
+  body.append(line);
+
+  if (!done) {
+    const pool = h(`<div class="tiles">
+      ${session.ex.tiles.map((w, i) => picked.includes(i)
+        ? `<span class="tile tile--used">${esc(w)}</span>`
+        : `<button class="tile" data-tile="${i}">${esc(w)}</button>`).join('')}
+    </div>`);
+    body.append(pool);
+    on(pool, '[data-tile]', 'click', (e) => { picked.push(Number(e.currentTarget.dataset.tile)); render(); });
+    on(line, '[data-drop]', 'click', (e) => { picked.splice(Number(e.currentTarget.dataset.drop), 1); render(); });
+    foot.append(h(`<button class="btn btn--primary" data-act="check"${picked.length ? '' : ' disabled'}>Controlla</button>`));
+  } else {
+    body.append(marksBlock(session.result));
+  }
+}
+
+/* --------------------- 3. completa: buchi crescenti ---------------------- */
+
+function askCloze(body, foot, sentence, done) {
+  let blank = -1;
+  const line = h(`<p class="target target--cloze">${session.ex.parts.map((p) => {
+    if (!p.blank) return `<span>${esc(p.text)}</span>`;
+    blank += 1;
+    const row = done ? session.result.rows[blank] : null;
+    if (done) {
+      return `<span class="slot slot--${row.correct ? 'ok' : 'ko'}">${esc(p.answer)}</span>`;
+    }
+    return `<input class="slot slot--in" data-blank="${blank}" size="${Math.max(4, p.answer.length)}"
+      inputmode="text" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false"
+      value="${esc(session.filled[blank])}">`;
+  }).join(' ')}</p>`);
+
+  body.append(h(`<div class="stack center">
+    <p class="hint">${esc(sentence.it)}</p>
+  </div>`));
+  body.append(line);
+
+  if (!done) {
+    body.append(h(`<p class="muted small center">${session.ex.blanks === 1
+      ? 'Manca un pezzo. Crescono man mano che la frase si consolida.'
+      : `Mancano ${session.ex.blanks} pezzi su ${session.ex.total} parole.`}</p>`));
+    const inputs = [...line.querySelectorAll('[data-blank]')];
+    inputs.forEach((input, i) => {
+      input.addEventListener('input', () => { session.filled[i] = input.value; });
+      input.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (i + 1 < inputs.length) inputs[i + 1].focus();
+        else check();
+      });
+    });
+    setTimeout(() => inputs[0]?.focus(), 60);
+    foot.append(h('<button class="btn btn--primary" data-act="check">Controlla</button>'));
+  } else {
+    const wrong = session.result.rows.filter((r) => !r.correct);
+    if (wrong.length) {
+      body.append(h(`<div class="check check--ko">
+        ${wrong.map((r) => `<p class="small">Hai scritto <b class="w w--missing">${esc(r.given || '—')}</b>, era <b class="w w--ok">${esc(r.answer)}</b>.</p>`).join('')}
+      </div>`));
+    }
+  }
+}
+
+/* ---------------- 4. produci: scrittura oppure dettatura ----------------- */
+
+function askProd(body, foot, sentence, done) {
+  body.append(h(`
+    <div class="stack center">
+      <p class="hint hint--big">${esc(sentence.it)}</p>
+      ${done ? '' : '<p class="muted small">Scrivila per intero, o dettala.</p>'}
+    </div>`));
+
+  if (!done) {
+    const input = h(`<input class="input" type="text" inputmode="text" autocapitalize="none" autocomplete="off"
+      autocorrect="off" spellcheck="false" placeholder="scrivi la frase" value="${esc(session.answer)}">`);
+    body.append(input);
+    input.addEventListener('input', () => { session.answer = input.value; });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
+    if (!session.listening) setTimeout(() => input.focus(), 60);
+
+    if (Speech.supported && settings().speechInput) {
+      const mic = h(`<button class="btn btn--mic${session.listening ? ' btn--mic-on' : ''}" data-act="mic">
+        ${session.listening ? '● Ti ascolto… tocca per fermare' : '🎙 Dettala a voce'}
+      </button>`);
+      body.append(mic);
+      mic.addEventListener('click', () => toggleMic());
+    }
+    if (session.micError) body.append(h(`<p class="small muted center">${esc(session.micError)}</p>`));
+    foot.append(h('<button class="btn btn--primary" data-act="check">Controlla</button>'));
+  } else {
+    if (session.heard) {
+      body.append(h(`<p class="small muted center">Ho sentito: “${esc(session.heard)}”</p>`));
+    }
+    body.append(marksBlock(session.result));
+  }
+}
+
+/** Frase attesa parola per parola, con quello che manca in evidenza. */
+function marksBlock(result) {
+  return h(`
+    <div class="check ${result.correct ? 'check--ok' : 'check--ko'}">
+      <div class="check__line">${result.marks.map((m) => `<span class="w w--${m.status}">${esc(m.word)}</span>`).join(' ')}</div>
+      ${result.near.length
+        ? `<p class="small muted">Hai messo ${result.near.map((n) => `<b>${esc(n.written)}</b>`).join(', ')} al posto di ${result.near.map((n) => `<b>${esc(n.expected)}</b>`).join(', ')}.</p>`
+        : ''}
+    </div>`);
+}
+
+/* ------------------------------- avanzamento ----------------------------- */
+
+function commit(grade) {
   const card = currentCard();
   const sch = scheduler();
   const now = Date.now();
@@ -582,8 +798,9 @@ function answer(grade) {
   Store.logReview({
     t: now,
     id: card.id,
-    type: splitId(card.id).type,
+    type: session.type,
     g: grade,
+    auto: grade === session.grade,
     wasReview,
     isNew,
     ivl: next.ivl,
@@ -601,16 +818,13 @@ function answer(grade) {
   }
 
   session.index += 1;
-  session.revealed = false;
-  session.answer = '';
-  session.result = null;
-  session.grade = null;
-
   if (session.index >= session.queue.length) return go('done');
+  prepare();
   render();
 }
 
 function endSession() {
+  stopMic?.();
   if (!session) return go('home');
   go(session.done ? 'done' : 'home');
 }
@@ -835,12 +1049,23 @@ function paintSettings() {
       </div>
 
       <div class="card card--flat">
-        <div class="card__head"><b>Modo di rispondere</b></div>
+        <div class="card__head"><b>Correzione</b></div>
         <label class="switch">
-          <span>Scrivere la risposta</span>
-          <input type="checkbox" ${cfg.typing ? 'checked' : ''} data-toggle="typing">
+          <span>Voto automatico</span>
+          <input type="checkbox" ${cfg.autoGrade ? 'checked' : ''} data-toggle="autoGrade">
         </label>
-        <p class="small muted">Digitare costringe al richiamo completo. Se preferisci andare a mente, disattivalo e valuta da solo.</p>
+        <p class="small muted">Il voto lo decide l’esito dell’esercizio, non il tuo giudizio: dopo aver visto la soluzione la si riconosce e la si scambia per un ricordo. Puoi comunque correggerlo a mano dopo ogni carta.</p>
+      </div>
+
+      <div class="card card--flat">
+        <div class="card__head"><b>Voce</b></div>
+        <label class="switch">
+          <span>Dettare le risposte${Speech.supported ? '' : ' <em class="muted small">(non disponibile qui)</em>'}</span>
+          <input type="checkbox" ${cfg.speechInput ? 'checked' : ''} ${Speech.supported ? '' : 'disabled'} data-toggle="speechInput">
+        </label>
+        <p class="small muted">${Speech.supported
+          ? 'Nel passaggio di produzione puoi dire la frase invece di scriverla: viene trascritta e confrontata come una risposta scritta. Dirla ad alta voce, per conto suo, la fa ricordare meglio.'
+          : 'Questo browser non trascrive la voce. Su iPhone funziona con Safari, da iOS 14.5.'}</p>
         <label class="switch">
           <span>Voce sintetica</span>
           <input type="checkbox" ${cfg.tts ? 'checked' : ''} data-toggle="tts">
@@ -918,6 +1143,10 @@ function paintSettings() {
 const PAPERS = [
   ['Ripassare a intervalli crescenti batte il ripasso ravvicinato', 'Cepeda, Pashler, Vul, Wixted & Rohrer (2006), meta-analisi su 254 studi: a parità di tempo speso, distribuire le ripetizioni migliora la ritenzione a lungo termine.'],
   ['Richiamare è più efficace che rileggere', 'Roediger & Karpicke (2006), testing effect: provare a tirare fuori la risposta consolida più di riguardare la soluzione. Per questo qui si scrive prima di vedere.'],
+  ['Riconoscere la risposta non è ricordarla', 'Koriat & Bjork (2005), illusione di competenza: dopo aver visto la soluzione sembra ovvia, e la si scambia per un ricordo. Dunlosky & Rawson (2012) misurano quanto chi si autocorregge si dia ragione più del dovuto. È il motivo per cui qui nessun esercizio si valuta da sé.'],
+  ['Quello che produci resta più di quello che leggi', 'Slamecka & Graf (1978), effetto generazione: una parola tirata fuori da soli si ricorda meglio della stessa parola letta. Ogni gradino della scala chiede di generare un pezzo in più.'],
+  ['L’impalcatura va tolta poco per volta', 'Renkl & Atkinson (2003), fading degli esempi svolti: l’aiuto si ritira mentre la competenza cresce. Qui i buchi del cloze aumentano man mano che la frase si consolida.'],
+  ['Dirlo ad alta voce lo fissa meglio', 'MacLeod, Gopie, Hourihan, Neary & Ozubko (2010), production effect: pronunciare quello che si studia lo rende più memorabile del solo leggerlo. Per questo la produzione si può dettare, non solo scrivere.'],
   ['La difficoltà giusta è quella che costa', 'Bjork, desirable difficulties: la carta torna quando la probabilità di ricordarla è scesa intorno al 90%, non prima.'],
   ['Il modello della memoria a tre variabili', 'Ye et al. (2022-2024), FSRS: stabilità, difficoltà e recuperabilità, con curva di oblio a legge di potenza. È l’algoritmo che decide qui ogni intervallo.'],
   ['Input comprensibile appena sopra il livello', 'Krashen (1985), ipotesi dell’input "i+1": le frasi nuove vengono pescate poco sopra il livello stimato, non a caso.'],
@@ -949,8 +1178,15 @@ function paintScience() {
 
 document.addEventListener('keydown', (e) => {
   if (screen !== 'study' || !session) return;
-  if (e.key === 'Enter' && !session.revealed) { e.preventDefault(); reveal(); }
-  else if (session.revealed && ['1', '2', '3', '4'].includes(e.key)) answer(Number(e.key));
+  if (session.phase === 'ask') {
+    if (e.key === 'Enter' && session.type !== 'cloze') { e.preventDefault(); check(); }
+    else if (session.type === 'comp' && ['1', '2', '3', '4'].includes(e.key)) answerChoice(Number(e.key) - 1);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    commit(session.grade);
+  } else if (['1', '2', '3', '4'].includes(e.key)) {
+    commit(Number(e.key));
+  }
 });
 
 const state = Store.getState();

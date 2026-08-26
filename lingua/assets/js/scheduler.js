@@ -19,12 +19,18 @@ import { newCard, LEARNING, RELEARNING, REVIEW, NEW } from './fsrs.js';
 import { LEVELS, levelIndex } from './corpus.js';
 import { bandProgress, toCefr } from './irt.js';
 
-/** I tre passaggi su una stessa frase, dal più facile al più difficile. */
+/**
+ * I quattro passaggi su una stessa frase, dal riconoscere al produrre.
+ * Nessuno di questi si autovaluta: ognuno ha una risposta verificabile.
+ */
 export const TYPES = [
-  { id: 'comp', label: 'Comprendi', short: 'Comprensione', icon: '👂', hint: 'Dalla frase al significato' },
-  { id: 'cloze', label: 'Completa', short: 'Cloze', icon: '✏️', hint: 'Manca il pezzo grammaticale' },
-  { id: 'prod', label: 'Produci', short: 'Produzione', icon: '🗣️', hint: 'Dall’italiano alla lingua' },
+  { id: 'comp', label: 'Riconosci', short: 'Riconoscimento', icon: '👂', hint: 'Quale delle quattro traduzioni è la sua' },
+  { id: 'build', label: 'Componi', short: 'Composizione', icon: '🧩', hint: 'Rimetti in fila le parole' },
+  { id: 'cloze', label: 'Completa', short: 'Cloze', icon: '✏️', hint: 'Riempi i buchi, che aumentano col tempo' },
+  { id: 'prod', label: 'Produci', short: 'Produzione', icon: '🗣️', hint: 'Scrivila o dettala per intero' },
 ];
+
+const ORDER = TYPES.map((t) => t.id);
 
 export const cardId = (sid, type) => `${sid}|${type}`;
 export const splitId = (id) => {
@@ -42,9 +48,9 @@ const SPREAD = 0.9;
 
 /** Un tipo è disponibile solo se il passaggio precedente è già maturo. */
 export function unlocked(deck, sid, type) {
-  if (type === 'comp') return true;
-  const prev = type === 'cloze' ? 'comp' : 'cloze';
-  const c = deck.cards[cardId(sid, prev)];
+  const i = ORDER.indexOf(type);
+  if (i <= 0) return i === 0;
+  const c = deck.cards[cardId(sid, ORDER[i - 1])];
   return !!c && c.state === REVIEW && c.reps >= 1;
 }
 
@@ -129,11 +135,11 @@ export function pendingUnlocks(lang, deck) {
   const sids = new Set(Object.keys(deck.cards).map((id) => splitId(id).sid));
   for (const sid of sids) {
     if (!sentences.has(sid)) continue;
-    for (const t of ['cloze', 'prod']) {
+    for (let i = 1; i < ORDER.length; i++) {
+      const t = ORDER[i];
       if (deck.cards[cardId(sid, t)]) continue;
       if (!unlocked(deck, sid, t)) continue;
-      const prev = deck.cards[cardId(sid, t === 'cloze' ? 'comp' : 'cloze')];
-      out.push({ sid, type: t, strength: prev.s });
+      out.push({ sid, type: t, strength: deck.cards[cardId(sid, ORDER[i - 1])].s });
       break; // un passaggio alla volta per frase
     }
   }

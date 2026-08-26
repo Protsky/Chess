@@ -122,23 +122,53 @@ await shot('5-home');
 console.log('\n▸ Sessione di studio');
 await tap('[data-act="study"]');
 await page.waitForSelector('.study');
-check('prima carta è una comprensione', (await page.textContent('.pill--comp')).includes('Comprendi'));
-check('frase mostrata in grande', (await page.locator('.target').count()) === 1);
+check('la prima carta è un riconoscimento', (await page.textContent('.pill--comp')).includes('Riconosci'));
+check('quattro traduzioni fra cui scegliere', (await page.locator('[data-choice]').count()) === 4);
+check('nessun voto da dare prima di rispondere', (await page.locator('[data-grade], [data-act="next"]').count()) === 0);
 await shot('6-studio');
 
-let answered = 0;
-while (answered < 40 && (await page.locator('.study').count())) {
-  if (await page.locator('.input').count()) await page.fill('.input', 'test');
-  if (await page.locator('[data-act="reveal"]').count()) {
-    await tap('[data-act="reveal"]');
-    if (answered === 0) {
-      check('la nota grammaticale compare dopo la risposta', (await page.locator('.note').count()) === 1);
-      check('quattro voti disponibili', (await page.locator('[data-grade]').count()) === 4);
-      check('intervalli stimati mostrati', (await page.textContent('.grade__i')).length > 0);
-      await shot('7-risposta');
-    }
+// mappa frase → traduzione giusta, imparata dalla correzione: così la seconda
+// volta che una carta torna, la prova risponde bene e la sessione converge
+const known = new Map();
+const pickChoice = async () => {
+  const target = (await page.textContent('.target')).trim();
+  const want = known.get(target);
+  if (want) {
+    const i = await page.evaluate((w) => [...document.querySelectorAll('[data-choice]')]
+      .find((b) => b.textContent.trim() === w)?.dataset.choice, want);
+    if (i !== undefined) { await tap(`[data-choice="${i}"]`); return; }
   }
-  await tap('[data-grade="3"]');
+  await tap('[data-choice="0"]');
+  known.set(target, (await page.textContent('.btn--right')).trim());
+};
+
+let answered = 0;
+let checkedVerdict = false;
+while (answered < 60 && (await page.locator('.study').count())) {
+  if (await page.locator('[data-choice]').count()) await pickChoice();
+  else if (await page.locator('[data-tile]').count()) {
+    while (await page.locator('[data-tile]').count()) await page.click('[data-tile]');
+    await tap('[data-act="check"]');
+  } else if (await page.locator('[data-blank]').count()) {
+    await tap('[data-act="check"]');
+  } else if (await page.locator('.input').count()) {
+    await page.fill('.input', 'x');
+    await tap('[data-act="check"]');
+  }
+  if (!checkedVerdict) {
+    checkedVerdict = true;
+    check('la correzione compare subito', (await page.locator('.reveal').count()) === 1);
+    check('la nota grammaticale compare dopo la risposta', (await page.locator('.note').count()) === 1);
+    check('un solo bottone: il voto è già deciso', (await page.locator('[data-act="next"]').count()) === 1);
+    check('intervallo stimato mostrato', (await page.textContent('[data-act="next"]')).includes('fra'));
+    await tap('[data-act="other"]');
+    check('il voto resta correggibile a mano', (await page.locator('[data-grade]').count()) === 4);
+    await shot('7-risposta');
+    await tap('[data-grade="3"]');
+    answered++;
+    continue;
+  }
+  await tap('[data-act="next"]');
   answered++;
 }
 check('sessione completata', (await page.locator('.done').count()) === 1, `(${answered} risposte)`);
@@ -183,45 +213,63 @@ const seen = await page.locator('.stat').nth(2).textContent();
 check('frasi viste memorizzate', Number(seen.replace(/\D+/g, '')) > 0, seen);
 await shot('12-ritorno');
 
-console.log('\n▸ Cloze e produzione');
-// Si forza uno stato in cui la comprensione è già matura: così il passaggio
-// successivo (il cloze) risulta sbloccato senza aspettare giorni veri.
-await page.evaluate(() => {
-  const state = JSON.parse(localStorage.getItem('frasi/v1'));
-  const id = 'de-a1-01|comp';
-  state.settings.newPerDay = 1;
-  state.settings.typing = true;
-  state.decks.de.cards = {
-    [id]: {
-      id, sid: 'de-a1-01', type: 'comp', state: 'review',
-      s: 12, d: 5, due: Date.now() + 6 * 86400000, last: Date.now() - 86400000,
-      reps: 2, lapses: 0, ivl: 12, step: 0,
-    },
-  };
-  state.decks.de.daily = { day: null, introduced: 0, reviewed: 0 };
-  localStorage.setItem('frasi/v1', JSON.stringify(state));
-});
-await page.reload({ waitUntil: 'networkidle' });
-await tap('[data-act="study"]');
-await page.waitForSelector('.study');
-check('il passaggio successivo è il cloze', (await page.locator('.pill--cloze').count()) === 1);
-check('la frase è mostrata con il buco', (await page.textContent('.target')).includes('____'));
+console.log('\n▸ Componi, completa, produci');
+/* Si forza uno stato in cui i gradini precedenti sono già maturi: così i
+   passaggi successivi risultano sbloccati senza aspettare giorni veri. */
+const seed = async (ladder) => {
+  await page.evaluate((mature) => {
+    const state = JSON.parse(localStorage.getItem('frasi/v1'));
+    state.settings.newPerDay = 1;
+    state.decks.de.cards = {};
+    for (const type of mature) {
+      const id = `de-a1-01|${type}`;
+      state.decks.de.cards[id] = {
+        id, sid: 'de-a1-01', type, state: 'review',
+        s: 12, d: 5, due: Date.now() + 6 * 86400000, last: Date.now() - 86400000,
+        reps: 2, lapses: 0, ivl: 12, step: 0,
+      };
+    }
+    state.decks.de.daily = { day: null, introduced: 0, reviewed: 0 };
+    localStorage.setItem('frasi/v1', JSON.stringify(state));
+  }, ladder);
+  await page.reload({ waitUntil: 'networkidle' });
+  await tap('[data-act="study"]');
+  await page.waitForSelector('.study');
+};
+
+await seed(['comp']);
+check('dopo il riconoscimento arriva la composizione', (await page.locator('.pill--build').count()) === 1);
+check('le tessere sono più delle parole della frase', (await page.locator('[data-tile]').count()) === 5);
+const order = await page.evaluate((want) => {
+  const tiles = [...document.querySelectorAll('[data-tile]')];
+  return want.map((w) => tiles.find((el) => el.textContent.trim() === w)?.dataset.tile);
+}, ['Wie', 'heißt', 'du?']);
+check('le tessere contengono la frase intera', order.every((i) => i !== undefined), JSON.stringify(order));
+for (const i of order) await tap(`[data-tile="${i}"]`);
+await shot('13-componi');
+await tap('[data-act="check"]');
+check('ordine giusto riconosciuto', (await page.locator('.tray--ok').count()) === 1);
+check('la frase giusta viene ripetuta', (await page.textContent('.solution')).includes('Wie heißt du?'));
+check('voto automatico su Bene', (await page.textContent('[data-act="next"]')).includes('Bene'));
+
+await seed(['comp', 'build']);
+check('poi tocca al cloze', (await page.locator('.pill--cloze').count()) === 1);
+check('un solo buco sulla carta nuova', (await page.locator('[data-blank]').count()) === 1);
 check('la traduzione fa da appoggio', (await page.textContent('.hint')).includes('Come ti chiami'));
 // la ß non si digita su una tastiera italiana: "heisst" deve bastare
-await page.fill('.input', 'heisst');
-await tap('[data-act="reveal"]');
-check('risposta giusta riconosciuta', (await page.locator('.check--ok').count()) === 1);
-check('parola confermata', (await page.locator('.w--ok').count()) === 1);
-check('voto suggerito su Bene', (await page.locator('.grade--3.grade--hint').count()) === 1);
-await shot('13-cloze');
+await page.fill('[data-blank="0"]', 'heisst');
+await tap('[data-act="check"]');
+check('buco riempito correttamente', (await page.locator('.slot--ok').count()) === 1);
+await shot('14-completa');
 
-await tap('[data-grade="3"]');
-check('la carta torna nella sessione finché non è imparata', (await page.locator('.study').count()) === 1);
-await page.fill('.input', 'heisst');
-await tap('[data-act="reveal"]');
-await tap('[data-grade="3"]');
-check('sessione conclusa', (await page.locator('.done').count()) === 1);
-await shot('14-cloze-fine');
+await seed(['comp', 'build', 'cloze']);
+check('l’ultimo gradino è la produzione', (await page.locator('.pill--prod').count()) === 1);
+check('si può scrivere la frase intera', (await page.locator('.input').count()) === 1);
+await page.fill('.input', 'Wie heisst du');
+await tap('[data-act="check"]');
+check('accenti e punteggiatura perdonati', (await page.locator('.check--ok').count()) === 1);
+check('parole tutte confermate', (await page.locator('.w--ok').count()) === 3);
+await shot('15-produci');
 
 console.log('\n▸ Svizzero tedesco');
 await page.evaluate(() => {
@@ -239,10 +287,10 @@ check('avvertenza sul dialetto mostrata', (await page.textContent('.caveat')).in
 await tap('[data-act="study"]');
 await page.waitForSelector('.study');
 check('variante indicata sulla carta', (await page.textContent('.study__meta')).includes('Züridütsch'));
-await tap('[data-act="reveal"]');
+await tap('[data-choice="0"]');
 const bridge = await page.textContent('.bridge');
 check('ponte col tedesco standard', bridge.includes('TEDESCO STANDARD') || bridge.length > 10, bridge);
-await shot('15-svizzero');
+await shot('16-svizzero');
 
 check('nessun errore JavaScript', errors.length === 0, errors.join(' | '));
 

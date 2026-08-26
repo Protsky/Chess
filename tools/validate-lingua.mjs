@@ -9,6 +9,7 @@ import * as Fsrs from '../lingua/assets/js/fsrs.js';
 import * as Irt from '../lingua/assets/js/irt.js';
 import { diff, suggestGrade, normalize } from '../lingua/assets/js/check.js';
 import { buildQueue, cardId, unlocked, TYPES } from '../lingua/assets/js/scheduler.js';
+import * as Ex from '../lingua/assets/js/exercises.js';
 
 let errors = 0;
 let checks = 0;
@@ -238,6 +239,68 @@ console.log('\n[check] correzione delle risposte');
 
 /* ------------------------------- coda ---------------------------------- */
 
+console.log('\n[exercises] esercizi che si correggono da soli');
+{
+  const lang = LANGS.find((l) => l.code === 'de');
+  const norm = (s) => normalize(s);
+
+  for (const s of lang.sentences) {
+    const seed = `${s.id}|0`;
+
+    const choice = Ex.buildChoice(s, lang, seed);
+    if (choice.options.length !== 4) fail(`${s.id}: ${choice.options.length} scelte invece di 4`);
+    if (new Set(choice.options).size !== 4) fail(`${s.id}: due scelte identiche`);
+    if (choice.options[choice.correct] !== s.it) fail(`${s.id}: la scelta giusta non è la traduzione`);
+
+    const tiles = Ex.buildTiles(s, lang, seed);
+    if (tiles.answer.join(' ') !== s.text) fail(`${s.id}: le tessere non ricompongono la frase`);
+    if (tiles.tiles.length !== tiles.answer.length + tiles.extras) fail(`${s.id}: conteggio tessere sbagliato`);
+    for (const w of tiles.answer) {
+      if (!tiles.tiles.includes(w)) fail(`${s.id}: manca la tessera "${w}"`);
+    }
+
+    const cloze = Ex.buildCloze(s, { s: 0, reps: 0 }, seed);
+    const rebuilt = cloze.parts.map((p) => (p.blank ? p.answer : p.text)).join(' ');
+    if (rebuilt !== s.text) fail(`${s.id}: i buchi non ricompongono la frase (${rebuilt})`);
+    const holes = cloze.parts.filter((p) => p.blank).map((p) => norm(p.answer)).join(' ');
+    if (!holes.includes(norm(s.key)) && !norm(s.key).includes(holes)) {
+      fail(`${s.id}: il primo buco non cade sulla chiave (${holes} contro ${norm(s.key)})`);
+    }
+  }
+  ok(`${lang.sentences.length} frasi: scelte, tessere e buchi coerenti su tutte`);
+
+  // l'impalcatura si ritira: più la carta è solida, più pezzi spariscono
+  let regressions = 0;
+  for (const s of lang.sentences) {
+    let prev = 0;
+    for (const [reps, stability] of [[0, 0], [2, 5], [4, 20], [8, 60], [12, 200]]) {
+      const c = Ex.buildCloze(s, { s: stability, reps }, s.id);
+      if (c.hidden < prev) regressions++;
+      prev = c.hidden;
+    }
+  }
+  expect(regressions === 0, `${regressions} casi in cui i buchi diminuiscono col consolidarsi della carta`);
+  const sample = lang.sentences.find((s) => s.text.split(' ').length >= 7);
+  const growth = [[0, 0], [4, 20], [12, 200]].map(([reps, st]) => Ex.buildCloze(sample, { s: st, reps }, sample.id).hidden);
+  expect(growth[2] > growth[0], 'i buchi non crescono mai');
+  ok(`i buchi passano da ${growth[0]} a ${growth[2]} su una frase di ${sample.text.split(' ').length} parole`);
+
+  // stesso seme, stesso esercizio: niente sorprese fra un render e l'altro
+  const s0 = lang.sentences[3];
+  const a1 = Ex.buildTiles(s0, lang, 'x|1').tiles.join('|');
+  const a2 = Ex.buildTiles(s0, lang, 'x|1').tiles.join('|');
+  const a3 = Ex.buildTiles(s0, lang, 'x|2').tiles.join('|');
+  expect(a1 === a2, 'lo stesso seme dà due esercizi diversi');
+  expect(a1 !== a3, 'semi diversi danno lo stesso esercizio');
+  ok('gli esercizi sono ripetibili a parità di seme e cambiano a ogni ripasso');
+
+  expect(Ex.autoGrade({ correct: true, score: 1, extra: 0 }) === 3, 'tutto giusto non vale Bene');
+  expect(Ex.autoGrade({ correct: false, score: 1, extra: 0 }) === 2, 'forma sbagliata non vale Difficile');
+  expect(Ex.autoGrade({ correct: false, score: 0.5, extra: 0 }) === 1, 'risposta incompleta non vale Di nuovo');
+  expect(Ex.autoGrade({ correct: false, score: 1, extra: 2 }) === 1, 'parole di troppo non vengono penalizzate');
+  ok('il voto scende dall’esito, non da un giudizio');
+}
+
 console.log('\n[scheduler] costruzione della sessione');
 {
   const lang = LANGS.find((l) => l.code === 'en');
@@ -276,16 +339,20 @@ console.log('\n[scheduler] costruzione della sessione');
   expect(buildQueue({ lang, deck, settings, introducedToday: 8 }).counts.fresh === 0, 'il tetto giornaliero non viene rispettato');
   ok('il tetto di frasi nuove al giorno viene rispettato');
 
-  // il passaggio successivo si sblocca solo quando il precedente è maturo
+  // la scala si sale un gradino alla volta, e solo su un gradino consolidato
   const sid = lang.sentences[0].id;
-  deck.cards[cardId(sid, 'comp')] = { ...Fsrs.newCard(cardId(sid, 'comp')), state: 'learning', reps: 1, s: 0.4 };
-  expect(!unlocked(deck, sid, 'cloze'), 'il cloze si sblocca troppo presto');
-  deck.cards[cardId(sid, 'comp')] = { ...Fsrs.newCard(cardId(sid, 'comp')), state: 'review', reps: 2, s: 6 };
-  expect(unlocked(deck, sid, 'cloze'), 'il cloze non si sblocca a comprensione matura');
-  expect(!unlocked(deck, sid, 'prod'), 'la produzione salta il cloze');
-  ok('comprensione → cloze → produzione, in ordine');
+  const ladder = TYPES.map((x) => x.id);
+  expect(ladder.join(' → ') === 'comp → build → cloze → prod', `scala inattesa: ${ladder}`);
 
-  expect(TYPES.length === 3, 'i tipi di carta non sono tre');
+  const mature = (id) => ({ ...Fsrs.newCard(id), state: 'review', reps: 2, s: 6 });
+  deck.cards[cardId(sid, 'comp')] = { ...Fsrs.newCard(cardId(sid, 'comp')), state: 'learning', reps: 1, s: 0.4 };
+  expect(!unlocked(deck, sid, 'build'), 'la composizione si sblocca prima che il riconoscimento sia maturo');
+  for (let i = 1; i < ladder.length; i++) {
+    deck.cards[cardId(sid, ladder[i - 1])] = mature(cardId(sid, ladder[i - 1]));
+    expect(unlocked(deck, sid, ladder[i]), `${ladder[i]} non si sblocca dopo ${ladder[i - 1]}`);
+    if (i + 1 < ladder.length) expect(!unlocked(deck, sid, ladder[i + 1]), `${ladder[i + 1]} salta un gradino`);
+  }
+  ok(`${ladder.join(' → ')}: un gradino alla volta`);
 
   // i ripassi in scadenza precedono le novità e restano mescolati
   const deck2 = { profile: { theta: 0 }, cards: {}, log: [] };

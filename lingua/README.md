@@ -15,11 +15,50 @@ frase di sei parole sì, e resta comunque dentro la memoria di lavoro. Quindi:
 1. **Un test adattivo** stabilisce il livello in 8-16 domande.
 2. **Le frasi nuove** vengono pescate appena sopra quel livello, nel settore
    che hai scelto (lavoro, viaggi, tecnologia, salute, ricerca, quotidiano).
-3. **Ogni frase diventa tre carte** in ordine crescente di sforzo:
-   comprendere → completare il buco grammaticale → produrre dall'italiano.
-   La produzione si sblocca solo quando il passaggio precedente è consolidato.
+3. **Ogni frase diventa quattro carte** in ordine crescente di sforzo, e
+   ognuna si sblocca solo quando la precedente è consolidata.
 4. **Un algoritmo di ripetizione dilazionata** decide quando rivedere ciascuna
    carta, puntando alla probabilità di ricordare che hai richiesto.
+
+## I quattro esercizi, e perché nessuno si autovaluta
+
+| | Esercizio | Come si corregge |
+| --- | --- | --- |
+| 👂 | **Riconosci** — la frase, quattro traduzioni | scelta giusta o sbagliata |
+| 🧩 | **Componi** — tessere da rimettere in fila, due di troppo | ordine esatto |
+| ✏️ | **Completa** — buchi che aumentano col consolidarsi della carta | parola per parola |
+| 🗣️ | **Produci** — la frase intera, scritta o dettata a voce | confronto completo |
+
+Il punto non è la varietà: è che **nessuno di questi esercizi può essere
+corretto da chi studia**. Chiedere "l'avevi indovinata?" dopo aver mostrato la
+risposta non misura niente — dopo averla vista la si riconosce, e riconoscerla
+viene scambiato per ricordarla (Koriat & Bjork, 2005). Chi si autocorregge si
+dà ragione più spesso di quanto i dati giustifichino (Dunlosky & Rawson, 2012),
+e quell'errore finisce dritto dentro FSRS, che programma i ripassi su un voto
+gonfiato.
+
+Qui il voto **scende dall'esito**: tutto giusto → *Bene*, parole giuste e forma
+sbagliata → *Difficile*, manca qualcosa → *Di nuovo*. Resta un bottone per
+correggerlo a mano — *Facile* nessuna macchina può indovinarlo — ma la
+condizione normale è che tu non debba giudicarti.
+
+### I buchi che crescono
+
+Il cloze non ha un numero fisso di buchi: ne ha **uno** quando la carta è nuova
+e arriva a **metà frase** quando è solida, con il primo buco sempre sulla chiave
+grammaticale. È il *fading* dell'impalcatura di Renkl & Atkinson (2003): l'aiuto
+si ritira mentre la memoria regge da sola, e la stessa frase resta un esercizio
+utile invece di diventare un automatismo.
+
+### La voce
+
+Nel passaggio di produzione puoi **dettare la frase** invece di scriverla:
+`SpeechRecognition` la trascrive e il confronto è lo stesso di una risposta
+scritta. Non è solo comodità — pronunciare ad alta voce quello che si studia lo
+fa ricordare meglio del solo leggerlo (*production effect*, MacLeod et al.
+2010). Fra le trascrizioni proposte dal motore viene scelta la più vicina alla
+frase attesa, così un omofono non conta come errore. Dove il browser non
+trascrive (fuori da Safari e Chrome) il microfono non compare nemmeno.
 
 ## I due motori
 
@@ -133,7 +172,7 @@ sintetica: si ripiega sul tedesco svizzero standard.
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus + motori: 177 controlli
+node tools/validate-lingua.mjs     # corpus, motori ed esercizi: 192 controlli
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```
@@ -152,4 +191,9 @@ python3 tools/make_icons_lingua.py # rigenera le icone PNG
 - **Nation (2001)** — la conoscenza ricettiva precede quella produttiva.
 - **Rohrer & Taylor (2007)** — interleaving: mescolare conviene.
 - **Lord (1980)**, **van der Linden & Glas (2000)** — test adattivi su IRT.
+- **Koriat & Bjork (2005)**, **Dunlosky & Rawson (2012)** — illusione di
+  competenza: perché l'autovalutazione qui non esiste.
+- **Slamecka & Graf (1978)** — effetto generazione: si ricorda ciò che si produce.
+- **Renkl & Atkinson (2003)** — fading: i buchi crescono col consolidarsi.
+- **MacLeod et al. (2010)** — production effect: dirlo ad alta voce aiuta.
 - **Consiglio d'Europa, QCER (2001/2020)** — la scala A1-C2.

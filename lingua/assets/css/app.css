@@ -236,6 +236,7 @@ ul { margin: 0; padding-left: 1.1em; }
 .pill--ghost { background: transparent; }
 .pill--new { color: #06231c; background: var(--accent); border-color: transparent; }
 .pill--comp { color: var(--blue); border-color: rgba(106, 169, 233, 0.35); }
+.pill--build { color: var(--green); border-color: rgba(111, 202, 134, 0.35); }
 .pill--cloze { color: var(--amber); border-color: rgba(242, 166, 90, 0.35); }
 .pill--prod { color: var(--violet); border-color: rgba(167, 139, 250, 0.35); }
 
@@ -626,4 +627,92 @@ ul { margin: 0; padding-left: 1.1em; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+}
+
+/* ------------------------- esercizi interattivi ------------------------- */
+
+/* Componi: la riga che si sta costruendo e le tessere da pescare. */
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 10px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--line);
+  background: var(--bg-soft);
+}
+.tray--ok { border-color: var(--green); border-style: solid; }
+.tray--ko { border-color: var(--red); border-style: solid; }
+.tray__ghost { color: var(--muted); font-size: 13px; }
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.tile {
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 17px;
+  font-weight: 560;
+  line-height: 1.2;
+}
+.tile:active { transform: scale(0.96); }
+.tile--set { background: var(--surface); border-color: var(--accent-dim); }
+.tile--used { opacity: 0.22; border-style: dashed; }
+
+/* Completa: i buchi dentro la frase. */
+.target--cloze {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.slot {
+  display: inline-block;
+  min-width: 3.4em;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 21px;
+  font-weight: 620;
+  text-align: center;
+}
+.slot--in {
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+}
+.slot--in:focus { border-color: var(--accent); }
+.slot--ok { background: rgba(111, 202, 134, 0.14); color: var(--green); }
+.slot--ko { background: rgba(236, 106, 99, 0.14); color: var(--red); }
+
+/* Produci: il bottone del microfono. */
+.btn--mic { background: transparent; border-style: dashed; color: var(--muted); }
+.btn--mic-on {
+  border-style: solid;
+  border-color: var(--red);
+  color: var(--red);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% { background: rgba(236, 106, 99, 0.08); }
+}
+
+/* La soluzione, sempre mostrata dopo la correzione. */
+.solution {
+  font-size: 21px;
+  font-weight: 620;
+  text-align: center;
+  line-height: 1.4;
 }

@@ -1,5 +1,5 @@
 /* Service worker: l'app resta utilizzabile offline dopo la prima visita. */
-const CACHE = 'frasi-v2';
+const CACHE = 'frasi-v3';
 
 const ASSETS = [
   './',
@@ -8,6 +8,7 @@ const ASSETS = [
   'assets/css/app.css',
   'assets/js/app.js',
   'assets/js/check.js',
+  'assets/js/exercises.js',
   'assets/js/corpus.js',
   'assets/js/corpus-de.js',
   'assets/js/corpus-en.js',
@@ -16,6 +17,7 @@ const ASSETS = [
   'assets/js/fsrs.js',
   'assets/js/irt.js',
   'assets/js/scheduler.js',
+  'assets/js/speech.js',
   'assets/js/stats.js',
   'assets/js/store.js',
   'assets/icons/icon-180.png',
