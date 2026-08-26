@@ -590,12 +590,12 @@ function paintStudy() {
   ({ comp: askComp, build: askBuild, cloze: askCloze, prod: askProd }[type])(body, foot, sentence, done);
 
   if (done) {
-    // la frase giusta si ripete solo dove non è già sotto gli occhi
+    // la traduzione è già nella domanda in ogni esercizio: qui non si ripete,
+    // e la frase giusta torna solo dove non è già sotto gli occhi
     const repeat = type === 'build' || type === 'prod';
     body.append(h(`
       <div class="reveal">
         ${repeat ? `<p class="solution">${esc(sentence.text)}</p>` : ''}
-        ${type === 'comp' ? '' : `<p class="hint">${esc(sentence.it)}</p>`}
         ${sentence.de ? `<p class="bridge"><span>${esc(lang.bridge || 'Standard')}</span>${esc(sentence.de)}</p>` : ''}
         <p class="note"><b>${esc(sentence.g)}</b> — ${esc(sentence.note)}</p>
         <div class="tags">${sentence.dom.map((d) => `<span class="tag">${esc(DOMAINS.find((x) => x.id === d)?.label || d)}</span>`).join('')}</div>
