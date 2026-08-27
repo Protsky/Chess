@@ -20,6 +20,8 @@ import * as Ex from './exercises.js';
 import * as Speech from './speech.js';
 import * as Voices from './voices.js';
 import * as Tts from './tts.js';
+import * as Sfx from './sfx.js';
+import * as Goal from './goal.js';
 
 /* ------------------------------- utilità ------------------------------- */
 
@@ -41,6 +43,9 @@ const h = (html) => {
 const on = (root, sel, event, fn) => {
   root.querySelectorAll(sel).forEach((el) => el.addEventListener(event, fn));
 };
+
+const reduceMotion = () =>
+  typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -468,6 +473,7 @@ function paintHome() {
   const day = Store.today(lang.code);
   const { counts } = buildQueue({ lang, deck, settings: cfg, introducedToday: day.introduced });
   const streak = Store.streak(lang.code);
+  const goal = Goal.goalOf(cfg.dailyGoal);
   const cov = Stats.levelCoverage(deck, lang);
   const seen = cov.reduce((a, c) => a + c.done, 0);
   const upcoming = nextDue(deck);
@@ -476,18 +482,24 @@ function paintHome() {
 
   const el = h(`
     <section class="pad stack">
-      <div class="row">
-        <div class="stat">
-          <div class="stat__n">${deck.profile.cefr || '—'}</div>
-          <div class="stat__l">livello</div>
-        </div>
-        <div class="stat">
-          <div class="stat__n">${streak}</div>
-          <div class="stat__l">giorni di fila</div>
-        </div>
-        <div class="stat">
-          <div class="stat__n">${seen}</div>
-          <div class="stat__l">frasi viste</div>
+      <div class="today">
+        ${Chart.ring({
+          value: day.xp,
+          total: goal.xp,
+          big: String(day.xp),
+          small: `su ${goal.xp}`,
+          done: day.xp >= goal.xp,
+        })}
+        <div class="today__side">
+          <p class="today__title">${day.xp >= goal.xp ? 'Obiettivo raggiunto' : 'Obiettivo di oggi'}</p>
+          <p class="small muted">${day.xp >= goal.xp
+            ? `${esc(goal.label.toLowerCase())} · puoi fermarti qui o andare avanti`
+            : `${plural(Goal.cardsLeft(day.xp, goal.xp), 'carta', 'carte')} e ci sei`}</p>
+          <div class="today__chips">
+            <span class="pill">🔥 ${plural(streak, 'giorno', 'giorni')}</span>
+            <span class="pill">${deck.profile.cefr || '—'}</span>
+            <span class="pill">${seen} frasi</span>
+          </div>
         </div>
       </div>
 
@@ -548,6 +560,8 @@ function startSession({ extraNew = 0 } = {}) {
     index: 0,
     done: 0,
     again: 0,
+    earned: 0,
+    startXp: Store.today(lang.code).xp,
     hits: new Map(),          // richiami corretti di ogni carta dentro questa sessione
     startedAt: Date.now(),
     sentences: new Map(lang.sentences.map((s) => [s.id, s])),
@@ -618,6 +632,7 @@ function settle(result) {
   session.result = result;
   session.grade = Ex.autoGrade(result);
   session.phase = 'done';
+  Sfx.play(result.correct ? 'ok' : 'wrong', { enabled: settings().sounds && !reduceMotion() });
   render();
   window.scrollTo(0, 0); // la correzione va letta dall'inizio
 }
@@ -973,6 +988,7 @@ function commit(grade) {
     isNew,
     ivl: next.ivl,
     ms: Math.min(600000, now - (session.shownAt || now)),
+    xp: Goal.PER_CARD,
     s: Number(next.s.toFixed(3)),
     d: Number(next.d.toFixed(2)),
   }, lang.code);
@@ -997,8 +1013,13 @@ function commit(grade) {
     session.queue.splice(at, 0, next);
   }
 
+  session.earned += Goal.PER_CARD;
   session.index += 1;
-  if (session.index >= session.queue.length) return go('done');
+  if (session.index >= session.queue.length) {
+    // coda svuotata: il premio si prende una volta al giorno, non una a sessione
+    if (Store.markCleared(Goal.CLEARED_BONUS, lang.code)) session.earned += Goal.CLEARED_BONUS;
+    return go('done');
+  }
   prepare();
   render();
 }
@@ -1013,20 +1034,51 @@ function endSession() {
 function paintDone() {
   const s = session;
   session = null;
-  setBar('Sessione finita');
+  setBar('');
+  const cfg = settings();
+  const day = Store.today(lang.code);
+  const goal = Goal.goalOf(cfg.dailyGoal);
+  const reached = day.xp >= goal.xp;
+  const justReached = reached && s && (s.startXp || 0) < goal.xp;
   const minutes = s ? Math.max(1, Math.round((Date.now() - s.startedAt) / 60000)) : 0;
   const accuracy = s && s.done ? Math.round(((s.done - s.again) / s.done) * 100) : 0;
   const deck = Store.getDeck(lang.code);
   const up = nextDue(deck);
+
+  Sfx.play(justReached ? 'goal' : 'done', { enabled: cfg.sounds && !reduceMotion() });
+
   const el = h(`
-    <section class="pad stack">
+    <section class="pad stack done-screen">
       <div class="done">
-        <div class="done__mark">✓</div>
-        <h2>${s ? plural(s.done, 'carta ripassata', 'carte ripassate') : 'Fatto'}</h2>
-        <p class="muted">${minutes} min · ${accuracy}% al primo colpo</p>
+        <div class="done__ring${reduceMotion() ? '' : ' done__ring--in'}">
+          ${Chart.ring({
+            value: day.xp,
+            total: goal.xp,
+            big: `+${s ? s.earned : 0}`,
+            small: 'punti',
+            done: reached,
+            size: 148,
+          })}
+        </div>
+        <h2>${justReached ? 'Obiettivo raggiunto' : reached ? 'Ancora avanti' : 'Sessione finita'}</h2>
+        <p class="muted">${s ? plural(s.done, 'carta', 'carte') : ''} · ${minutes} min · ${accuracy}% al primo colpo</p>
       </div>
+
+      <div class="row">
+        <div class="stat">
+          <div class="stat__n">${day.xp}<span class="stat__of">/${goal.xp}</span></div>
+          <div class="stat__l">punti di oggi</div>
+        </div>
+        <div class="stat">
+          <div class="stat__n">🔥 ${Store.streak(lang.code)}</div>
+          <div class="stat__l">giorni di fila</div>
+        </div>
+      </div>
+
       <div class="card card--flat">
-        <p class="small muted">${up ? `Il prossimo ripasso è fra ${humanDelay(up - Date.now())}. Le carte tornano poco prima che tu le dimentichi: è lì che ripassare rende di più.` : 'Nessun ripasso in programma.'}</p>
+        <p class="small muted">${up
+          ? `Il prossimo ripasso è fra ${humanDelay(up - Date.now())}. Le carte tornano poco prima che tu le dimentichi: è lì che ripassare rende di più.`
+          : 'Nessun ripasso in programma.'}</p>
       </div>
       <button class="btn btn--primary" data-act="home">Torna alla home</button>
       <button class="btn btn--ghost" data-act="stats">Guarda i progressi</button>
@@ -1518,6 +1570,31 @@ function paintSettings() {
       </div>
 
       <div class="card card--flat">
+        <div class="card__head"><b>Obiettivo di oggi</b><span class="pill">${cfg.dailyGoal} punti</span></div>
+        <div class="grid">
+          ${Goal.GOALS.map((g) => `
+            <button class="chip-card${cfg.dailyGoal === g.xp ? ' chip-card--on' : ''}" data-goal="${g.xp}">
+              <span class="chip-card__icon">${g.xp}</span><span>${esc(g.label)}</span>
+            </button>`).join('')}
+        </div>
+        <p class="small muted">
+          ${esc(Goal.goalOf(cfg.dailyGoal).hint)}. Dieci punti per ogni carta portata a termine —
+          <b>giusta o sbagliata che sia</b> — più ${Goal.CLEARED_BONUS} una volta al giorno quando svuoti
+          i ripassi in scadenza.
+        </p>
+        <p class="small muted">
+          I punti si prendono per aver risposto, non per aver risposto bene: premiare la risposta
+          giusta spingerebbe a scegliere gli esercizi facili, cioè il contrario di quello che serve.
+          Un obiettivo esplicito e un po’ sopra la comodità è una delle poche leve motivazionali con
+          basi solide; punti e serie di giorni servono a farti presentare, non a farti imparare.
+        </p>
+        <label class="switch">
+          <span>Suoni di risposta</span>
+          <input type="checkbox" ${cfg.sounds ? 'checked' : ''} data-toggle="sounds">
+        </label>
+      </div>
+
+      <div class="card card--flat">
         <div class="card__head"><b>Criterio di sessione</b></div>
         <div class="grid">
           <button class="chip-card${(cfg.criterion || 1) === 1 ? ' chip-card--on' : ''}" data-crit="1">
@@ -1617,6 +1694,10 @@ function paintSettings() {
   on(el, '[data-act="try-voice"]', 'click', () => {
     const sample = lang.sentences.find((s) => s.lv === 'A1');
     speak(sample ? sample.text : 'Test', { force: true });
+  });
+  on(el, '[data-goal]', 'click', (e) => {
+    Store.setSetting('dailyGoal', Number(e.currentTarget.dataset.goal));
+    render();
   });
   on(el, '[data-crit]', 'click', (e) => {
     Store.setSetting('criterion', Number(e.currentTarget.dataset.crit));

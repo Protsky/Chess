@@ -124,6 +124,30 @@ tocchi, perché su un telefono il passaggio del mouse non esiste. Nessun grafico
 ha due scale sullo stesso asse: dove servono due grandezze diverse (il prezzo
 della ritenzione) ci sono due grafici uno sotto l'altro.
 
+## Obiettivo del giorno, punti e serie
+
+In cima alla home c'è un anello: i punti di oggi contro l'obiettivo che hai
+scelto (60, 120, 200 o 300, cioè da sei a trenta carte). A fine sessione
+l'anello si riempie, con un suono breve e diverso quando l'obiettivo è appena
+stato raggiunto.
+
+La regola che tiene la cosa onesta: **dieci punti per ogni carta portata a
+termine, giusta o sbagliata che sia**, più venti una volta al giorno quando
+svuoti i ripassi in scadenza. Premiare la risposta giusta spingerebbe a
+scegliere gli esercizi facili e a evitare quelli che insegnano di più — cioè
+esattamente il contrario di quello che serve. Chi sbaglia una carta difficile
+ha lavorato quanto chi ne indovina una facile.
+
+Sul perché esiste, senza gonfiare: fissare un obiettivo esplicito e un po'
+sopra la comodità è una delle poche leve motivazionali con basi solide (Locke &
+Latham, 2002). Punti e serie di giorni sono un'impalcatura più debole: aiutano
+a presentarsi, non a imparare, e la letteratura sulla gamification è molto meno
+univoca di quanto il marketing lasci credere. Stanno lì per quello, e per
+niente di più — e non toccano in nessun modo lo scheduler.
+
+I suoni si spengono dalle impostazioni, e si tacciono da soli quando il sistema
+chiede meno movimento (`prefers-reduced-motion`), insieme alle animazioni.
+
 ## Il criterio di sessione
 
 Quante volte devi azzeccare una carta prima che la sessione la lasci andare:
@@ -386,8 +410,8 @@ sintetica: si ripiega sul tedesco svizzero standard.
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 301 controlli
-node tools/smoke-lingua.mjs        # 94 controlli end-to-end in Chromium
+node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 314 controlli
+node tools/smoke-lingua.mjs        # 103 controlli end-to-end in Chromium
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```

@@ -112,9 +112,11 @@ await shot('4-settore');
 
 console.log('\n▸ Home');
 await page.waitForSelector('[data-act="study"]');
+check('obiettivo del giorno in cima', (await page.locator('.today .ring').count()) === 1);
+check('punti di oggi a zero all’inizio', (await page.textContent('.today')).includes('su 120'));
 const queueText = await page.textContent('.queue');
 check('coda del giorno mostrata', queueText.includes('frasi nuove'));
-check('livello in evidenza', (await page.textContent('.stat')).includes(level.trim()));
+check('livello in evidenza', (await page.textContent('.today__chips')).includes(level.trim()));
 check('lingua scelta in barra', (await page.textContent('#bar-title')).includes('Tedesco'));
 check('copertura del corpus mostrata', (await page.locator('.levels__row').count()) === 6);
 await shot('5-home');
@@ -176,6 +178,10 @@ while (answered < 60 && (await page.locator('.study').count())) {
 }
 check('sessione completata', (await page.locator('.done').count()) === 1, `(${answered} risposte)`);
 check('riepilogo con precisione', (await page.textContent('.done')).includes('%'));
+check('punti guadagnati mostrati', /\+\d+/.test(await page.textContent('.done')));
+check('anello dell’obiettivo alla fine', (await page.locator('.done .ring').count()) === 1);
+const earned = Number((await page.textContent('.done')).match(/\+(\d+)/)[1]);
+check('dieci punti a carta più il premio della coda svuotata', earned >= answered * 10, `(+${earned} su ${answered} carte)`);
 await shot('8-fine');
 
 console.log('\n▸ Progressi');
@@ -229,6 +235,11 @@ check('frasi nuove al giorno aggiornate', (await page.textContent('.val')).inclu
 check('backup esportabile', (await page.locator('[data-act="export"]').count()) === 1);
 check('si può scegliere che cosa allenare', (await page.locator('[data-dir]').count()) === 2);
 check('il criterio di sessione è scegliibile', (await page.locator('[data-crit]').count()) === 2);
+check('quattro obiettivi fra cui scegliere', (await page.locator('[data-goal]').count()) === 4);
+check('i punti non dipendono dall’esito, e lo dice', (await page.textContent('section')).includes('giusta o sbagliata che sia'));
+await tap('[data-goal="200"]');
+check('obiettivo cambiato', await page.evaluate(() => JSON.parse(localStorage.getItem('frasi/v1')).settings.dailyGoal === 200));
+await tap('[data-goal="120"]');
 check('una volta è il criterio di partenza', (await page.locator('[data-crit="1"].chip-card--on').count()) === 1);
 await tap('[data-crit="2"]');
 check('il criterio si cambia', await page.evaluate(() => JSON.parse(localStorage.getItem('frasi/v1')).settings.criterion === 2));
@@ -246,10 +257,10 @@ await shot('12-impostazioni');
 
 console.log('\n▸ Persistenza');
 await page.reload({ waitUntil: 'networkidle' });
-await page.waitForSelector('.stat');
+await page.waitForSelector('.today');
 check('si riapre sulla home', (await page.locator('[data-go="home"]').count()) === 1);
-check('livello ancora salvato', (await page.textContent('.stat')).includes(level.trim()));
-const seen = await page.locator('.stat').nth(2).textContent();
+check('livello ancora salvato', (await page.textContent('.today__chips')).includes(level.trim()));
+const seen = await page.locator('.today__chips .pill').nth(2).textContent();
 check('frasi viste memorizzate', Number(seen.replace(/\D+/g, '')) > 0, seen);
 await shot('13-ritorno');
 

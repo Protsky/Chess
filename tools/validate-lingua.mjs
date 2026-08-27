@@ -13,6 +13,7 @@ import * as Ex from '../lingua/assets/js/exercises.js';
 import * as Tr from '../lingua/assets/js/translit.js';
 import * as Opt from '../lingua/assets/js/optimizer.js';
 import * as Tts from '../lingua/assets/js/tts.js';
+import * as Goal from '../lingua/assets/js/goal.js';
 
 let errors = 0;
 let checks = 0;
@@ -324,6 +325,28 @@ console.log('\n[tts] voce online');
   const enc = Tts.url('Я не знаю.', 'ru-RU');
   expect(!/[^\x00-\x7F]/.test(enc), 'indirizzo con caratteri non ASCII: alcuni client lo rifiutano');
   ok('il cirillico viaggia codificato in percentuale, accenti compresi');
+}
+
+console.log('\n[goal] punti e obiettivo del giorno');
+{
+  expect(Goal.GOALS.length === 4, 'gli obiettivi proponibili non sono quattro');
+  expect(Goal.GOALS.every((g, i) => i === 0 || g.xp > Goal.GOALS[i - 1].xp), 'gli obiettivi non crescono');
+  expect(Goal.GOALS.every((g) => g.xp % Goal.PER_CARD === 0), 'un obiettivo non è raggiungibile con carte intere');
+  ok(`obiettivi da ${Goal.GOALS[0].xp} a ${Goal.GOALS[3].xp} punti, tutti multipli di una carta`);
+
+  // il punto della faccenda: i punti non dipendono dall'esito
+  expect(typeof Goal.PER_CARD === 'number' && Goal.PER_CARD > 0, 'i punti per carta non sono un numero');
+  const perCard = new Set([1, 2, 3, 4].map(() => Goal.PER_CARD));
+  expect(perCard.size === 1, 'i punti cambiano col voto: incentiverebbero a scegliere il facile');
+  ok('gli stessi punti per ogni carta, qualunque sia il voto');
+
+  const goal = Goal.goalOf(120);
+  expect(goal.xp === 120, 'obiettivo non trovato per un valore valido');
+  expect(Goal.goalOf(999).xp === 120, 'un valore fuori elenco non ricade su quello di riferimento');
+  expect(Goal.cardsLeft(70, 120) === 5, `carte mancanti sbagliate: ${Goal.cardsLeft(70, 120)}`);
+  expect(Goal.cardsLeft(200, 120) === 0, 'oltre l’obiettivo restano carte da fare');
+  expect(Goal.progress(60, 120) === 0.5 && Goal.progress(300, 120) === 1, 'avanzamento fuori scala');
+  ok('conteggio di quanto manca e avanzamento entro 0 e 1');
 }
 
 console.log('\n[exercises] esercizi che si correggono da soli');

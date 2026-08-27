@@ -218,6 +218,27 @@ export function heatmap({ days, weeks = 16 }) {
   return svg(W, H, `${months}${cells}`, `calendario di ${weeks} settimane`);
 }
 
+/**
+ * Anello dell'obiettivo del giorno: un valore solo, quindi nessuna serie da
+ * distinguere e nessuna legenda da mettere. Il numero grande al centro è il
+ * dato; l'anello è il contesto.
+ */
+export function ring({ value, total, big, small, done = false, size = 128 }) {
+  const r = size / 2 - 9;
+  const c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(1, total ? value / total : 0));
+  const stroke = done ? '#59d3b0' : '#2f7d69';
+  return `
+    <svg class="ring" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(`${value} su ${total}`)}">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#1e2735" stroke-width="9"/>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${stroke}" stroke-width="9"
+        stroke-linecap="round" stroke-dasharray="${round(c * p)} ${round(c)}"
+        transform="rotate(-90 ${size / 2} ${size / 2})"/>
+      <text x="${size / 2}" y="${size / 2 + 2}" fill="#e8edf6" font-size="26" font-weight="700" text-anchor="middle">${esc(big)}</text>
+      <text x="${size / 2}" y="${size / 2 + 20}" fill="${INK}" font-size="10" text-anchor="middle">${esc(small)}</text>
+    </svg>`;
+}
+
 /** Legenda: l'identità non sta mai nel solo colore. */
 export const legend = (names) => `
   <div class="legend">

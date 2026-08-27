@@ -20,6 +20,8 @@ const DEFAULTS = {
     tts: true,
     ttsRate: 0.85,
     ttsPitch: 1,
+    dailyGoal: 120,   // punti al giorno
+    sounds: true,
     criterion: 1,     // richiami corretti richiesti dentro la stessa sessione
     autoGrade: true,
     speechInput: true,
@@ -36,7 +38,7 @@ const EMPTY_DECK = {
   profile: { theta: null, se: null, cefr: null, at: null, history: [] },
   cards: {},
   log: [],
-  daily: { day: null, introduced: 0, reviewed: 0 },
+  daily: { day: null, introduced: 0, reviewed: 0, xp: 0, cleared: false },
   streak: { count: 0, last: null },
 };
 
@@ -151,6 +153,7 @@ export function logReview(entry, code = read().lang) {
     if (deck.log.length > LOG_MAX) deck.log.splice(0, deck.log.length - LOG_MAX);
     rollDay(deck, entry.t);
     deck.daily.reviewed += 1;
+    deck.daily.xp = (deck.daily.xp || 0) + (entry.xp || 0);
     if (entry.isNew) deck.daily.introduced += 1;
     bumpStreak(deck, entry.t);
     return deck.daily;
@@ -159,7 +162,7 @@ export function logReview(entry, code = read().lang) {
 
 function rollDay(deck, ts) {
   const today = dayKey(ts);
-  if (deck.daily.day !== today) deck.daily = { day: today, introduced: 0, reviewed: 0 };
+  if (deck.daily.day !== today) deck.daily = { day: today, introduced: 0, reviewed: 0, xp: 0, cleared: false };
 }
 
 function bumpStreak(deck, ts) {
@@ -174,7 +177,20 @@ function bumpStreak(deck, ts) {
 export function today(code = read().lang) {
   const { daily } = getDeck(code);
   const key = dayKey();
-  return daily.day === key ? { ...daily } : { day: key, introduced: 0, reviewed: 0 };
+  return daily.day === key
+    ? { xp: 0, cleared: false, ...daily }
+    : { day: key, introduced: 0, reviewed: 0, xp: 0, cleared: false };
+}
+
+/** Segna che oggi la coda è stata svuotata, e assegna il premio una sola volta. */
+export function markCleared(bonus, code = read().lang) {
+  return withDeck((deck) => {
+    rollDay(deck, Date.now());
+    if (deck.daily.cleared) return false;
+    deck.daily.cleared = true;
+    deck.daily.xp = (deck.daily.xp || 0) + bonus;
+    return true;
+  }, code);
 }
 
 export function streak(code = read().lang) {

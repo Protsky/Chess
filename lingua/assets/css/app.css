@@ -804,3 +804,37 @@ ul { margin: 0; padding-left: 1.1em; }
   color: #06231c;
 }
 .solution .tok { font-size: inherit; }
+
+/* ------------------------- obiettivo del giorno ------------------------- */
+
+.ring { display: block; width: 100%; height: auto; }
+
+.today {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.today .ring { width: 104px; flex: 0 0 104px; }
+.today__side { flex: 1; min-width: 0; }
+.today__title { font-size: 17px; font-weight: 650; }
+.today__side p + p { margin-top: 4px; }
+.today__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+.stat__of { font-size: 15px; color: var(--muted); font-weight: 500; }
+
+.done__ring { width: 156px; margin: 0 auto 14px; }
+.done__ring--in .ring circle:last-of-type { animation: ring-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.done__ring--in { animation: pop 0.5s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+
+@keyframes ring-in {
+  from { stroke-dasharray: 0 999; }
+}
+@keyframes pop {
+  from { transform: scale(0.86); opacity: 0; }
+}
+
+.done-screen .done { padding-top: 18px; }
