@@ -113,7 +113,8 @@ l’equivalente in tedesco standard), russo (150, con accento tonico segnato e
 risposte accettate anche in caratteri latini), inglese (205) e spagnolo (120),
 tutte scritte per italofoni. Si sceglie se allenarsi a **parlare** (dall’italiano
 alla lingua, con la produzione al secondo gradino) o a **capire**; i pesi dello
-scheduler si possono rifare sui propri ripassi, con la calibrazione a vista.
+scheduler si possono rifare sui propri ripassi, con la curva dell’oblio e la
+calibrazione disegnate a partire dai propri numeri.
 
 Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
 L’unica eccezione è facoltativa: la voce online (la sintesi pubblica di Google

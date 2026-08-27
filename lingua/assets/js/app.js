@@ -10,6 +10,8 @@ import { LANGS, DOMAINS, LEVELS, byCode } from './corpus.js';
 import * as Store from './store.js';
 import * as Irt from './irt.js';
 import * as Stats from './stats.js';
+import * as Chart from './chart.js';
+import * as Fsrs from './fsrs.js';
 import { createScheduler, GRADES, REVIEW, NEW, DEFAULT_W } from './fsrs.js';
 import * as Opt from './optimizer.js';
 import { buildQueue, splitId, TYPES, nextDue, targetLevel } from './scheduler.js';
@@ -546,6 +548,7 @@ function startSession({ extraNew = 0 } = {}) {
     index: 0,
     done: 0,
     again: 0,
+    hits: new Map(),          // richiami corretti di ogni carta dentro questa sessione
     startedAt: Date.now(),
     sentences: new Map(lang.sentences.map((s) => [s.id, s])),
   };
@@ -977,9 +980,20 @@ function commit(grade) {
   session.done += 1;
   if (grade === 1) session.again += 1;
 
-  // carta ancora in apprendimento: torna in coda dentro la sessione
-  if (next.state === 'learning' || next.state === 'relearning') {
-    const at = Math.min(session.index + 3, session.queue.length);
+  /*
+   * Criterio di sessione (successive relearning: Rawson & Dunlosky 2011;
+   * Rawson, Dunlosky & Sciartelli 2013). Richiamare una cosa UNA volta per
+   * sessione e poi rivederla a distanza produce già molto; richiamarla più
+   * volte prima di chiudere la sessione produce di più, e a un costo modesto
+   * perché la seconda volta arriva quasi gratis. Chi lo vuole lo attiva.
+   */
+  const hits = grade >= 3 ? (session.hits.get(card.id) || 0) + 1 : 0;
+  session.hits.set(card.id, hits);
+  const wantsMore = grade >= 3 && hits < (settings().criterion || 1);
+
+  // carta ancora in apprendimento, o criterio non ancora raggiunto: torna in coda
+  if (next.state === 'learning' || next.state === 'relearning' || wantsMore) {
+    const at = Math.min(session.index + (wantsMore ? 5 : 3), session.queue.length);
     session.queue.splice(at, 0, next);
   }
 
@@ -1024,7 +1038,7 @@ function paintDone() {
 
 /* -------------------------------- esplora -------------------------------- */
 
-let filter = { lv: '', dom: '', q: '' };
+let filter = { lv: '', dom: '', q: '', g: '' };
 
 function paintExplore() {
   const deck = Store.getDeck(lang.code);
@@ -1033,12 +1047,14 @@ function paintExplore() {
   const rows = lang.sentences.filter((s) =>
     (!filter.lv || s.lv === filter.lv)
     && (!filter.dom || s.dom.includes(filter.dom))
+    && (!filter.g || s.g === filter.g)
     && (!q || s.text.toLowerCase().includes(q) || s.it.toLowerCase().includes(q) || s.g.toLowerCase().includes(q)));
 
   setBar('Esplora il corpus');
   const el = h(`
     <section class="pad stack">
       <input class="input" id="q" type="search" placeholder="cerca una frase, una parola, una regola" value="${esc(filter.q)}">
+      ${filter.g ? `<button class="chip chip--on chip--clear" data-act="clear-g">${esc(filter.g)} ✕</button>` : ''}
       <div class="scroller">
         <button class="chip${filter.lv ? '' : ' chip--on'}" data-lv="">Tutti</button>
         ${LEVELS.map((lv) => `<button class="chip${filter.lv === lv ? ' chip--on' : ''}" data-lv="${lv}">${lv}</button>`).join('')}
@@ -1070,6 +1086,7 @@ function paintExplore() {
     const again = view.querySelector('#q');
     if (again) { again.focus(); again.setSelectionRange(pos, pos); }
   });
+  on(el, '[data-act="clear-g"]', 'click', () => { filter.g = ''; render(); });
   on(el, '[data-lv]', 'click', (e) => { filter.lv = e.currentTarget.dataset.lv; render(); });
   on(el, '[data-dom]', 'click', (e) => { filter.dom = e.currentTarget.dataset.dom; render(); });
   on(el, '[data-say]', 'click', (e) => speak(e.currentTarget.dataset.say, { force: true }));
@@ -1078,15 +1095,72 @@ function paintExplore() {
 
 /* ------------------------------- progressi ------------------------------- */
 
-function bars(rows, key, height = 54) {
-  const max = Math.max(1, ...rows.map((r) => r[key]));
-  return `<div class="chart" style="--h:${height}px">
-    ${rows.map((r) => `
-      <div class="chart__col" title="${r.label}: ${r[key]}">
-        <i style="height:${Math.round((r[key] / max) * 100)}%"></i>
-        <span>${r.label}</span>
-      </div>`).join('')}
-  </div>`;
+/** Contenitore standard di un grafico, con la riga che risponde al tocco. */
+function chartCard({ title, badge = '', intro = '', svg, legend = '', foot = '' }) {
+  return `
+    <div class="card card--flat chart-card">
+      <div class="card__head"><b>${title}</b>${badge ? `<span class="muted small">${badge}</span>` : ''}</div>
+      ${intro ? `<p class="small muted">${intro}</p>` : ''}
+      <div class="chart-wrap">${svg}</div>
+      ${legend}
+      <p class="small muted chart__readout">&nbsp;</p>
+      ${foot ? `<p class="small muted">${foot}</p>` : ''}
+    </div>`;
+}
+
+/** Toccare o passare sopra un segno ne scrive il valore sotto al grafico. */
+function wireCharts(root) {
+  root.querySelectorAll('.chart-card').forEach((card) => {
+    const out = card.querySelector('.chart__readout');
+    if (!out) return;
+    const show = (e) => {
+      const mark = e.target.closest('[data-readout]');
+      if (mark) out.textContent = mark.dataset.readout;
+    };
+    card.addEventListener('pointerdown', show);
+    card.addEventListener('pointermove', show);
+  });
+}
+
+let gramExpanded = false;   // la mappa mostra di norma solo i punti già incontrati
+
+/** Dal consolidamento di un punto grammaticale al passo della rampa. */
+function gramColor(g) {
+  if (!g.seen) return '#1e2735';
+  const steps = Chart.RAMP;
+  const solid = Math.min(1, g.strength / 30);          // 30 giorni di stabilità = solido
+  const covered = g.seen / g.total;
+  return steps[Math.min(steps.length - 1, Math.floor(((solid * 0.7) + (covered * 0.3)) * steps.length))];
+}
+
+/**
+ * La curva dell'oblio della carta tipica del mazzo: quella con la stabilità
+ * mediana, disegnata con i pesi in uso e con la soglia di ritenzione richiesta.
+ * È la formula che decide gli intervalli, resa guardabile.
+ */
+function forgettingCurve(deck, cfg) {
+  const median = Stats.medianStability(deck.cards);
+  const s = median || Fsrs.initStability(cfg.w || DEFAULT_W, 3);
+  const due = Math.max(1, Math.round(Fsrs.intervalFor(s, cfg.retention)));
+  const span = Math.max(2, Math.round(due * 2.4));
+  const points = [];
+  for (let i = 0; i <= 40; i++) {
+    const t = (span * i) / 40;
+    points.push({ x: t, y: Fsrs.retrievability(t, s) });
+  }
+  return {
+    badge: median ? `stabilità mediana ${humanDays(s)}` : 'carta nuova',
+    svg: Chart.line({
+      points,
+      yFormat: (v) => `${Math.round(v * 100)}%`,
+      xLabels: [{ x: 0, label: 'oggi' }, { x: due, label: humanDays(due) }, { x: span, label: humanDays(span) }],
+      hline: { y: cfg.retention, label: `${Math.round(cfg.retention * 100)}%` },
+      marks: [{ x: due, y: cfg.retention, label: 'ripasso', readout: `Dopo ${humanDays(due)} la probabilità di ricordarla è scesa al ${Math.round(cfg.retention * 100)}%: è lì che la carta torna.` }],
+    }),
+    foot: median
+      ? `La carta a metà del tuo mazzo regge ${humanDays(s)} prima di scendere al 90%. Con la ritenzione al ${Math.round(cfg.retention * 100)}% torna dopo ${humanDays(due)}: prima sarebbe tempo sprecato, dopo sarebbe dimenticata.`
+      : 'Compare sui tuoi numeri appena qualche carta arriva in ripasso. Per ora è quella di una carta appena imparata.',
+  };
 }
 
 function paintStats() {
@@ -1094,7 +1168,11 @@ function paintStats() {
   const cfg = settings();
   const ret = Stats.trueRetention(deck.log, 30);
   const states = Stats.stateCounts(deck.cards);
-  const gram = Stats.grammarProgress(deck, lang).slice(0, 10);
+  const gram = Stats.grammarProgress(deck, lang);
+  const history = Stats.reviewsByDay(deck.log, 30);
+  const calendar = Stats.reviewsByDay(deck.log, 112).map((d) => ({ ...d, value: d.total }));
+  const vocab = Stats.vocabulary(deck, lang);
+  const forget = forgettingCurve(deck, cfg);
   const trouble = Stats.troubleSpots(deck, lang, 5);
   const theta = deck.profile.theta;
 
@@ -1130,15 +1208,48 @@ function paintStats() {
         ? `Misurata su ${plural(ret.n, 'ripasso', 'ripassi')} degli ultimi 30 giorni. Se resta vicina all’obiettivo, gli intervalli sono tarati bene.`
         : 'La ritenzione reale compare dopo i primi ripassi a scadenza.'}</p>
 
-      <div class="card card--flat">
-        <div class="card__head"><b>Ultimi 14 giorni</b><span class="muted small">ripassi</span></div>
-        ${bars(Stats.reviewsByDay(deck.log, 14), 'total')}
-      </div>
+      ${chartCard({
+        title: 'La tua curva dell’oblio',
+        badge: forget.badge,
+        intro: 'La formula che decide i tuoi intervalli, disegnata sui tuoi numeri: la probabilità di ricordare cala nel tempo, e il ripasso cade quando arriva alla ritenzione che hai chiesto.',
+        svg: forget.svg,
+        foot: forget.foot,
+      })}
 
-      <div class="card card--flat">
-        <div class="card__head"><b>Carico in arrivo</b><span class="muted small">prossimi 14 giorni</span></div>
-        ${bars(Stats.forecast(deck.cards, 14), 'total')}
-      </div>
+      ${chartCard({
+        title: 'Ripassi fatti',
+        badge: 'ultimi 30 giorni',
+        svg: Chart.bars({ rows: history.map((d) => ({ label: d.label, values: [d.ok, d.again], readout: `${d.label}: ${d.total} ripassi, ${d.again} sbagliati` })), names: ['indovinati', 'sbagliati'] }),
+        legend: Chart.legend(['indovinati', 'sbagliati']),
+        foot: `${history.reduce((n, d) => n + d.total, 0)} ripassi in trenta giorni, ${history.filter((d) => d.total).length} giorni con almeno una carta.`,
+      })}
+
+      ${chartCard({
+        title: 'Calendario dello studio',
+        badge: '16 settimane',
+        svg: Chart.heatmap({ days: calendar }),
+        foot: `Ogni quadratino è un giorno, più chiaro dove hai ripassato di più. Serie attuale: ${plural(Store.streak(lang.code), 'giorno', 'giorni')}.`,
+      })}
+
+      ${chartCard({
+        title: 'Carico in arrivo',
+        badge: 'prossimi 14 giorni',
+        svg: Chart.bars({ rows: Stats.forecast(deck.cards, 14).map((d) => ({ label: d.label, values: [d.total], readout: `${d.label}: ${d.total} carte in scadenza` })), names: ['carte in scadenza'] }),
+        foot: 'Quanto ti costerà ogni giorno se non aggiungi nulla. Se cresce troppo, abbassa le frasi nuove al giorno.',
+      })}
+
+      ${vocab.points.length > 1 ? chartCard({
+        title: 'Parole diverse incontrate',
+        badge: `${vocab.types} su ${vocab.total}`,
+        intro: 'Non quante frasi hai visto, ma quanti tipi lessicali diversi: è la quota di parole note dentro un testo a decidere se lo capisci.',
+        svg: Chart.line({
+          points: vocab.points,
+          yFormat: (v) => Math.round(v),
+          xLabels: [{ x: 0, label: 'inizio' }, { x: vocab.points.length - 1, label: 'oggi' }],
+          marks: [{ x: vocab.points.length - 1, y: vocab.types, label: String(vocab.types), readout: `${vocab.types} parole diverse` }],
+        }),
+        foot: `Il corpus ${esc(lang.name.toLowerCase())} ne contiene ${vocab.total} in tutto.`,
+      }) : ''}
 
       <div class="card card--flat">
         <div class="card__head"><b>Composizione del mazzo</b><span class="muted small">${states.total} carte</span></div>
@@ -1148,20 +1259,29 @@ function paintStats() {
           <span class="split__seg split__seg--mature" style="flex:${states.mature || 0.001}"></span>
         </div>
         <div class="legend">
-          <span><i class="dot dot--learn"></i>${states.learning} in apprendimento</span>
-          <span><i class="dot dot--young"></i>${states.young} giovani</span>
-          <span><i class="dot dot--mature"></i>${states.mature} mature (oltre 21 g)</span>
+          <span><i class="swatch" style="background:#cf7a26"></i>${states.learning} in apprendimento</span>
+          <span><i class="swatch" style="background:#4a93e0"></i>${states.young} giovani</span>
+          <span><i class="swatch" style="background:#279c78"></i>${states.mature} mature (oltre 21 g)</span>
         </div>
       </div>
 
       <div class="card card--flat">
-        <div class="card__head"><b>Grammatica coperta</b></div>
-        ${gram.length ? gram.map((g) => `
-          <div class="levels__row">
-            <span class="levels__lv levels__lv--wide">${esc(g.g)}</span>
-            <span class="levels__bar"><i style="width:${Math.round((g.seen / g.total) * 100)}%"></i></span>
-            <span class="levels__n muted small">${g.seen}/${g.total}</span>
-          </div>`).join('') : '<p class="muted small">Ancora niente: comincia una sessione.</p>'}
+        <div class="card__head"><b>Mappa della grammatica</b><span class="muted small">${gram.filter((g) => g.seen).length}/${gram.length} punti</span></div>
+        <p class="small muted">Più chiaro, più solido. Tocca un punto per vedere tutte le frasi che lo contengono.</p>
+        <div class="gram-map">
+          ${(gramExpanded ? gram : gram.filter((g) => g.seen)).map((g) => `
+            <button class="gram" data-gram="${esc(g.g)}" style="--fill:${gramColor(g)}">
+              <span class="gram__n">${esc(g.g)}</span>
+              <span class="gram__v">${g.seen}/${g.total}</span>
+            </button>`).join('')}
+        </div>
+        ${gram.some((g) => !g.seen) ? `<button class="btn btn--ghost small" data-act="gram-all">${
+          gramExpanded ? 'Mostra solo quelli incontrati' : `Mostra anche i ${gram.filter((g) => !g.seen).length} mai incontrati`}</button>` : ''}
+        <div class="legend">
+          <span><i class="swatch" style="background:#1e2735"></i>mai visto</span>
+          <span><i class="swatch" style="background:${Chart.RAMP[0]}"></i>fragile</span>
+          <span><i class="swatch" style="background:${Chart.RAMP[4]}"></i>solido</span>
+        </div>
       </div>
 
       <div id="tuning-slot"></div>
@@ -1179,9 +1299,16 @@ function paintStats() {
       </div>` : ''}
     </section>`);
   on(el, '[data-act="retest"]', 'click', () => startExam());
+  on(el, '[data-act="gram-all"]', 'click', () => { gramExpanded = !gramExpanded; render(); });
+  on(el, '[data-gram]', 'click', (e) => {
+    filter = { lv: '', dom: '', q: '', g: e.currentTarget.dataset.gram };
+    go('explore');
+  });
   const slot = el.querySelector('#tuning-slot');
   paintTuning(slot, deck, cfg);
   paintRetention(slot, deck, cfg);
+  wireCharts(el);
+  wireCharts(slot);
   view.append(el);
 }
 
@@ -1189,20 +1316,6 @@ function paintStats() {
 /* ---------------------- taratura del modello di memoria ------------------ */
 
 let tuning = null;   // esito dell'ultima ottimizzazione, in attesa di conferma
-
-/** Riga della curva di calibrazione: previsto contro accaduto. */
-function calibrationRows(bins) {
-  const max = Math.max(...bins.map((b) => b.n));
-  return bins.map((b) => `
-    <div class="calib">
-      <span class="calib__band">${Math.round(b.from * 100)}–${Math.round(b.to * 100)}%</span>
-      <span class="calib__bars">
-        <i class="calib__bar calib__bar--pred" style="width:${Math.round(b.predicted * 100)}%"></i>
-        <i class="calib__bar calib__bar--obs" style="width:${Math.round(b.observed * 100)}%"></i>
-      </span>
-      <span class="calib__n muted small" style="opacity:${0.35 + 0.65 * (b.n / max)}">${b.n}</span>
-    </div>`).join('');
-}
 
 function paintTuning(container, deck, cfg) {
   const sequences = Opt.replay(deck.log);
@@ -1212,7 +1325,7 @@ function paintTuning(container, deck, cfg) {
   const enough = now.n >= Opt.MIN_REVIEWS;
 
   const card = h(`
-    <div class="card card--flat">
+    <div class="card card--flat chart-card">
       <div class="card__head">
         <b>Taratura del modello</b>
         <span class="pill">${personal ? 'pesi tuoi' : 'pesi di serie'}</span>
@@ -1251,13 +1364,11 @@ function paintTuning(container, deck, cfg) {
     <div class="stack">
       <p class="small muted">
         Quando il modello dice “te la ricordi all’85%”, dovrebbe azzeccarci l’85% delle volte.
-        La barra chiara è quello che prevedeva, quella piena quello che è successo davvero.
+        Ogni punto è una fascia di previsioni: sulla diagonale il modello è onesto, sotto è
+        ottimista, sopra è prudente. Più grande il punto, più ripassi ci sono dentro.
       </p>
-      <div class="calibs">${calibrationRows(bins)}</div>
-      <div class="legend">
-        <span><i class="dot dot--pred"></i>previsto</span>
-        <span><i class="dot dot--obs"></i>accaduto</span>
-      </div>
+      <div class="chart-wrap chart-wrap--square">${Chart.calibration({ bins })}</div>
+      <p class="small muted chart__readout">&nbsp;</p>
     </div>`));
 
   if (tuning) {
@@ -1312,10 +1423,9 @@ function paintRetention(container, deck, cfg) {
   const here = curve.find((p) => Math.abs(p.retention - cfg.retention) < 0.005) || curve[10];
   const low = curve[0];
   const high = curve[curve.length - 1];
-  const maxReviews = Math.max(...curve.map((p) => p.reviews));
 
   container.append(h(`
-    <div class="card card--flat">
+    <div class="card card--flat chart-card">
       <div class="card__head"><b>Il prezzo della ritenzione</b><span class="pill">${Math.round(cfg.retention * 100)}%</span></div>
       <p class="small muted">
         Alzare la ritenzione richiesta accorcia gli intervalli: ricordi di più e ripassi di più.
@@ -1323,21 +1433,32 @@ function paintRetention(container, deck, cfg) {
         consigliartene uno, ecco quanto costa ognuno, simulato con i tuoi pesi
         ${cost.measured ? `e con i tuoi tempi reali (${cost.pass.toFixed(0)} s se indovini, ${cost.fail.toFixed(0)} s se sbagli)` : 'e con tempi di riferimento, finché non ne avrai di tuoi'}.
       </p>
-      <div class="levels">
-        ${curve.filter((p) => [80, 85, 88, 90, 92, 95].includes(Math.round(p.retention * 100))).map((p) => `
-          <div class="levels__row${Math.abs(p.retention - cfg.retention) < 0.005 ? ' levels__row--on' : ''}">
-            <span class="levels__lv">${Math.round(p.retention * 100)}%</span>
-            <span class="levels__bar"><i style="width:${Math.round((p.reviews / maxReviews) * 100)}%"></i></span>
-            <span class="levels__n muted small">${p.reviews.toFixed(1)} rip.</span>
-            <span class="levels__n muted small">${Math.round(p.knowledge * 100)}%</span>
-          </div>`).join('')}
-      </div>
+      <p class="small muted"><b>Quanto costa</b> — ripassi all’anno per carta</p>
+      <div class="chart-wrap">${Chart.bars({
+        rows: curve.map((p) => ({
+          label: `${Math.round(p.retention * 100)}`,
+          values: [p.reviews],
+          readout: `Al ${Math.round(p.retention * 100)}%: ${p.reviews.toFixed(1)} ripassi e ${p.minutes.toFixed(1)} minuti all’anno, memoria media ${Math.round(p.knowledge * 100)}%`,
+        })),
+        names: ['ripassi all’anno'],
+        everyLabel: 3,
+      })}</div>
+      <p class="small muted"><b>Quanto rende</b> — memoria media nell’anno</p>
+      <div class="chart-wrap">${Chart.line({
+        points: curve.map((p) => ({ x: p.retention * 100, y: p.knowledge })),
+        yFormat: (v) => `${Math.round(v * 100)}%`,
+        area: false,
+        xLabels: [{ x: 80, label: '80%' }, { x: 88, label: '88%' }, { x: 95, label: '95%' }],
+        marks: [{ x: here.retention * 100, y: here.knowledge, label: 'tu', readout: `Al ${Math.round(here.retention * 100)}% che hai adesso: ${here.reviews.toFixed(1)} ripassi l’anno per una memoria media del ${Math.round(here.knowledge * 100)}%` }],
+        height: 120,
+      })}</div>
+      <p class="small muted chart__readout">&nbsp;</p>
       <p class="small muted">
-        Per carta e per anno: ripassi a sinistra, memoria media a destra. Fra
-        ${Math.round(low.retention * 100)}% e ${Math.round(high.retention * 100)}% i ripassi passano da
-        ${low.reviews.toFixed(1)} a ${high.reviews.toFixed(1)} — ${(high.reviews / low.reviews).toFixed(1)} volte tanti —
-        per ${Math.round((high.knowledge - low.knowledge) * 100)} punti di memoria in più.
-        ${here ? `Al ${Math.round(here.retention * 100)}% che hai adesso: ${here.reviews.toFixed(1)} ripassi l’anno.` : ''}
+        Due grafici e non uno con due scale: le due grandezze non si confrontano, si leggono una
+        sotto l’altra. Fra ${Math.round(low.retention * 100)}% e ${Math.round(high.retention * 100)}%
+        i ripassi passano da ${low.reviews.toFixed(1)} a ${high.reviews.toFixed(1)} —
+        ${(high.reviews / low.reviews).toFixed(1)} volte tanti — per
+        ${Math.round((high.knowledge - low.knowledge) * 100)} punti di memoria media in più.
       </p>
     </div>`));
 }
@@ -1394,6 +1515,24 @@ function paintSettings() {
           frase e ne cerchi il senso, e la produzione arriva alla fine.
         </p>
         <p class="small muted">Vale da qui in avanti: le carte già avviate restano dove sono.</p>
+      </div>
+
+      <div class="card card--flat">
+        <div class="card__head"><b>Criterio di sessione</b></div>
+        <div class="grid">
+          <button class="chip-card${(cfg.criterion || 1) === 1 ? ' chip-card--on' : ''}" data-crit="1">
+            <span class="chip-card__icon">1×</span><span>Una volta</span>
+          </button>
+          <button class="chip-card${(cfg.criterion || 1) === 2 ? ' chip-card--on' : ''}" data-crit="2">
+            <span class="chip-card__icon">2×</span><span>Due volte</span>
+          </button>
+        </div>
+        <p class="small muted">
+          Quante volte devi azzeccare una carta prima che la sessione la lasci andare. Richiamarla
+          due volte a distanza di qualche carta, e poi rivederla nei giorni successivi, è la
+          combinazione che regge meglio a distanza di mesi: la seconda volta costa poco e rende
+          molto. In cambio le sessioni si allungano.
+        </p>
       </div>
 
       <div class="card card--flat">
@@ -1478,6 +1617,10 @@ function paintSettings() {
   on(el, '[data-act="try-voice"]', 'click', () => {
     const sample = lang.sentences.find((s) => s.lv === 'A1');
     speak(sample ? sample.text : 'Test', { force: true });
+  });
+  on(el, '[data-crit]', 'click', (e) => {
+    Store.setSetting('criterion', Number(e.currentTarget.dataset.crit));
+    render();
   });
   on(el, '[data-dir]', 'click', (e) => {
     Store.setSetting('direction', e.currentTarget.dataset.dir);
@@ -1611,6 +1754,9 @@ const PAPERS = [
   ['Provarci prima di sapere aiuta, anche sbagliando', 'Richland, Kornell & Kao (2009) e Carpenter & Toftness (2017), prequestioning: tentare una risposta che non si può ancora conoscere migliora l’apprendimento di quello che arriva subito dopo. È il motivo per cui una frase nuova non viene mostrata: viene chiesta.'],
   ['La stessa regola in frasi diverse, non la stessa frase', 'Variabilità della pratica: un punto grammaticale ancora fragile viene ripreso in un’altra frase, non ripetendo quella di prima. È così che diventa una regola invece che una frase imparata a memoria.'],
   ['La difficoltà va messa dove cede', 'I buchi del cloze si spostano sulle parole che hai già sbagliato su quella carta. Rendere difficile tutto non serve: serve rendere difficile il punto che non regge.'],
+  ['Richiamare due volte in una sessione, e poi a distanza', 'Rawson & Dunlosky (2011) e Rawson, Dunlosky & Sciartelli (2013), successive relearning: portare ogni elemento a un criterio di richiamo dentro la sessione, e poi ripetere la cosa nelle sessioni successive, produce una tenuta a mesi di distanza molto superiore al richiamo singolo. È l’opzione "due volte" nelle impostazioni.'],
+  ['Si capisce un testo quando se ne conoscono abbastanza parole', 'Nation, sulla copertura lessicale: la comprensione dipende dalla quota di parole note dentro un testo, e quella quota si costruisce per tipi diversi, non ripetendo gli stessi. Per questo i progressi contano le parole diverse incontrate, non le frasi.'],
+  ['Un modello va guardato, non creduto', 'La curva dell’oblio in Progressi non è un’illustrazione: è la funzione che decide i tuoi intervalli, disegnata con i tuoi parametri, con segnata sopra la soglia a cui la carta torna.'],
   ['Mescolare gli argomenti conviene', 'Rohrer & Taylor (2007), interleaving: alternare tipi diversi di esercizio peggiora la sensazione immediata e migliora il risultato a distanza.'],
   ['Misurare il livello con poche domande giuste', 'Lord (1980) e van der Linden & Glas (2000), test adattivi su modello IRT: ogni domanda è scelta per essere massimamente informativa sul tuo θ.'],
   ['Una scala condivisa', 'Consiglio d’Europa, QCER (2001, aggiornato 2020): A1-C2 come riferimento per livelli e descrittori.'],

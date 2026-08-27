@@ -181,10 +181,32 @@ await shot('8-fine');
 console.log('\n▸ Progressi');
 await tap('[data-act="stats"]');
 await page.waitForSelector('.chart');
-check('due grafici disegnati', (await page.locator('.chart').count()) === 2);
+const charts = await page.locator('.chart').count();
+check('i grafici sono disegnati in SVG', charts >= 4, `(${charts})`);
+check('la curva dell’oblio è la prima cosa', (await page.textContent('section')).includes('curva dell’oblio'));
+check('la soglia di ritenzione è segnata sulla curva', (await page.locator('.chart line[stroke-dasharray]').count()) >= 1);
+check('calendario dello studio disegnato', (await page.textContent('section')).includes('Calendario dello studio'));
 check('composizione del mazzo mostrata', (await page.locator('.split__seg').count()) === 3);
-check('grammatica coperta elencata', (await page.locator('.levels__lv--wide').count()) > 0);
+check('mappa della grammatica interattiva', (await page.locator('[data-gram]').count()) > 5);
+check('ogni serie ha la sua etichetta, non solo il colore', (await page.locator('.legend .swatch').count()) >= 3);
+
+// il valore di un segno si legge toccandolo: sui telefoni non c'è il passaggio del mouse
+await page.locator('.chart-card').first().locator('[data-readout]').first().dispatchEvent('pointerdown');
+const readout = await page.locator('.chart-card').first().locator('.chart__readout').textContent();
+check('toccare un segno ne scrive il valore', readout.trim().length > 3, readout);
 await shot('9-progressi');
+
+await page.locator('.gram-map').scrollIntoViewIfNeeded();
+await page.waitForTimeout(120);
+await shot('9b-mappa-grammatica');
+const point = await page.locator('[data-gram]').first().getAttribute('data-gram');
+await tap('[data-gram]');
+check('dalla mappa si arriva alle frasi di quel punto', (await page.textContent('section')).includes(point), point);
+check('il filtro si può togliere', (await page.locator('[data-act="clear-g"]').count()) === 1);
+await tap('[data-act="clear-g"]');
+await shot('10-mappa');
+await tap('[data-go="stats"]');
+await page.waitForSelector('.chart');
 
 console.log('\n▸ Esplora');
 await tap('[data-go="explore"]');
@@ -196,7 +218,7 @@ const after = await page.locator('.row-item').count();
 check('la ricerca filtra', after > 0 && after < before, `(${before} → ${after})`);
 await tap('[data-lv="C1"]');
 check('filtro per livello attivo', (await page.locator('.chip--on').count()) >= 1);
-await shot('10-esplora');
+await shot('11-esplora');
 
 console.log('\n▸ Impostazioni');
 await tap('[data-go="settings"]');
@@ -206,6 +228,11 @@ await page.waitForTimeout(150);
 check('frasi nuove al giorno aggiornate', (await page.textContent('.val')).includes('12'));
 check('backup esportabile', (await page.locator('[data-act="export"]').count()) === 1);
 check('si può scegliere che cosa allenare', (await page.locator('[data-dir]').count()) === 2);
+check('il criterio di sessione è scegliibile', (await page.locator('[data-crit]').count()) === 2);
+check('una volta è il criterio di partenza', (await page.locator('[data-crit="1"].chip-card--on').count()) === 1);
+await tap('[data-crit="2"]');
+check('il criterio si cambia', await page.evaluate(() => JSON.parse(localStorage.getItem('frasi/v1')).settings.criterion === 2));
+await tap('[data-crit="1"]');
 check('parlare è la scelta di partenza', (await page.locator('[data-dir="produce"].chip-card--on').count()) === 1);
 check('la velocità della lingua è spiegata', (await page.textContent('section')).includes('di questa velocità'));
 check('il tono è regolabile', (await page.locator('[data-set="ttsPitch"]').count()) === 1);
@@ -215,7 +242,7 @@ check('la scelta della voce è offerta o spiegata', (await page.locator('[data-v
   || voiceUi.includes('voci installate') || voiceUi.includes('Nessuna voce'), voiceUi.slice(0, 80));
 check('il limite della sintesi è dichiarato', voiceUi.includes('sintesi è quella del tuo dispositivo')
   || voiceUi.includes('non ne espone') || voiceUi.includes('Nessuna voce'));
-await shot('11-impostazioni');
+await shot('12-impostazioni');
 
 console.log('\n▸ Persistenza');
 await page.reload({ waitUntil: 'networkidle' });
@@ -224,7 +251,7 @@ check('si riapre sulla home', (await page.locator('[data-go="home"]').count()) =
 check('livello ancora salvato', (await page.textContent('.stat')).includes(level.trim()));
 const seen = await page.locator('.stat').nth(2).textContent();
 check('frasi viste memorizzate', Number(seen.replace(/\D+/g, '')) > 0, seen);
-await shot('12-ritorno');
+await shot('13-ritorno');
 
 console.log('\n▸ Componi, completa, produci');
 /* Si forza uno stato in cui i gradini precedenti sono già maturi: così i
@@ -389,12 +416,13 @@ await page.evaluate(() => {
 });
 await page.reload({ waitUntil: 'networkidle' });
 await tap('[data-go="stats"]');
-await page.waitForSelector('.calibs');
-check('curva di calibrazione disegnata', (await page.locator('.calib').count()) > 1);
-check('ripassi utilizzabili contati', /\d/.test(await page.textContent('.calibs')) || true);
+await page.waitForSelector('.chart-card');
+check('grafico di calibrazione disegnato', (await page.locator('.chart circle').count()) > 1);
+check('la diagonale del modello onesto è tracciata', (await page.textContent('section')).includes('modello onesto'));
 check('prezzo della ritenzione mostrato', (await page.textContent('section')).includes('prezzo della ritenzione'));
 check('costo misurato dai tempi reali', (await page.textContent('section')).includes('se indovini'));
-await page.locator('.calibs').scrollIntoViewIfNeeded();
+await page.locator('.chart-wrap--square').scrollIntoViewIfNeeded();
+await page.waitForTimeout(150);
 await shot('18-taratura');
 
 await tap('[data-act="fit"]');
@@ -409,7 +437,7 @@ if (applyEnabled) {
   await tap('[data-act="discard"]');
   check('niente di meglio trovato, e lo dice', true);
 }
-await page.locator('.calibs').scrollIntoViewIfNeeded();
+await page.locator('#tuning-slot').scrollIntoViewIfNeeded();
 await shot('19-pesi');
 
 check('nessun errore JavaScript', errors.length === 0, errors.join(' | '));

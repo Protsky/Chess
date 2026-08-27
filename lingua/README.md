@@ -93,6 +93,50 @@ fa ricordare meglio del solo leggerlo (*production effect*, MacLeod et al.
 frase attesa, così un omofono non conta come errore. Dove il browser non
 trascrive (fuori da Safari e Chrome) il microfono non compare nemmeno.
 
+## I grafici: far vedere il modello, non decorarlo
+
+I *Progressi* non sono una bacheca di numeri motivazionali. Ogni grafico
+risponde a una domanda che riguarda il modello:
+
+| Grafico | Domanda |
+| --- | --- |
+| **La tua curva dell'oblio** | come decide, il modello, quando ti ripropone una carta? |
+| **Calibrazione** | quando dice "85%", ci azzecca l'85% delle volte? |
+| **Il prezzo della ritenzione** | quanto costa ogni scelta che posso fare? |
+| **Ripassi fatti / Carico in arrivo** | quanto sto spendendo e quanto spenderò? |
+| **Parole diverse incontrate** | quanto lessico diverso mi è passato davanti? |
+| **Mappa della grammatica** | quali regole reggono e quali no? |
+
+La curva dell'oblio non è un'illustrazione presa da un libro: è
+`R(t) = (1 + 19/81 · t/S)^-0.5` calcolata con **la stabilità mediana del tuo
+mazzo** e **i tuoi pesi**, con segnata sopra la soglia di ritenzione che hai
+chiesto e il punto in cui la carta torna. La mappa della grammatica è
+interattiva: si tocca un punto e si aprono le frasi che lo contengono.
+
+### I colori sono calcolati, non scelti a occhio
+
+La serie categorica e la rampa sequenziale passano i controlli misurabili
+contro la superficie scura dell'app: banda di luminosità OKLCH, soglia di
+croma, **separazione sotto daltonismo** (protanopia e deuteranopia, ΔE ≥ 8 in
+OKLab) e contrasto. L'identità non è mai affidata al solo colore — ogni serie
+ha la sua etichetta in legenda, e ogni segno scrive il proprio valore quando lo
+tocchi, perché su un telefono il passaggio del mouse non esiste. Nessun grafico
+ha due scale sullo stesso asse: dove servono due grandezze diverse (il prezzo
+della ritenzione) ci sono due grafici uno sotto l'altro.
+
+## Il criterio di sessione
+
+Quante volte devi azzeccare una carta prima che la sessione la lasci andare:
+**una** (di serie) o **due**. Con due, dopo un richiamo corretto la carta torna
+qualche posizione più avanti e va richiamata di nuovo prima di uscire.
+
+È il *successive relearning* di Rawson & Dunlosky (2011) e Rawson, Dunlosky &
+Sciartelli (2013): portare ogni elemento a un criterio di richiamo dentro la
+sessione, e poi ripetere la cosa nelle sessioni successive, regge a mesi di
+distanza molto meglio del richiamo singolo. Il secondo richiamo costa poco —
+la carta è appena stata richiamata — e rende molto. In cambio le sessioni si
+allungano, quindi la scelta resta esplicita.
+
 ## Tarare il modello sui propri ripassi
 
 I 19 pesi di FSRS vengono di serie dai ripassi di centinaia di milioni di carte
@@ -343,6 +387,7 @@ sintetica: si ripiega sul tedesco svizzero standard.
 
 ```bash
 node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 301 controlli
+node tools/smoke-lingua.mjs        # 94 controlli end-to-end in Chromium
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```
@@ -371,5 +416,8 @@ python3 tools/make_icons_lingua.py # rigenera le icone PNG
 - **Slamecka & Graf (1978)** — effetto generazione: si ricorda ciò che si produce.
 - **Renkl & Atkinson (2003)** — fading: i buchi crescono col consolidarsi.
 - **MacLeod et al. (2010)** — production effect: dirlo ad alta voce aiuta.
+- **Rawson & Dunlosky (2011)**, **Rawson, Dunlosky & Sciartelli (2013)** —
+  successive relearning: il criterio di sessione a due richiami.
+- **Nation** — copertura lessicale: si conta il lessico per tipi diversi.
 - **Consiglio d'Europa, QCER (2001/2020)** — la scala A1-C2 (che però i
   dialetti non li copre: per lo svizzero tedesco sono bande di difficoltà).

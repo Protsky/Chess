@@ -1,5 +1,5 @@
 /* Service worker: l'app resta utilizzabile offline dopo la prima visita. */
-const CACHE = 'frasi-v10';
+const CACHE = 'frasi-v11';
 
 const ASSETS = [
   './',
@@ -7,6 +7,7 @@ const ASSETS = [
   'manifest.webmanifest',
   'assets/css/app.css',
   'assets/js/app.js',
+  'assets/js/chart.js',
   'assets/js/check.js',
   'assets/js/exercises.js',
   'assets/js/corpus.js',

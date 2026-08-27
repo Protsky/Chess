@@ -25,16 +25,27 @@ export function trueRetention(log, days = 30) {
 
 /** Ripassi per giorno negli ultimi `days` giorni, dal più vecchio. */
 export function reviewsByDay(log, days = 14) {
+  const MONTHS = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+  const counts = new Map();
+  for (const e of log) {
+    const key = dayKey(e.t);
+    const row = counts.get(key) || { total: 0, again: 0, fresh: 0 };
+    row.total += 1;
+    if (e.g === 1) row.again += 1;
+    if (e.isNew) row.fresh += 1;
+    counts.set(key, row);
+  }
   const out = [];
   for (let i = days - 1; i >= 0; i--) {
-    const key = dayKey(Date.now() - i * DAY);
-    const rows = log.filter((e) => dayKey(e.t) === key);
+    const at = Date.now() - i * DAY;
+    const key = dayKey(at);
+    const row = counts.get(key) || { total: 0, again: 0, fresh: 0 };
     out.push({
       key,
       label: key.slice(8),
-      total: rows.length,
-      again: rows.filter((e) => e.g === 1).length,
-      fresh: rows.filter((e) => e.isNew).length,
+      month: MONTHS[new Date(at).getMonth()],
+      ...row,
+      ok: row.total - row.again,
     });
   }
   return out;
@@ -122,6 +133,55 @@ export function troubleSpots(deck, lang, limit = 8) {
     if (s) rows.push({ sentence: s, card, type: splitId(id).type });
   }
   return rows.sort((a, b) => b.card.lapses - a.card.lapses || b.card.d - a.card.d).slice(0, limit);
+}
+
+/**
+ * Parole diverse incontrate nel tempo.
+ *
+ * È la misura che conta per la comprensione: non quante frasi hai visto, ma
+ * quanti tipi lessicali diversi ti sono passati davanti. La letteratura sulla
+ * copertura del testo (Nation) mostra che la comprensione dipende dalla quota
+ * di parole note in un testo, e quella quota si costruisce per tipi, non per
+ * ripetizioni delle stesse.
+ */
+export function vocabulary(deck, lang) {
+  const sentences = new Map(lang.sentences.map((s) => [s.id, s]));
+  const firstSeen = new Map();
+  for (const e of [...deck.log].sort((a, b) => a.t - b.t)) {
+    const sid = splitId(e.id).sid;
+    if (!firstSeen.has(sid)) firstSeen.set(sid, e.t);
+  }
+  const types = new Set();
+  const points = [];
+  const seenDays = new Map();
+  for (const [sid, t] of [...firstSeen.entries()].sort((a, b) => a[1] - b[1])) {
+    const s = sentences.get(sid);
+    if (!s) continue;
+    for (const w of s.text.toLowerCase().split(/\s+/)) {
+      const clean = w.replace(/[.,!?¿¡;:"()…]/g, '');
+      if (clean) types.add(clean);
+    }
+    seenDays.set(dayKey(t), types.size);
+  }
+  let i = 0;
+  for (const [key, count] of seenDays) points.push({ x: i++, y: count, key });
+
+  const all = new Set();
+  for (const s of lang.sentences) {
+    for (const w of s.text.toLowerCase().split(/\s+/)) {
+      const clean = w.replace(/[.,!?¿¡;:"()…]/g, '');
+      if (clean) all.add(clean);
+    }
+  }
+  return { points, types: types.size, total: all.size, days: points.length };
+}
+
+/** Stabilità mediana delle carte già in ripasso: la carta "tipica" del mazzo. */
+export function medianStability(cards) {
+  const values = Object.values(cards).filter((c) => c.state === 'review' && c.s > 0).map((c) => c.s).sort((a, b) => a - b);
+  if (!values.length) return null;
+  const mid = Math.floor(values.length / 2);
+  return values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
 }
 
 /** Minuti stimati per la sessione: 9 secondi a carta è la media osservata. */

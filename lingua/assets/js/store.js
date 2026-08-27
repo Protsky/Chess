@@ -20,6 +20,7 @@ const DEFAULTS = {
     tts: true,
     ttsRate: 0.85,
     ttsPitch: 1,
+    criterion: 1,     // richiami corretti richiesti dentro la stessa sessione
     autoGrade: true,
     speechInput: true,
     voices: {},       // lingua -> voce scelta a mano fra quelle del dispositivo
