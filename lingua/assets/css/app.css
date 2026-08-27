@@ -880,3 +880,19 @@ ul { margin: 0; padding-left: 1.1em; }
 @media (prefers-reduced-motion: reduce) {
   .match__cell--wrong { animation: none; }
 }
+
+/* Avanzamento automatico: una barra sottile dice che sta per passare oltre. */
+.btn--auto { position: relative; overflow: hidden; }
+.btn--auto::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: rgba(6, 35, 28, 0.45);
+  transform-origin: left;
+  animation: auto-next 0.9s linear both;
+}
+@keyframes auto-next { from { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .btn--auto::after { animation: none; } }

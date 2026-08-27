@@ -46,7 +46,12 @@ Una tappa per iterazione. Ogni tappa finisce quando è **implementata, provata
       di recente, con un giro corto e mirato. *(Il ripasso concentrato sugli
       errori rende più del ripasso uniforme.)*
 
-- [ ] **6. Micro-interazioni e identità** — transizioni fra le carte, riscontro
+- [~] **6. Micro-interazioni e identità** — *avviato*: avanzamento automatico
+      quando si indovina (un tocco in meno per carta), barra di attesa sul
+      bottone, animazioni che si spengono con `prefers-reduced-motion`.
+      Restano: transizioni fra le carte, riscontro aptico, icona propria.
+
+- [ ] **6b. Micro-interazioni e identità** — transizioni fra le carte, riscontro
       aptico dove esiste, schermate meno spoglie, un'icona che non sia un
       fumetto generico.
 

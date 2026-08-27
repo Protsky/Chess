@@ -71,6 +71,12 @@ dà ragione più spesso di quanto i dati giustifichino (Dunlosky & Rawson, 2012)
 e quell'errore finisce dritto dentro FSRS, che programma i ripassi su un voto
 gonfiato.
 
+Quando indovini la carta successiva **arriva da sola** dopo un attimo (una
+barra sul bottone lo dice, e toccando *Avanti* la anticipi): se hai indovinato
+non c'è niente da leggere, e un tocco di conferma per ognuna delle venti carte
+di una sessione sono venti tocchi di troppo. Quando sbagli si aspetta sempre,
+perché lì la correzione è l'unica parte che conta.
+
 Qui il voto **scende dall'esito**: tutto giusto → *Bene*, parole giuste e forma
 sbagliata → *Difficile*, manca qualcosa → *Di nuovo*. Resta un bottone per
 correggerlo a mano — *Facile* nessuna macchina può indovinarlo — ma la
@@ -426,7 +432,7 @@ sintetica: si ripiega sul tedesco svizzero standard.
 
 ```bash
 node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 314 controlli
-node tools/smoke-lingua.mjs        # 110 controlli end-to-end in Chromium
+node tools/smoke-lingua.mjs        # 112 controlli end-to-end in Chromium
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```

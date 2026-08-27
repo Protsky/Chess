@@ -25,6 +25,7 @@ const DEFAULTS = {
     match: true,      // apre la sessione con un abbinamento a coppie
     criterion: 1,     // richiami corretti richiesti dentro la stessa sessione
     autoGrade: true,
+    autoNext: true,   // se indovini, la carta successiva arriva da sola
     speechInput: true,
     voices: {},       // lingua -> voce scelta a mano fra quelle del dispositivo
     online: { ru: true },  // lingua -> voce online invece di quella del telefono

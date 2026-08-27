@@ -639,6 +639,7 @@ function prepare() {
   session.grade = null;
   session.chosen = null;
   session.showGrades = !settings().autoGrade;
+  session.auto = false;
   session.heard = null;
   session.micError = null;
   session.listening = false;
@@ -680,12 +681,22 @@ function checkCloze(parts, filled) {
 }
 
 function settle(result) {
+  const cfg = settings();
   session.result = result;
   session.grade = Ex.autoGrade(result);
   session.phase = 'done';
-  Sfx.play(result.correct ? 'ok' : 'wrong', { enabled: settings().sounds && !reduceMotion() });
+  Sfx.play(result.correct ? 'ok' : 'wrong', { enabled: cfg.sounds && !reduceMotion() });
+
+  /*
+   * Se hai indovinato non c'è niente da leggere: la correzione conferma e
+   * basta, e chiedere un tocco per ognuna delle venti carte di una sessione
+   * è un tocco di troppo venti volte. Quando si sbaglia invece si aspetta,
+   * perché lì la correzione è l'unica parte che serve davvero.
+   */
+  session.auto = Boolean(result.correct && cfg.autoGrade && cfg.autoNext);
   render();
-  window.scrollTo(0, 0); // la correzione va letta dall'inizio
+  window.scrollTo(0, 0);
+  if (session.auto) later(() => { if (session?.auto) commit(session.grade); }, 900);
 }
 
 function check() {
@@ -809,7 +820,12 @@ function paintStudy() {
   });
   on(el, '[data-act="check"]', 'click', () => check());
   on(el, '[data-act="next"]', 'click', () => commit(session.grade));
-  on(el, '[data-act="other"]', 'click', () => { session.showGrades = true; render(); });
+  on(el, '[data-act="other"]', 'click', () => {
+    session.auto = false;
+    clearTimers();
+    session.showGrades = true;
+    render();
+  });
   on(el, '[data-grade]', 'click', (e) => commit(Number(e.currentTarget.dataset.grade)));
 }
 
@@ -914,7 +930,7 @@ function gradeBar(card) {
   if (!session.showGrades) {
     return h(`
       <div class="stack">
-        <button class="btn btn--primary" data-act="next">
+        <button class="btn btn--primary${session.auto ? ' btn--auto' : ''}" data-act="next">
           Avanti<span class="btn__sub">${labels[session.grade]} · fra ${labelInterval(preview[session.grade])}</span>
         </button>
         <button class="btn btn--ghost small" data-act="other">Non è andata così: scegli tu il voto</button>
@@ -1160,6 +1176,8 @@ function advance() {
 }
 
 function commit(grade) {
+  session.auto = false;
+  clearTimers();
   stopSpeaking();
   const card = currentCard();
 
@@ -1773,6 +1791,15 @@ function paintSettings() {
           <span>Voto automatico</span>
           <input type="checkbox" ${cfg.autoGrade ? 'checked' : ''} data-toggle="autoGrade">
         </label>
+        <label class="switch">
+          <span>Avanza da solo quando indovini</span>
+          <input type="checkbox" ${cfg.autoNext ? 'checked' : ''} data-toggle="autoNext">
+        </label>
+        <p class="small muted">
+          Quando hai indovinato non c’è niente da leggere: la carta successiva arriva da sé dopo
+          un attimo, e toccando Avanti la anticipi. Quando sbagli si aspetta sempre, perché lì la
+          correzione è l’unica parte che conta.
+        </p>
         <p class="small muted">Il voto lo decide l’esito dell’esercizio, non il tuo giudizio: dopo aver visto la soluzione la si riconosce e la si scambia per un ricordo. Puoi comunque correggerlo a mano dopo ogni carta.</p>
       </div>
 

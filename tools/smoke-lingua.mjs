@@ -202,6 +202,7 @@ while (answered < 60 && (await page.locator('.study').count())) {
     check('intervallo stimato mostrato', (await page.textContent('[data-act="next"]')).includes('fra'));
     await tap('[data-act="other"]');
     check('il voto resta correggibile a mano', (await page.locator('[data-grade]').count()) === 4);
+    check('scegliere a mano ferma l’avanzamento automatico', (await page.locator('.btn--auto').count()) === 0);
     await shot('7-risposta');
     await tap('[data-grade="3"]');
     answered++;
@@ -268,6 +269,7 @@ await page.waitForTimeout(150);
 check('frasi nuove al giorno aggiornate', (await page.textContent('.val')).includes('12'));
 check('backup esportabile', (await page.locator('[data-act="export"]').count()) === 1);
 check('si può scegliere che cosa allenare', (await page.locator('[data-dir]').count()) === 2);
+check('avanzamento automatico attivo di serie', await page.isChecked('[data-toggle="autoNext"]'));
 check('il criterio di sessione è scegliibile', (await page.locator('[data-crit]').count()) === 2);
 check('quattro obiettivi fra cui scegliere', (await page.locator('[data-goal]').count()) === 4);
 check('i punti non dipendono dall’esito, e lo dice', (await page.textContent('section')).includes('giusta o sbagliata che sia'));
