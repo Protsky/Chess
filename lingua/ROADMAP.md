@@ -31,7 +31,7 @@ Una tappa per iterazione. Ogni tappa finisce quando è **implementata, provata
       Fatto: apre la sessione quando ci sono almeno quattro riconoscimenti in
       coda, sei coppie, voto per carta secondo gli errori della sua coppia.
 
-- [ ] **3. Ascolta e scrivi** — dettatura pura: nessun testo, solo audio, e si
+- [x] **3. Ascolta e scrivi** — dettatura pura: nessun testo, solo audio, e si
       scrive quello che si è sentito. Il gradino che manca fra il capire e il
       produrre. *(Decodifica fonologica; per il russo si appoggia alla voce
       online.)*

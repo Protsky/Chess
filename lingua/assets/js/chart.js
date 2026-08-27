@@ -223,7 +223,7 @@ export function heatmap({ days, weeks = 16 }) {
  * distinguere e nessuna legenda da mettere. Il numero grande al centro è il
  * dato; l'anello è il contesto.
  */
-export function ring({ value, total, big, small, done = false, size = 128 }) {
+export function ring({ value, total, big, small, done = false, extra = 0, size = 128 }) {
   const r = size / 2 - 9;
   const c = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(1, total ? value / total : 0));
@@ -234,6 +234,9 @@ export function ring({ value, total, big, small, done = false, size = 128 }) {
       <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${stroke}" stroke-width="9"
         stroke-linecap="round" stroke-dasharray="${round(c * p)} ${round(c)}"
         transform="rotate(-90 ${size / 2} ${size / 2})"/>
+      ${extra > 0 ? `<circle cx="${size / 2}" cy="${size / 2}" r="${r - 8}" fill="none" stroke="#a5f0d3" stroke-width="3"
+        stroke-linecap="round" stroke-dasharray="${round(2 * Math.PI * (r - 8) * Math.min(1, extra))} ${round(2 * Math.PI * (r - 8))}"
+        transform="rotate(-90 ${size / 2} ${size / 2})"/>` : ''}
       <text x="${size / 2}" y="${size / 2 + 2}" fill="#e8edf6" font-size="26" font-weight="700" text-anchor="middle">${esc(big)}</text>
       <text x="${size / 2}" y="${size / 2 + 20}" fill="${INK}" font-size="10" text-anchor="middle">${esc(small)}</text>
     </svg>`;

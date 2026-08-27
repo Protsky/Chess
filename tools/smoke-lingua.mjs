@@ -114,6 +114,21 @@ console.log('\n▸ Home');
 await page.waitForSelector('[data-act="study"]');
 check('obiettivo del giorno in cima', (await page.locator('.today .ring').count()) === 1);
 check('punti di oggi a zero all’inizio', (await page.textContent('.today')).includes('su 120'));
+check('oltre l’obiettivo si vede che è superato', await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('frasi/v1'));
+  s.decks.de.daily = { day: new Date().toISOString().slice(0, 10), introduced: 0, reviewed: 0, xp: 180, cleared: false };
+  localStorage.setItem('frasi/v1', JSON.stringify(s));
+  return true;
+}));
+await page.reload({ waitUntil: 'networkidle' });
+const over = await page.textContent('.today');
+check('l’anello non dice più "180 su 120"', over.includes('obiettivo 120') && over.includes('60 punti oltre'), over.replace(/\s+/g, ' ').slice(0, 90));
+await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('frasi/v1'));
+  s.decks.de.daily = { day: null, introduced: 0, reviewed: 0, xp: 0, cleared: false };
+  localStorage.setItem('frasi/v1', JSON.stringify(s));
+});
+await page.reload({ waitUntil: 'networkidle' });
 const queueText = await page.textContent('.queue');
 check('coda del giorno mostrata', queueText.includes('frasi nuove'));
 check('livello in evidenza', (await page.textContent('.today__chips')).includes(level.trim()));
@@ -355,6 +370,12 @@ await shot('14-componi');
 
 await seed(['comp', 'prod', 'build']);
 check('l’ultimo gradino è il cloze', (await page.locator('.pill--cloze').count()) === 1);
+check('dettatura possibile ma non su ogni produzione', await page.evaluate(async () => {
+  const { seeded } = await import('./assets/js/exercises.js');
+  let n = 0;
+  for (let i = 0; i < 300; i++) if (seeded(`c${i}|0|dictation`)() < 0.34) n++;
+  return n > 60 && n < 150;   // circa una su tre, non tutte e non nessuna
+}));
 check('un solo buco sulla carta nuova', (await page.locator('[data-blank]').count()) === 1);
 // la ß non si digita su una tastiera italiana: "heisst" deve bastare
 await page.fill('[data-blank="0"]', 'heisst');

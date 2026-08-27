@@ -29,6 +29,7 @@ frase di sei parole sì, e resta comunque dentro la memoria di lavoro. Quindi:
 | 🧩 | **Componi** — tessere da rimettere in fila, due di troppo | ordine esatto |
 | ✏️ | **Completa** — buchi che aumentano col consolidarsi della carta | parola per parola |
 | 🗣️ | **Produci** — la frase intera, scritta o dettata a voce | confronto completo |
+| 🎧 | **Ascolta e scrivi** — una produzione su tre arriva senza testo, solo audio | confronto completo |
 
 ### L'abbinamento che apre la sessione
 
@@ -43,6 +44,17 @@ nuovo. Il vantaggio non è la velocità: è che i cinque distrattori sono frasi
 vere, presenti sullo schermo nello stesso momento, quindi il richiamo avviene
 **sotto interferenza** invece che contro tre opzioni pescate a caso. Si spegne
 dalle impostazioni.
+
+### Ascolta e scrivi
+
+Una produzione su tre arriva **senza il testo italiano**: solo un bottone
+grande, l'audio, e il campo dove scrivere quello che hai sentito. Decidere
+quale tocca a chi è deterministico (dipende dal seme della carta), e succede
+solo se una voce c'è: senza audio la carta resta una produzione normale.
+
+È il gradino che mancava fra il capire e il produrre — decodificare il parlato
+e riscriverlo mette insieme le due cose — e su una lingua con un altro alfabeto
+è l'unico esercizio che lega davvero il suono alla forma scritta.
 
 ### Il verso conta più di quanto sembri
 
@@ -71,7 +83,9 @@ dà ragione più spesso di quanto i dati giustifichino (Dunlosky & Rawson, 2012)
 e quell'errore finisce dritto dentro FSRS, che programma i ripassi su un voto
 gonfiato.
 
-Quando indovini la carta successiva **arriva da sola** dopo un attimo (una
+Quando indovini la carta successiva **arriva da sola** (aspettando che l'audio,
+se parte, finisca di leggere: tagliare a metà la parola che stai imparando è
+peggio del tocco che ti si risparmia) (una
 barra sul bottone lo dice, e toccando *Avanti* la anticipi): se hai indovinato
 non c'è niente da leggere, e un tocco di conferma per ognuna delle venti carte
 di una sessione sono venti tocchi di troppo. Quando sbagli si aspetta sempre,
@@ -432,7 +446,7 @@ sintetica: si ripiega sul tedesco svizzero standard.
 
 ```bash
 node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 314 controlli
-node tools/smoke-lingua.mjs        # 112 controlli end-to-end in Chromium
+node tools/smoke-lingua.mjs        # 115 controlli end-to-end in Chromium
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```

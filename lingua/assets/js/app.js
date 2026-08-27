@@ -165,10 +165,12 @@ async function say(text, { slow = false } = {}) {
 }
 
 function speak(text, { force = false, slow = false } = {}) {
-  if (!lang) return;
-  if (!force && !settings().tts) return;
+  if (!lang) return Promise.resolve();
+  if (!force && !settings().tts) return Promise.resolve();
   stopSpeaking();
-  say(text, { slow });
+  const promise = say(text, { slow });
+  if (session) session.saying = promise;   // l'avanzamento automatico la aspetta
+  return promise;
 }
 
 let guided = null;
@@ -493,14 +495,17 @@ function paintHome() {
           value: day.xp,
           total: goal.xp,
           big: String(day.xp),
-          small: `su ${goal.xp}`,
+          small: day.xp >= goal.xp ? `obiettivo ${goal.xp} ✓` : `su ${goal.xp}`,
           done: day.xp >= goal.xp,
+          extra: day.xp > goal.xp ? (day.xp - goal.xp) / goal.xp : 0,
         })}
         <div class="today__side">
           <p class="today__title">${day.xp >= goal.xp ? 'Obiettivo raggiunto' : 'Obiettivo di oggi'}</p>
-          <p class="small muted">${day.xp >= goal.xp
-            ? `${esc(goal.label.toLowerCase())} · puoi fermarti qui o andare avanti`
-            : `${plural(Goal.cardsLeft(day.xp, goal.xp), 'carta', 'carte')} e ci sei`}</p>
+          <p class="small muted">${day.xp > goal.xp
+            ? `${day.xp - goal.xp} punti oltre l’obiettivo · puoi fermarti quando vuoi`
+            : day.xp === goal.xp
+              ? `${esc(goal.label.toLowerCase())} · puoi fermarti qui o andare avanti`
+              : `${plural(Goal.cardsLeft(day.xp, goal.xp), 'carta', 'carte')} e ci sei`}</p>
           <div class="today__chips">
             <span class="pill">🔥 ${plural(streak, 'giorno', 'giorni')}</span>
             <span class="pill">${deck.profile.cefr || '—'}</span>
@@ -640,6 +645,8 @@ function prepare() {
   session.chosen = null;
   session.showGrades = !settings().autoGrade;
   session.auto = false;
+  session.saying = null;
+  session.spoke = { ask: false, done: false };
   session.heard = null;
   session.micError = null;
   session.listening = false;
@@ -653,8 +660,20 @@ function prepare() {
     session.ex = Ex.buildCloze(sentence, card, seed);
     session.filled = session.ex.parts.filter((x) => x.blank).map(() => '');
   } else {
+    /*
+     * Ascolta e scrivi: ogni tanto la produzione arriva senza il testo
+     * italiano, solo con l'audio. È il gradino che manca fra il capire e il
+     * produrre — decodificare il parlato e riscriverlo mette insieme le due
+     * cose — e su una lingua con un altro alfabeto è l'unico esercizio che
+     * lega davvero il suono alla forma scritta.
+     *
+     * Capita a una carta su tre, deciso dal seme della carta, e solo se c'è
+     * una voce: senza audio la carta resta una produzione normale.
+     */
+    const voiceReady = settings().tts && (Tts.supported || (window.speechSynthesis && voices.length));
     session.ex = null;
     session.answer = '';
+    session.dictation = voiceReady && Ex.seeded(`${seed}|dictation`)() < 0.34;
   }
 }
 
@@ -694,9 +713,23 @@ function settle(result) {
    * perché lì la correzione è l'unica parte che serve davvero.
    */
   session.auto = Boolean(result.correct && cfg.autoGrade && cfg.autoNext);
+  session.saying = null;
   render();
   window.scrollTo(0, 0);
-  if (session.auto) later(() => { if (session?.auto) commit(session.grade); }, 900);
+
+  /*
+   * Se durante la correzione parte la lettura della frase, l'avanzamento la
+   * aspetta: tagliare a metà la parola che stai imparando è peggio del tocco
+   * che l'automatismo ti risparmia. Il tetto evita che una sintesi bloccata
+   * fermi la sessione.
+   */
+  if (!session.auto) return;
+  const spoken = session.saying
+    ? Promise.race([session.saying, new Promise((r) => later(r, 7000))])
+    : Promise.resolve();
+  spoken.catch(() => {}).then(() => {
+    if (session?.auto) later(() => { if (session?.auto) commit(session.grade); }, 500);
+  });
 }
 
 function check() {
@@ -776,7 +809,7 @@ function paintStudy() {
   const el = h(`
     <section class="study">
       <div class="study__meta">
-        <span class="pill pill--${type}">${meta.icon} ${meta.label}</span>
+        <span class="pill pill--${type}">${type === 'prod' && session.dictation ? '🎧 Ascolta e scrivi' : `${meta.icon} ${meta.label}`}</span>
         <span class="pill pill--ghost">${sentence.lv}</span>
         ${lang.variant ? `<span class="pill pill--ghost">${esc(lang.variant.split(',')[0])}</span>` : ''}
         ${isNew ? '<span class="pill pill--new">nuova</span>' : ''}
@@ -959,7 +992,7 @@ function askComp(body, foot, sentence, done) {
         <p class="hint hint--big">${esc(sentence.it)}</p>
         ${done ? '' : '<p class="muted small">Come si dice?</p>'}
       </div>`));
-    if (done) speak(sentence.text);
+    if (done && !session.spoke.done) { session.spoke.done = true; speak(sentence.text); }
   } else {
     body.append(h(`
       <div class="stack center">
@@ -967,7 +1000,8 @@ function askComp(body, foot, sentence, done) {
         ${audioButtons()}
         ${done ? '' : '<p class="muted small">Quale traduzione è la sua?</p>'}
       </div>`));
-    speak(sentence.text);
+    const phase = done ? 'done' : 'ask';
+    if (!session.spoke[phase]) { session.spoke[phase] = true; speak(sentence.text); }
   }
 
   const list = h(`
@@ -1069,11 +1103,24 @@ function askCloze(body, foot, sentence, done) {
 /* ---------------- 4. produci: scrittura oppure dettatura ----------------- */
 
 function askProd(body, foot, sentence, done) {
-  body.append(h(`
-    <div class="stack center">
-      <p class="hint hint--big">${esc(sentence.it)}</p>
-      ${done ? '' : `<p class="muted small">Scrivila per intero, o dettala.${lang.script ? ` In ${esc(lang.script)} o in caratteri latini: vanno bene entrambi.` : ''}</p>`}
-    </div>`));
+  const heard = session.dictation;
+
+  if (heard && !done) {
+    body.append(h(`
+      <div class="stack center">
+        <p class="muted small">Ascolta e scrivi quello che senti.</p>
+        <button class="btn btn--listen" data-act="say">🔊</button>
+        <button class="btn btn--icon" data-act="guided">👣 Parola per parola</button>
+      </div>`));
+    if (!session.spoke.ask) { session.spoke.ask = true; speak(sentence.text, { force: true }); }
+  } else {
+    body.append(h(`
+      <div class="stack center">
+        ${heard ? '<p class="muted small">Era questa:</p>' : ''}
+        <p class="hint hint--big">${esc(sentence.it)}</p>
+        ${done ? '' : `<p class="muted small">Scrivila per intero, o dettala.${lang.script ? ` In ${esc(lang.script)} o in caratteri latini: vanno bene entrambi.` : ''}</p>`}
+      </div>`));
+  }
 
   if (!done) {
     const input = h(`<input class="input" type="text" inputmode="text" autocapitalize="none" autocomplete="off"
@@ -1228,8 +1275,9 @@ function paintDone() {
             value: day.xp,
             total: goal.xp,
             big: `+${s ? s.earned : 0}`,
-            small: 'punti',
+            small: reached ? `${day.xp} oggi · obiettivo ✓` : `${day.xp} su ${goal.xp}`,
             done: reached,
+            extra: day.xp > goal.xp ? (day.xp - goal.xp) / goal.xp : 0,
             size: 148,
           })}
         </div>
@@ -1239,7 +1287,7 @@ function paintDone() {
 
       <div class="row">
         <div class="stat">
-          <div class="stat__n">${day.xp}<span class="stat__of">/${goal.xp}</span></div>
+          <div class="stat__n">${day.xp}<span class="stat__of">${reached ? ' ✓' : `/${goal.xp}`}</span></div>
           <div class="stat__l">punti di oggi</div>
         </div>
         <div class="stat">

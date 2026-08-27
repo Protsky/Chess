@@ -896,3 +896,15 @@ ul { margin: 0; padding-left: 1.1em; }
 }
 @keyframes auto-next { from { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .btn--auto::after { animation: none; } }
+
+/* Ascolta e scrivi: il bottone dell'audio è il centro della schermata. */
+.btn--listen {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
+  border-radius: 50%;
+  font-size: 34px;
+  background: var(--surface-2);
+  border: 1px solid var(--accent-dim);
+}
+.btn--listen:active { background: var(--surface); }
