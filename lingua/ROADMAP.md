@@ -72,3 +72,19 @@ Una tappa per iterazione. Ogni tappa finisce quando è **implementata, provata
 - Modo "conversazione": due o tre frasi collegate invece di frasi isolate.
 - Scelta della difficoltà del giorno (più ripassi o più roba nuova).
 - Esportare le frasi ostiche come mazzo Anki.
+
+## Il corpus, lingua per lingua
+
+Non è una tappa: è lavoro che continua. Regola: prima si guarda che cosa manca
+con `node tools/corpus-review.mjs`, poi si aggiunge — mai frasi a caso, mai
+frasi che nessuno dice. La priorità è la base (A1-A2) e la giornata vera.
+
+- [x] Tedesco — 211 frasi, 38/38 situazioni quotidiane coperte.
+- [x] Russo — 185 frasi, 38/38.
+- [x] Inglese — 232 frasi, 38/38.
+- [ ] Svizzero tedesco — 115 frasi, 24/38. Mancano: il conto, taglie e vestiti,
+      albergo, telefono, internet, banca, bere, sveglia, pulizie, studio, sport,
+      quantità, opinioni, appuntamenti.
+- [ ] Spagnolo — 120 frasi, 27/38. Mancano: salutare, come stai, il conto, fare
+      la spesa, taglie e vestiti, telefono, email, banca, tempo libero, pulizie,
+      sport.

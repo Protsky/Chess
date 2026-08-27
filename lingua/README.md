@@ -324,18 +324,51 @@ in simulazione, l'abilità vera viene recuperata entro ±0.36 su tutta la scala.
 
 ## Il corpus
 
-| Lingua | Frasi | Item del test | Punti di grammatica |
-| --- | --- | --- | --- |
-| 🇩🇪 Tedesco | 180 | 44 | 47 |
-| 🇨🇭 Svizzero tedesco | 115 | 34 | 31 |
-| 🇷🇺 Russo | 150 | 40 | 35 |
-| 🇬🇧 Inglese | 205 | 48 | 46 |
-| 🇪🇸 Spagnolo | 120 | 38 | 32 |
+| Lingua | Frasi | di cui A1-A2 | Situazioni quotidiane | Item del test |
+| --- | --- | --- | --- | --- |
+| 🇩🇪 Tedesco | 211 | 101 | 38/38 | 44 |
+| 🇨🇭 Svizzero tedesco | 115 | 50 | 24/38 | 34 |
+| 🇷🇺 Russo | 185 | 95 | 38/38 | 40 |
+| 🇬🇧 Inglese | 232 | 107 | 38/38 | 48 |
+| 🇪🇸 Spagnolo | 120 | 50 | 27/38 | 38 |
 
 Tutte le frasi sono scritte per italofoni: la nota di ogni frase spiega proprio
 il punto dove l'italiano ci fa sbagliare (la posizione del verbo tedesco,
 `must` contro `have to`, `ser` contro `estar`, il congiuntivo dopo `cuando`).
 Media di sei parole per frase.
+
+### Come si allarga il corpus, e come si evita di riempirlo di niente
+
+Un corpus può essere corretto e inutile: frasi giuste che nessuno dice mai. Per
+non arrivarci, prima di aggiungere si guarda che cosa manca:
+
+```bash
+node tools/corpus-review.mjs        # tutte le lingue
+node tools/corpus-review.mjs de ru  # solo queste
+```
+
+Il rapporto mostra cinque cose: la **forma della piramide** (quante frasi per
+livello — in basso ne servono di più, non di meno, perché è lì che si passa il
+tempo), la **lunghezza** (ad A1 una frase lunga non è difficile, è sbagliata),
+le **situazioni quotidiane coperte** contro un elenco esplicito di 38 — salutare,
+chiedere indicazioni, il conto, la farmacia, il bucato, il wifi — i **doppioni**
+(due frasi che insegnano la stessa cosa) e i **punti grammaticali con un solo
+esempio**, che si imparano a memoria invece che come regola.
+
+Il riconoscimento delle situazioni è dichiaratamente grezzo: parole chiave sulla
+traduzione italiana, elencate in chiaro in [`tools/situations.mjs`](../tools/situations.mjs)
+proprio perché si possano contestare riga per riga. Non è una misura, è una
+lente per vedere i buchi.
+
+Quello che il rapporto trova, il validatore lo tiene fermo: almeno il 40% del
+corpus fra A1 e A2, nessuna frase facile più lunga di sette parole (nove ad A2),
+nessuna frase identica a un'altra, nessuna coppia quasi identica su punti
+grammaticali diversi — due frasi vicinissime sullo **stesso** punto sono una
+coppia minima voluta (`hay` contro `estar`, `wo` contro `wohin`) e restano — e
+un numero di situazioni coperte che non può scendere sotto quello già raggiunto.
+
+Tedesco, russo e inglese coprono tutte e 38 le situazioni. Svizzero tedesco e
+spagnolo no, ed è scritto nella tabella qui sopra invece che nascosto.
 
 ### Il russo, e i due problemi che porta
 
@@ -492,7 +525,8 @@ sintetica: si ripiega sul tedesco svizzero standard.
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus, motori, percorso, esercizi, taratura, voce: 379 controlli
+node tools/validate-lingua.mjs     # corpus, motori, percorso, esercizi, taratura, voce: 409 controlli
+node tools/corpus-review.mjs       # che cosa manca al corpus, lingua per lingua
 node tools/smoke-lingua.mjs        # 127 controlli end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```

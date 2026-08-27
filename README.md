@@ -108,9 +108,9 @@ Poi `node tools/validate.mjs` per la verifica.
 In `lingua/` c’è una seconda app, indipendente dalla prima: **impara una lingua
 memorizzando frasi corte** invece di parole singole, con un test di livello
 adattivo su modello IRT, quattro esercizi che si correggono da soli (niente
-autovalutazione) e uno scheduler FSRS che decide quando riproporre ogni frase. Tedesco (180 frasi), svizzero tedesco di Zurigo (115, ognuna con
-l’equivalente in tedesco standard), russo (150, con accento tonico segnato e
-risposte accettate anche in caratteri latini), inglese (205) e spagnolo (120),
+autovalutazione) e uno scheduler FSRS che decide quando riproporre ogni frase. Tedesco (211 frasi), svizzero tedesco di Zurigo (115, ognuna con
+l’equivalente in tedesco standard), russo (185, con accento tonico segnato e
+risposte accettate anche in caratteri latini), inglese (232) e spagnolo (120),
 tutte scritte per italofoni. Si sceglie se allenarsi a **parlare** (dall’italiano
 alla lingua, con la produzione al secondo gradino) o a **capire**; i pesi dello
 scheduler si possono rifare sui propri ripassi, con la curva dell’oblio e la
@@ -128,6 +128,7 @@ Translate), accesa di serie sul russo perché le voci di sistema lì non bastano
 - Dettagli, motori e riferimenti: [`lingua/README.md`](lingua/README.md)
 
 ```bash
-node tools/validate-lingua.mjs   # corpus, motori e percorso (379 controlli)
+node tools/validate-lingua.mjs   # corpus, motori e percorso (409 controlli)
+node tools/corpus-review.mjs     # che cosa manca al corpus, lingua per lingua
 node tools/smoke-lingua.mjs      # prova end-to-end (127 controlli)
 ```

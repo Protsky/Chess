@@ -10,6 +10,7 @@ import * as Irt from '../lingua/assets/js/irt.js';
 import { diff, suggestGrade, normalize } from '../lingua/assets/js/check.js';
 import { buildQueue, cardId, unlocked, ladder, TYPES, levelScore } from '../lingua/assets/js/scheduler.js';
 import * as Units from '../lingua/assets/js/units.js';
+import { SITUATIONS, words as wordCount, overlap } from './situations.mjs';
 import * as Ex from '../lingua/assets/js/exercises.js';
 import * as Tr from '../lingua/assets/js/translit.js';
 import * as Opt from '../lingua/assets/js/optimizer.js';
@@ -625,6 +626,72 @@ console.log('\n[scheduler] costruzione della sessione');
   const firstNew = mixed.queue.findIndex((c) => c.state === 'new');
   expect(firstNew > 0, 'le carte nuove sono tutte in testa invece che mescolate');
   ok(`ripassi e novità mescolati: la prima nuova arriva in posizione ${firstNew + 1}`);
+}
+
+/* ------------------------------- corpus: quotidianità ------------------- */
+
+/*
+ * Un corpus può essere corretto e inutile: frasi giuste che nessuno dice mai.
+ * Questi controlli non guardano la grammatica — quella è già passata sopra —
+ * ma se le frasi servono a chi vive la giornata nella lingua.
+ * Il quadro completo, con i buchi da riempire, si stampa con
+ * `node tools/corpus-review.mjs`.
+ */
+
+console.log('\n[corpus] frasi facili e quotidiane');
+
+/* Quante situazioni della vita di tutti i giorni deve coprire una lingua fra
+ * A1 e A2. Le lingue riempite fino in fondo stanno a 38 su 38: la soglia sale
+ * man mano che le altre vengono completate, e non deve mai scendere. */
+const SIT_FLOOR = { de: 38, ru: 38, en: 38, gsw: 24, es: 27 };
+/* Ad A1 una frase lunga non è difficile: è sbagliata. */
+const MAX_WORDS = { A1: 7, A2: 9 };
+
+for (const lang of LANGS) {
+  const easy = lang.sentences.filter((s) => s.lv === 'A1' || s.lv === 'A2');
+  expect(easy.length / lang.sentences.length >= 0.4,
+    `[${lang.code}] solo il ${Math.round((easy.length / lang.sentences.length) * 100)}% del corpus è A1 o A2: la base è dove si passa il tempo`);
+
+  const long = easy.filter((s) => wordCount(s.text) > MAX_WORDS[s.lv]);
+  expect(long.length === 0,
+    `[${lang.code}] ${long.length} frasi facili troppo lunghe: ${long.slice(0, 3).map((s) => `${s.id} (${wordCount(s.text)} parole)`).join(', ')}`);
+
+  // frasi identiche: due volte la stessa cosa non insegna due volte
+  const byText = new Map();
+  const byIt = new Map();
+  const twins = [];
+  for (const s of lang.sentences) {
+    for (const [map, keyText] of [[byText, s.text], [byIt, s.it]]) {
+      if (map.has(keyText)) twins.push(`${map.get(keyText)} = ${s.id}`);
+      else map.set(keyText, s.id);
+    }
+  }
+  expect(twins.length === 0, `[${lang.code}] frasi doppie: ${twins.slice(0, 4).join(', ')}`);
+
+  /*
+   * Frasi quasi uguali. Due frasi vicinissime sullo STESSO punto grammaticale
+   * sono una coppia minima voluta (hay contro estar, wo contro wohin) e vanno
+   * bene. Su punti diversi sono solo un doppione che ruba un posto.
+   */
+  const near = [];
+  for (let i = 0; i < lang.sentences.length; i++) {
+    for (let j = i + 1; j < lang.sentences.length; j++) {
+      const a = lang.sentences[i];
+      const b = lang.sentences[j];
+      if (a.g === b.g) continue;
+      if (overlap(a.it, b.it) >= 0.8) near.push(`${a.id} ≈ ${b.id}`);
+    }
+  }
+  expect(near.length === 0, `[${lang.code}] frasi troppo vicine su punti diversi: ${near.slice(0, 4).join(', ')}`);
+
+  // le situazioni di una giornata qualunque
+  const covered = new Set();
+  for (const s of easy) for (const [name, re] of SITUATIONS) if (re.test(s.it)) covered.add(name);
+  const floor = SIT_FLOOR[lang.code] ?? 20;
+  expect(covered.size >= floor,
+    `[${lang.code}] copre ${covered.size} situazioni quotidiane su ${SITUATIONS.length}, sotto le ${floor} già raggiunte`);
+  const holes = SITUATIONS.filter(([name]) => !covered.has(name)).map(([name]) => name);
+  ok(`[${lang.code}] ${easy.length} frasi facili, ${covered.size}/${SITUATIONS.length} situazioni quotidiane${holes.length ? ` (mancano: ${holes.slice(0, 4).join(', ')}${holes.length > 4 ? '…' : ''})` : ''}`);
 }
 
 /* ------------------------------- percorso -------------------------------- */
