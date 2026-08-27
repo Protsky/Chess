@@ -22,6 +22,7 @@ const DEFAULTS = {
     ttsPitch: 1,
     dailyGoal: 120,   // punti al giorno
     sounds: true,
+    match: true,      // apre la sessione con un abbinamento a coppie
     criterion: 1,     // richiami corretti richiesti dentro la stessa sessione
     autoGrade: true,
     speechInput: true,

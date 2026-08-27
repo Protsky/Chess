@@ -121,9 +121,43 @@ check('lingua scelta in barra', (await page.textContent('#bar-title')).includes(
 check('copertura del corpus mostrata', (await page.locator('.levels__row').count()) === 6);
 await shot('5-home');
 
-console.log('\n▸ Sessione di studio');
+console.log('\n▸ Abbina');
 await tap('[data-act="study"]');
 await page.waitForSelector('.study');
+check('la sessione si apre con l’abbinamento', (await page.locator('.pill--match').count()) === 1);
+const cells = await page.locator('[data-pair]').count();
+check('sei coppie, dodici caselle', cells === 12, `(${cells})`);
+await shot('5b-abbina');
+
+// una coppia sbagliata di proposito, poi tutte giuste
+const wrongPick = await page.evaluate(() => {
+  const l = [...document.querySelectorAll('[data-side="l"]')];
+  const r = [...document.querySelectorAll('[data-side="r"]')];
+  return { a: l[0].dataset.pair, b: r.find((x) => x.dataset.pair !== l[0].dataset.pair).dataset.pair };
+});
+await page.click(`[data-side="l"][data-pair="${wrongPick.a}"]`);
+await page.click(`[data-side="r"][data-pair="${wrongPick.b}"]`);
+check('la coppia sbagliata viene segnalata', (await page.locator('.match__cell--wrong').count()) === 2);
+await page.waitForTimeout(750);
+check('e poi si può riprovare', (await page.locator('.match__cell--wrong').count()) === 0);
+
+const pairs = await page.evaluate(() => [...document.querySelectorAll('[data-side="l"]')].map((x) => x.dataset.pair));
+for (const id of pairs) {
+  await page.click(`[data-side="l"][data-pair="${id}"]`);
+  await page.click(`[data-side="r"][data-pair="${id}"]`);
+  await page.waitForTimeout(90);
+}
+check('abbinate tutte, la sessione prosegue', (await page.locator('.pill--match').count()) === 0);
+check('le sei carte sono state registrate', await page.evaluate(() => {
+  const log = JSON.parse(localStorage.getItem('frasi/v1')).decks.de.log;
+  return log.filter((e) => e.type === 'comp').length >= 6;
+}));
+check('chi ha sbagliato prende un voto più basso', await page.evaluate(() => {
+  const log = JSON.parse(localStorage.getItem('frasi/v1')).decks.de.log;
+  return log.some((e) => e.g === 3) && log.some((e) => e.g < 3);
+}));
+
+console.log('\n▸ Sessione di studio');
 check('la prima carta è un riconoscimento', (await page.textContent('.pill--comp')).includes('Riconosci'));
 check('quattro possibilità fra cui scegliere', (await page.locator('[data-choice]').count()) === 4);
 check('si parte dall’italiano', (await page.locator('.hint--big').count()) === 1 && (await page.locator('.target').count()) === 0);

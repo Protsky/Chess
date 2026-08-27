@@ -24,10 +24,12 @@ Una tappa per iterazione. Ogni tappa finisce quando è **implementata, provata
       *(Locke & Latham 2002 sugli obiettivi; il resto dichiarato come
       impalcatura.)*
 
-- [ ] **2. Abbina** — esercizio a coppie da toccare, italiano contro lingua,
+- [x] **2. Abbina** — esercizio a coppie da toccare, italiano contro lingua,
       sei coppie mescolate. Veloce, adatto all'inizio di una sessione, e
       correggibile in modo secco. *(Riconoscimento sotto interferenza: le
       coppie sbagliate sono distrattori attivi, non decorazione.)*
+      Fatto: apre la sessione quando ci sono almeno quattro riconoscimenti in
+      coda, sei coppie, voto per carta secondo gli errori della sua coppia.
 
 - [ ] **3. Ascolta e scrivi** — dettatura pura: nessun testo, solo audio, e si
       scrive quello che si è sentito. Il gradino che manca fra il capire e il

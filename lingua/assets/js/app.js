@@ -44,6 +44,11 @@ const on = (root, sel, event, fn) => {
   root.querySelectorAll(sel).forEach((el) => el.addEventListener(event, fn));
 };
 
+/** Un timer che non sopravvive al cambio di schermata. */
+let timers = [];
+const later = (fn, ms) => { timers.push(window.setTimeout(fn, ms)); };
+const clearTimers = () => { timers.forEach(window.clearTimeout); timers = []; };
+
 const reduceMotion = () =>
   typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -230,6 +235,7 @@ const TABS = [
 ];
 
 function go(next) {
+  clearTimers();
   screen = next;
   render();
   window.scrollTo(0, 0);
@@ -566,8 +572,53 @@ function startSession({ extraNew = 0 } = {}) {
     startedAt: Date.now(),
     sentences: new Map(lang.sentences.map((s) => [s.id, s])),
   };
+  openMatch();
   prepare();
   go('study');
+}
+
+/** Quante coppie fa un abbinamento, e da quante carte in giù ha senso farlo. */
+const MATCH_SIZE = 6;
+const MATCH_MIN = 4;
+
+/**
+ * Apre la sessione con un abbinamento, se ci sono abbastanza riconoscimenti in
+ * coda: si tocca l'italiano, si tocca la frase, e le coppie si chiudono.
+ *
+ * Non è un tipo di carta nuovo — è un altro modo di far sostenere lo stesso
+ * riconoscimento a sei carte insieme. Il vantaggio non è la velocità: è che i
+ * cinque distrattori sono frasi vere, presenti sullo schermo nello stesso
+ * momento, quindi il richiamo avviene sotto interferenza invece che contro tre
+ * opzioni scelte a caso. Il voto di ogni carta esce da come è andata la sua
+ * coppia: al primo colpo, dopo un errore, dopo due.
+ */
+function openMatch() {
+  if (!settings().match) return;
+  const picks = [];
+  for (let i = 0; i < session.queue.length && picks.length < MATCH_SIZE; i++) {
+    const card = session.queue[i];
+    if (splitId(card.id).type !== 'comp') continue;
+    const sentence = session.sentences.get(splitId(card.id).sid);
+    if (!sentence) continue;
+    picks.push({ card, sentence, index: i });
+  }
+  if (picks.length < MATCH_MIN) return;
+
+  // le carte abbinate escono dalla coda: vengono chiuse qui
+  const taken = new Set(picks.map((p) => p.index));
+  session.queue = session.queue.filter((_, i) => !taken.has(i));
+
+  const rnd = Ex.seeded(`${session.startedAt}|match`);
+  const order = (n) => Array.from({ length: n }, (_, i) => i).sort(() => rnd() - 0.5);
+  session.match = {
+    pairs: picks,
+    left: order(picks.length),
+    right: order(picks.length),
+    selected: null,
+    solved: new Set(),
+    errors: new Map(),
+    wrong: null,
+  };
 }
 
 const currentCard = () => session.queue[session.index];
@@ -696,6 +747,7 @@ function toggleMic() {
 /* -------------------------------- schermata ------------------------------ */
 
 function paintStudy() {
+  if (session?.match) return paintMatch();
   if (!session || session.index >= session.queue.length) return go('done');
   const card = currentCard();
   const sentence = session.sentence;
@@ -767,6 +819,93 @@ const audioButtons = () => `
     <button class="btn btn--icon" data-act="say">🔊 Ascolta</button>
     <button class="btn btn--icon" data-act="guided">👣 Parola per parola</button>
   </div>`;
+
+/* ------------------------- 0. abbina: sei coppie ------------------------- */
+
+function paintMatch() {
+  const m = session.match;
+  const total = m.pairs.length;
+  const left = m.left.map((i) => ({ i, text: m.pairs[i].sentence.it }));
+  const right = m.right.map((i) => ({ i, text: m.pairs[i].sentence.text }));
+
+  setBar('', { back: () => endSession() });
+  barTitle.innerHTML = `<span class="progress"><i style="width:${Math.round((m.solved.size / total) * 100)}%"></i></span>`;
+
+  const cellClass = (i, side) => {
+    if (m.solved.has(i)) return ' match__cell--done';
+    if (m.wrong && m.wrong.includes(`${side}${i}`)) return ' match__cell--wrong';
+    if (m.selected && m.selected.side === side && m.selected.i === i) return ' match__cell--on';
+    return '';
+  };
+
+  const el = h(`
+    <section class="study">
+      <div class="study__meta">
+        <span class="pill pill--match">🔗 Abbina</span>
+        <span class="grow"></span>
+        <span class="muted small">${m.solved.size}/${total}</span>
+      </div>
+      <div class="study__body">
+        <p class="muted small center">Tocca una frase a sinistra e la sua traduzione a destra.</p>
+        <div class="match">
+          <div class="match__col">
+            ${left.map((row) => `<button class="match__cell${cellClass(row.i, 'l')}" data-side="l" data-pair="${row.i}"
+              ${m.solved.has(row.i) ? 'disabled' : ''}>${esc(row.text)}</button>`).join('')}
+          </div>
+          <div class="match__col">
+            ${right.map((row) => `<button class="match__cell${cellClass(row.i, 'r')}" data-side="r" data-pair="${row.i}"
+              ${m.solved.has(row.i) ? 'disabled' : ''}>${esc(row.text)}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="study__foot"></div>
+    </section>`);
+  view.append(el);
+  on(el, '[data-pair]', 'click', (e) => matchTap(e.currentTarget.dataset.side, Number(e.currentTarget.dataset.pair)));
+}
+
+function matchTap(side, i) {
+  const m = session.match;
+  if (m.solved.has(i) || m.wrong) return;
+  const sel = m.selected;
+
+  if (!sel || sel.side === side) {
+    m.selected = { side, i };
+    return render();
+  }
+  if (sel.i === i) {
+    m.solved.add(i);
+    m.selected = null;
+    Sfx.play('ok', { enabled: settings().sounds && !reduceMotion() });
+    if (m.solved.size === m.pairs.length) return closeMatch();
+    return render();
+  }
+
+  // sbagliata: l'errore va sulla carta di entrambe le frasi coinvolte
+  for (const k of [sel.i, i]) m.errors.set(k, (m.errors.get(k) || 0) + 1);
+  m.wrong = [`${sel.side}${sel.i}`, `${side}${i}`];
+  m.selected = null;
+  Sfx.play('wrong', { enabled: settings().sounds && !reduceMotion() });
+  render();
+  later(() => { m.wrong = null; render(); }, 620);
+}
+
+/** Chiude l'abbinamento e registra le sei carte con il voto che si sono presi. */
+function closeMatch() {
+  const m = session.match;
+  session.match = null;
+  for (const [k, { card }] of m.pairs.entries()) {
+    const errors = m.errors.get(k) || 0;
+    applyReview(card, errors === 0 ? 3 : errors === 1 ? 2 : 1, 'comp', { ms: 0 });
+  }
+  Sfx.play('done', { enabled: settings().sounds && !reduceMotion() });
+  if (session.index >= session.queue.length) {
+    if (Store.markCleared(Goal.CLEARED_BONUS, lang.code)) session.earned += Goal.CLEARED_BONUS;
+    return go('done');
+  }
+  prepare();
+  render();
+}
 
 /** Riga dei voti: uno solo, già deciso, salvo ripensamenti. */
 function gradeBar(card) {
@@ -958,42 +1097,36 @@ function marksBlock(result) {
 
 /* ------------------------------- avanzamento ----------------------------- */
 
-function commit(grade) {
-  stopSpeaking();
-  const card = currentCard();
+/**
+ * Registra una risposta su una carta: scheduler, registro, punti, e il rientro
+ * in coda quando serve. Non tocca l'avanzamento della sessione, perché
+ * l'abbinamento ne chiude sei in un colpo solo.
+ */
+function applyReview(card, grade, type, { miss = null, ms = 0 } = {}) {
   const sch = scheduler();
   const now = Date.now();
   const wasReview = card.state === REVIEW;
   const isNew = card.state === NEW;
   const next = sch.review(card, grade, now);
-
-  // la carta si tiene le parole che hai sbagliato: i buchi futuri andranno lì
-  if (session.type === 'cloze' && session.result?.rows) {
-    const miss = { ...(card.miss || {}) };
-    for (const row of session.result.rows) {
-      if (row.correct) continue;
-      for (const word of row.answer.split(/\s+/)) miss[word] = (miss[word] || 0) + 1;
-    }
-    if (Object.keys(miss).length) next.miss = miss;
-  }
+  if (miss) next.miss = miss;
 
   Store.saveCard(next, lang.code);
   Store.logReview({
     t: now,
     id: card.id,
-    type: session.type,
+    type,
     g: grade,
-    auto: grade === session.grade,
     wasReview,
     isNew,
     ivl: next.ivl,
-    ms: Math.min(600000, now - (session.shownAt || now)),
+    ms: Math.min(600000, ms),
     xp: Goal.PER_CARD,
     s: Number(next.s.toFixed(3)),
     d: Number(next.d.toFixed(2)),
   }, lang.code);
 
   session.done += 1;
+  session.earned += Goal.PER_CARD;
   if (grade === 1) session.again += 1;
 
   /*
@@ -1007,13 +1140,15 @@ function commit(grade) {
   session.hits.set(card.id, hits);
   const wantsMore = grade >= 3 && hits < (settings().criterion || 1);
 
-  // carta ancora in apprendimento, o criterio non ancora raggiunto: torna in coda
   if (next.state === 'learning' || next.state === 'relearning' || wantsMore) {
     const at = Math.min(session.index + (wantsMore ? 5 : 3), session.queue.length);
     session.queue.splice(at, 0, next);
   }
+  return next;
+}
 
-  session.earned += Goal.PER_CARD;
+/** Fine della sessione, o carta successiva. */
+function advance() {
   session.index += 1;
   if (session.index >= session.queue.length) {
     // coda svuotata: il premio si prende una volta al giorno, non una a sessione
@@ -1024,9 +1159,29 @@ function commit(grade) {
   render();
 }
 
+function commit(grade) {
+  stopSpeaking();
+  const card = currentCard();
+
+  // la carta si tiene le parole che hai sbagliato: i buchi futuri andranno lì
+  let miss = null;
+  if (session.type === 'cloze' && session.result?.rows) {
+    const acc = { ...(card.miss || {}) };
+    for (const row of session.result.rows) {
+      if (row.correct) continue;
+      for (const word of row.answer.split(/\s+/)) acc[word] = (acc[word] || 0) + 1;
+    }
+    if (Object.keys(acc).length) miss = acc;
+  }
+
+  applyReview(card, grade, session.type, { miss, ms: Date.now() - (session.shownAt || Date.now()) });
+  advance();
+}
+
 function endSession() {
   stopMic?.();
   stopSpeaking();
+  if (session) session.match = null;
   if (!session) return go('home');
   go(session.done ? 'done' : 'home');
 }
@@ -1833,6 +1988,7 @@ const PAPERS = [
   ['Prima si riconosce, poi si produce', 'Nation (2001): la conoscenza ricettiva precede quella produttiva. È la scala che segui se scegli "capire".'],
   ['L’esercizio deve somigliare a quello che vuoi saper fare', 'Morris, Bransford & Franks (1977), transfer-appropriate processing: si ricorda meglio quando le condizioni dello studio somigliano a quelle dell’uso. Se l’obiettivo è parlare, l’esercizio parte dall’italiano e chiede di tirare fuori la frase — non il contrario. È la scala "parlare", quella di partenza.'],
   ['Provarci prima di sapere aiuta, anche sbagliando', 'Richland, Kornell & Kao (2009) e Carpenter & Toftness (2017), prequestioning: tentare una risposta che non si può ancora conoscere migliora l’apprendimento di quello che arriva subito dopo. È il motivo per cui una frase nuova non viene mostrata: viene chiesta.'],
+  ['Ricordare mentre altre risposte ti distraggono', 'L’abbinamento a inizio sessione non è un gioco messo lì per alleggerire: le cinque frasi sbagliate sono vere e stanno sullo schermo nello stesso momento, quindi il richiamo avviene sotto interferenza invece che contro tre opzioni pescate a caso. Ogni carta si prende il voto della sua coppia: al primo colpo, dopo un errore, dopo due.'],
   ['La stessa regola in frasi diverse, non la stessa frase', 'Variabilità della pratica: un punto grammaticale ancora fragile viene ripreso in un’altra frase, non ripetendo quella di prima. È così che diventa una regola invece che una frase imparata a memoria.'],
   ['La difficoltà va messa dove cede', 'I buchi del cloze si spostano sulle parole che hai già sbagliato su quella carta. Rendere difficile tutto non serve: serve rendere difficile il punto che non regge.'],
   ['Richiamare due volte in una sessione, e poi a distanza', 'Rawson & Dunlosky (2011) e Rawson, Dunlosky & Sciartelli (2013), successive relearning: portare ogni elemento a un criterio di richiamo dentro la sessione, e poi ripetere la cosa nelle sessioni successive, produce una tenuta a mesi di distanza molto superiore al richiamo singolo. È l’opzione "due volte" nelle impostazioni.'],

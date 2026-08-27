@@ -24,10 +24,25 @@ frase di sei parole sì, e resta comunque dentro la memoria di lavoro. Quindi:
 
 | | Esercizio | Come si corregge |
 | --- | --- | --- |
+| 🔗 | **Abbina** — sei coppie da chiudere a tocchi | coppia giusta o sbagliata |
 | 👂 | **Riconosci** — quattro possibilità, una giusta | scelta giusta o sbagliata |
 | 🧩 | **Componi** — tessere da rimettere in fila, due di troppo | ordine esatto |
 | ✏️ | **Completa** — buchi che aumentano col consolidarsi della carta | parola per parola |
 | 🗣️ | **Produci** — la frase intera, scritta o dettata a voce | confronto completo |
+
+### L'abbinamento che apre la sessione
+
+Quando in coda ci sono almeno quattro riconoscimenti, la sessione si apre con
+un **abbinamento a sei coppie**: si tocca la frase in italiano, si tocca la sua
+traduzione, e la coppia si chiude.
+
+Non è un tipo di carta nuovo — è un altro modo di far sostenere lo stesso
+riconoscimento a sei carte insieme, e ognuna esce con il voto che si è preso:
+**al primo colpo** → Bene, **dopo un errore** → Difficile, **dopo due** → Di
+nuovo. Il vantaggio non è la velocità: è che i cinque distrattori sono frasi
+vere, presenti sullo schermo nello stesso momento, quindi il richiamo avviene
+**sotto interferenza** invece che contro tre opzioni pescate a caso. Si spegne
+dalle impostazioni.
 
 ### Il verso conta più di quanto sembri
 
@@ -411,7 +426,7 @@ sintetica: si ripiega sul tedesco svizzero standard.
 
 ```bash
 node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 314 controlli
-node tools/smoke-lingua.mjs        # 103 controlli end-to-end in Chromium
+node tools/smoke-lingua.mjs        # 110 controlli end-to-end in Chromium
 node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```

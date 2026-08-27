@@ -551,10 +551,13 @@ console.log('\n[scheduler] costruzione della sessione');
       const id = cardId(s.id, 'comp');
       cards[id] = { ...Fsrs.newCard(id), state: 'review', reps: 3, s: stability, due: Date.now() + 5 * 86400000 };
     }
+    // stesso seme per i due casi: la differenza deve venire dai dati, non dal caso
+    let seed = 20260827;
+    const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
     let hits = 0;
     let total = 0;
-    for (let k = 0; k < 40; k++) {
-      const q = buildQueue({ lang, deck: { profile: { theta: 0.5 }, cards, log: [] }, settings: { ...settings, domains: [] } });
+    for (let k = 0; k < 80; k++) {
+      const q = buildQueue({ lang, deck: { profile: { theta: 0.5 }, cards, log: [] }, settings: { ...settings, domains: [] }, random: rand });
       for (const c of q.queue) {
         if (c.state !== 'new') continue;
         const s = lang.sentences.find((x) => x.id === c.id.split('|')[0]);
