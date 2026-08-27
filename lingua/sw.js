@@ -1,5 +1,5 @@
 /* Service worker: l'app resta utilizzabile offline dopo la prima visita. */
-const CACHE = 'frasi-v15';
+const CACHE = 'frasi-v16';
 
 const ASSETS = [
   './',
@@ -21,6 +21,7 @@ const ASSETS = [
   'assets/js/irt.js',
   'assets/js/optimizer.js',
   'assets/js/scheduler.js',
+  'assets/js/units.js',
   'assets/js/sfx.js',
   'assets/js/speech.js',
   'assets/js/stats.js',

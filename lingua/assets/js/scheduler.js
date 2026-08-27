@@ -18,6 +18,7 @@
 import { newCard, LEARNING, RELEARNING, REVIEW, NEW } from './fsrs.js';
 import { LEVELS, levelIndex } from './corpus.js';
 import { bandProgress, toCefr } from './irt.js';
+import { newPool } from './units.js';
 
 /**
  * I quattro passaggi su una stessa frase, dal riconoscere al produrre.
@@ -157,14 +158,31 @@ export function rankNew(lang, deck, settings, theta, random = Math.random) {
    *    sulle sequenze formulaiche, e la letteratura sull'effetto della
    *    variabilità degli esempi nell'apprendimento di categorie).
    */
-  const scored = lang.sentences
-    .filter((s) => !introduced.has(s.id))
-    .map((s) => {
-      const known = grammar.get(s.g);
-      const grammarBonus = !known ? 0.15 : known.strength < SHAKY ? 0.14 : 0;
-      return { s, score: fit(s.lv, user) + domainBonus(s, settings.domains) + grammarBonus };
-    });
-  return weightedOrder(scored, random).map((x) => x.s);
+  /*
+   * Il percorso restringe il campo alle unità aperte e dà una spinta a quella
+   * in corso. Non annulla il settore scelto: se le unità aperte contengono
+   * frasi di lavoro, quelle restano preferite. Il percorso decide DOVE si
+   * pesca, il settore CHE COSA si pesca lì dentro.
+   */
+  const pool = newPool(lang, deck, user, settings.domains, settings.unit || null);
+
+  const candidates = lang.sentences.filter((s) => !introduced.has(s.id));
+  /* Se il percorso non lascia niente di nuovo (unità tutte finite, corpus
+   * esaurito) si torna al corpus intero: mai una coda vuota per colpa nostra. */
+  const open = candidates.filter((s) => pool.allowed.has(s.id));
+  const scored = (open.length ? open : candidates).map((s) => {
+    const known = grammar.get(s.g);
+    const grammarBonus = !known ? 0.15 : known.strength < SHAKY ? 0.14 : 0;
+    return { s, score: fit(s.lv, user) + domainBonus(s, settings.domains) + grammarBonus };
+  });
+
+  /* L'unità in corso si finisce prima di cominciare la successiva: non è un
+   * bonus di punteggio ma un ordine: dentro ciascun gruppo vale il sorteggio
+   * pesato di sempre. L'unità di riserva serve solo a non lasciare la
+   * giornata a corto di novità il giorno in cui quella in corso finisce. */
+  const inUnit = scored.filter((x) => pool.focus.has(x.s.id));
+  const rest = scored.filter((x) => !pool.focus.has(x.s.id));
+  return [...weightedOrder(inUnit, random), ...weightedOrder(rest, random)].map((x) => x.s);
 }
 
 /** Carte già introdotte il cui passaggio successivo si è appena sbloccato. */
@@ -223,7 +241,9 @@ export function buildQueue({ lang, deck, settings, introducedToday = 0, now = Da
   const busy = new Set(reviews.map((c) => splitId(c.id).sid));
 
   const unlocks = pendingUnlocks(lang, deck, settings.direction).filter((u) => !busy.has(u.sid));
-  const deepSlots = Math.min(unlocks.length, Math.ceil(budget * 0.6));
+  /* Se si è scelta un'unità a mano, il budget va tutto lì: i gradini
+   * successivi di altre frasi aspettano la sessione normale. */
+  const deepSlots = settings.unit ? 0 : Math.min(unlocks.length, Math.ceil(budget * 0.6));
   const fresh = [];
 
   for (const u of unlocks.slice(0, deepSlots)) {

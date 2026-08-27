@@ -114,7 +114,10 @@ risposte accettate anche in caratteri latini), inglese (205) e spagnolo (120),
 tutte scritte per italofoni. Si sceglie se allenarsi a **parlare** (dall’italiano
 alla lingua, con la produzione al secondo gradino) o a **capire**; i pesi dello
 scheduler si possono rifare sui propri ripassi, con la curva dell’oblio e la
-calibrazione disegnate a partire dai propri numeri.
+calibrazione disegnate a partire dai propri numeri. Le frasi nuove entrano
+seguendo un **percorso a unità** che parte dal livello uscito dal test e si
+riordina attorno al settore scelto; i ripassi restano governati dalle scadenze,
+non dal percorso.
 
 Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
 L’unica eccezione è facoltativa: la voce online (la sintesi pubblica di Google
@@ -125,6 +128,6 @@ Translate), accesa di serie sul russo perché le voci di sistema lì non bastano
 - Dettagli, motori e riferimenti: [`lingua/README.md`](lingua/README.md)
 
 ```bash
-node tools/validate-lingua.mjs   # corpus e motori
-node tools/smoke-lingua.mjs      # prova end-to-end
+node tools/validate-lingua.mjs   # corpus, motori e percorso (379 controlli)
+node tools/smoke-lingua.mjs      # prova end-to-end (127 controlli)
 ```

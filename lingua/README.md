@@ -159,6 +159,53 @@ tocchi, perché su un telefono il passaggio del mouse non esiste. Nessun grafico
 ha due scale sullo stesso asse: dove servono due grandezze diverse (il prezzo
 della ritenzione) ci sono due grafici uno sotto l'altro.
 
+## Il percorso
+
+Le frasi non sono una coda infinita: stanno in **unità da quattro a dieci
+frasi**, una per livello e settore — "Lavoro e ufficio" a B1, "Viaggi" ad A2 —
+con un cammino visibile, un'unità in corso, quelle già chiuse e quelle ancora
+chiuse a chiave. La divisione è deterministica: lo stesso corpus dà sempre lo
+stesso percorso, altrimenti le unità si riordinerebbero sotto i piedi.
+
+Quattro cose che vale la pena dire chiaramente, perché è qui che un percorso
+può fare danno:
+
+1. **Il percorso non tocca i ripassi.** Governa solo l'ordine in cui il
+   materiale *nuovo* entra. Le scadenze restano di FSRS, sempre: una carta
+   introdotta tre unità fa torna quando deve tornare, non quando il percorso
+   lo trova comodo. Dove Duolingo mette in fila anche i richiami, qui la fila
+   è solo per le prime volte.
+2. **Il cammino parte dal livello del test.** Se il test adattivo ti mette a
+   B1, il cammino comincia dalle unità B1. Quelle sotto restano aperte ma
+   segnate *facoltative*: le puoi fare toccandole, non le devi attraversare.
+   Un test di livello che poi ti fa ricominciare da A1 è un test decorativo.
+3. **Il settore riordina il percorso, non lo subisce.** Dentro un livello, le
+   unità che contengono più frasi dei settori scelti vengono per prime — e il
+   criterio è quante frasi toccano quel settore, anche come settore
+   secondario, non l'etichetta dell'unità. Chi studia per lavoro trova le
+   unità di lavoro subito.
+4. **Toccare un'unità aperta fa una sessione con le sole sue frasi.** I
+   ripassi in scadenza entrano lo stesso: saltarli per fare l'unità che va di
+   moda oggi sarebbe barare con le scadenze. Se il tetto di frasi nuove del
+   giorno è già speso, l'unità scelta a mano ne concede cinque in più —
+   dichiarate, non tolte dal conteggio.
+
+Un'unità apre la successiva quando ne hai **imparato almeno il 60%** — cioè
+almeno una carta di quella frase è uscita dall'apprendimento ed è in ripasso —
+oppure quando le hai viste tutte. La seconda condizione non è una scorciatoia:
+serve a non lasciare la giornata senza frasi nuove il giorno in cui finisci
+un'unità, visto che una carta introdotta stamattina non è ancora "imparata" e
+non lo sarà fino a domani. Per lo stesso motivo la coda può attingere a
+un'unità di riserva oltre quelle aperte: senza, il tetto di frasi nuove non
+verrebbe rispettato proprio nei giorni di passaggio.
+
+Perché esista, senza gonfiare: un traguardo vicino regge la motivazione meglio
+di uno lontano (Bandura & Schunk, 1981, sui goal prossimali), e le frasi di
+un'unità condividono livello e settore, quindi vocabolario e situazione — il
+contesto che si ripete costa meno da tenere insieme di dodici frasi scollegate.
+Quello che il percorso *non* dimostra di fare è insegnare meglio: è
+organizzazione del materiale, non un metodo nuovo. Il metodo resta sotto.
+
 ## Obiettivo del giorno, punti e serie
 
 In cima alla home c'è un anello: i punti di oggi contro l'obiettivo che hai
@@ -445,9 +492,8 @@ sintetica: si ripiega sul tedesco svizzero standard.
 ## Strumenti
 
 ```bash
-node tools/validate-lingua.mjs     # corpus, motori, esercizi, taratura, voce: 314 controlli
-node tools/smoke-lingua.mjs        # 115 controlli end-to-end in Chromium
-node tools/smoke-lingua.mjs        # prova end-to-end in Chromium (serve playwright)
+node tools/validate-lingua.mjs     # corpus, motori, percorso, esercizi, taratura, voce: 379 controlli
+node tools/smoke-lingua.mjs        # 127 controlli end-to-end in Chromium (serve playwright)
 python3 tools/make_icons_lingua.py # rigenera le icone PNG
 ```
 
@@ -478,5 +524,7 @@ python3 tools/make_icons_lingua.py # rigenera le icone PNG
 - **Rawson & Dunlosky (2011)**, **Rawson, Dunlosky & Sciartelli (2013)** —
   successive relearning: il criterio di sessione a due richiami.
 - **Nation** — copertura lessicale: si conta il lessico per tipi diversi.
+- **Bandura & Schunk (1981)** — traguardi vicini: il percorso a unità spezza il
+  corpus in pezzi con un inizio e una fine, senza toccare le scadenze.
 - **Consiglio d'Europa, QCER (2001/2020)** — la scala A1-C2 (che però i
   dialetti non li copre: per lo svizzero tedesco sono bande di difficoltà).

@@ -14,7 +14,8 @@ import * as Chart from './chart.js';
 import * as Fsrs from './fsrs.js';
 import { createScheduler, GRADES, REVIEW, NEW, DEFAULT_W } from './fsrs.js';
 import * as Opt from './optimizer.js';
-import { buildQueue, splitId, TYPES, nextDue, targetLevel } from './scheduler.js';
+import { buildQueue, splitId, TYPES, nextDue, targetLevel, levelScore } from './scheduler.js';
+import * as Units from './units.js';
 import { diff } from './check.js';
 import * as Ex from './exercises.js';
 import * as Speech from './speech.js';
@@ -283,6 +284,7 @@ function render() {
     home: paintHome,
     study: paintStudy,
     done: paintDone,
+    path: paintPath,
     explore: paintExplore,
     stats: paintStats,
     settings: paintSettings,
@@ -530,6 +532,8 @@ function paintHome() {
              <button class="btn btn--ghost small" data-act="extra">Studia lo stesso 5 frasi nuove</button>
            </div>`}
 
+      ${pathCard(deck)}
+
       <div class="card card--flat">
         <div class="card__head"><b>Copertura del corpus</b><span class="muted small">${seen}/${lang.sentences.length}</span></div>
         <div class="levels">
@@ -550,19 +554,97 @@ function paintHome() {
   on(el, '[data-act="study"]', 'click', () => startSession());
   on(el, '[data-act="extra"]', 'click', () => startSession({ extraNew: 5 }));
   on(el, '[data-act="why"]', 'click', () => go('science'));
+  on(el, '[data-act="path"]', 'click', () => go('path'));
+  view.append(el);
+}
+
+/* -------------------------------- percorso ------------------------------- */
+
+/** Lo stato del percorso per il mazzo corrente. */
+const currentPath = (deck) => Units.pathState(lang, deck, levelScore(deck.profile?.theta), settings().domains);
+
+/** Il riquadro in home: dove si è, quanto manca, e le unità che seguono. */
+function pathCard(deck) {
+  const path = currentPath(deck);
+  const u = path.unit;
+  if (!u) return '';
+  const ahead = path.units.slice(path.active + 1, path.active + 6);
+  return `
+    <button class="card card--flat unit-card" data-act="path">
+      <div class="card__head"><b>Percorso</b><span class="muted small">unità ${u.index - path.start + 1} di ${path.units.length - path.start} ›</span></div>
+      <div class="unit-card__row">
+        <span class="unit-bubble unit-bubble--on">${u.icon}</span>
+        <span class="unit-card__main">
+          <span class="unit-card__title">${esc(u.title)}</span>
+          <span class="muted small">${u.level} · ${u.learned}/${u.total} frasi imparate</span>
+        </span>
+      </div>
+      <span class="levels__bar"><i style="width:${u.percent}%"></i></span>
+      ${ahead.length ? `<span class="unit-card__ahead">${ahead.map((n) => `<i class="unit-dot${n.open ? ' unit-dot--open' : ''}" title="${esc(n.title)}"></i>`).join('')}<span class="muted small">poi ${esc(ahead[0].title.toLowerCase())}</span></span>` : ''}
+    </button>`;
+}
+
+/**
+ * Il percorso per esteso. Le unità sotto il livello misurato dal test restano
+ * raggiungibili ma segnate come facoltative: il test ha già detto che quel
+ * livello c'è, ripassarlo è una scelta, non un pedaggio.
+ */
+function paintPath() {
+  const deck = Store.getDeck(lang.code);
+  const path = currentPath(deck);
+  setBar('Il percorso', { back: () => go('home') });
+
+  let level = '';
+  const rows = path.units.map((u) => {
+    const head = u.level !== level ? `<p class="unit-level">${u.level}</p>` : '';
+    level = u.level;
+    const state = u.done ? 'done' : u.index === path.active ? 'on' : u.open ? 'open' : 'locked';
+    const badge = { done: '✓', on: '●', open: '', locked: '' }[state];
+    return `${head}
+      <button class="unit-row unit-row--${state}${u.behind ? ' unit-row--behind' : ''}"
+              ${state === 'locked' ? 'disabled' : `data-unit="${u.id}"`}>
+        <span class="unit-bubble unit-bubble--${state}">${state === 'locked' ? '🔒' : u.icon}</span>
+        <span class="unit-row__main">
+          <span class="unit-row__title">${esc(u.title)}${u.behind ? ' <span class="muted small">facoltativa</span>' : ''}</span>
+          <span class="levels__bar"><i style="width:${u.percent}%"></i></span>
+          <span class="muted small">${u.learned}/${u.total} imparate${u.seen > u.learned ? ` · ${u.seen - u.learned} in corso` : ''}</span>
+        </span>
+        <span class="unit-row__badge">${badge}</span>
+      </button>`;
+  }).join('');
+
+  const el = h(`
+    <section class="pad stack">
+      <p class="small muted">Le frasi nuove escono dall’unità in corso. I ripassi no:
+        quelli restano governati dalle scadenze, qualunque unità li abbia introdotti.
+        ${path.start > 0 ? `Il test iniziale ti ha messo a ${esc(deck.profile.cefr || lang.sentences[0].lv)}, quindi il cammino parte da lì.` : ''}</p>
+      <div class="card card--flat path">${rows}</div>
+      <p class="small muted">Un’unità apre la successiva quando ne hai imparato almeno
+        il ${Math.round(Units.UNLOCK * 100)}% — o quando le hai viste tutte.
+        Tocca un’unità aperta per farne una sessione mirata.</p>
+    </section>`);
+  on(el, '[data-unit]', 'click', (e) => startSession({ unit: e.currentTarget.dataset.unit }));
   view.append(el);
 }
 
 /* ------------------------------- sessione -------------------------------- */
 
-function startSession({ extraNew = 0 } = {}) {
+/**
+ * `unit` limita le frasi nuove a una sola unità: serve quando si sceglie
+ * un'unità a mano dal percorso. I ripassi in scadenza entrano lo stesso —
+ * saltarli per fare un'unità a piacere sarebbe barare con le scadenze.
+ */
+function startSession({ extraNew = 0, unit = null } = {}) {
   const deck = Store.getDeck(lang.code);
   const cfg = settings();
   const day = Store.today(lang.code);
+  /* Un'unità scelta a mano quando il tetto del giorno è già speso vale come il
+   * "studia lo stesso": cinque frasi in più, dichiarate, non il tetto tolto. */
+  const spare = unit && cfg.newPerDay - day.introduced <= 0 ? 5 : 0;
   const { queue } = buildQueue({
     lang,
     deck,
-    settings: { ...cfg, newPerDay: cfg.newPerDay + extraNew },
+    settings: { ...cfg, newPerDay: cfg.newPerDay + extraNew + spare, unit },
     introducedToday: day.introduced,
   });
   if (!queue.length) return;
@@ -2069,6 +2151,9 @@ const PAPERS = [
   ['Richiamare due volte in una sessione, e poi a distanza', 'Rawson & Dunlosky (2011) e Rawson, Dunlosky & Sciartelli (2013), successive relearning: portare ogni elemento a un criterio di richiamo dentro la sessione, e poi ripetere la cosa nelle sessioni successive, produce una tenuta a mesi di distanza molto superiore al richiamo singolo. È l’opzione "due volte" nelle impostazioni.'],
   ['Si capisce un testo quando se ne conoscono abbastanza parole', 'Nation, sulla copertura lessicale: la comprensione dipende dalla quota di parole note dentro un testo, e quella quota si costruisce per tipi diversi, non ripetendo gli stessi. Per questo i progressi contano le parole diverse incontrate, non le frasi.'],
   ['Un modello va guardato, non creduto', 'La curva dell’oblio in Progressi non è un’illustrazione: è la funzione che decide i tuoi intervalli, disegnata con i tuoi parametri, con segnata sopra la soglia a cui la carta torna.'],
+  ['Un traguardo vicino tira più di uno lontano', 'Bandura & Schunk (1981) e la letteratura sui goal prossimali: un obiettivo raggiungibile in poco tempo regge la motivazione meglio di uno lontano. Il percorso spezza il corpus in unità da poche frasi, con un inizio e una fine visibili. Attenzione a che cosa fa e a che cosa non fa: ordina il materiale nuovo, non tocca le scadenze dei ripassi — quelle restano di FSRS, altrimenti il percorso mangerebbe il metodo.'],
+  ['Il contesto che si ripete aiuta a costruire la regola', 'Le frasi di un’unità condividono livello e settore, quindi vocabolario e situazione. Il materiale legato costa meno da tenere insieme di dodici frasi scollegate, e la stessa struttura vista in contesti vicini diventa una regola invece che un pezzo imparato a memoria.'],
+  ['Il test iniziale serve a qualcosa o non serve a niente', 'Se il livello viene misurato con un test adattivo, obbligare poi un B1 a ripartire da A1 rende la misura decorativa. Qui il cammino parte dal livello uscito dal test; le unità sotto restano aperte e dichiarate facoltative, da fare se si vuole.'],
   ['Mescolare gli argomenti conviene', 'Rohrer & Taylor (2007), interleaving: alternare tipi diversi di esercizio peggiora la sensazione immediata e migliora il risultato a distanza.'],
   ['Misurare il livello con poche domande giuste', 'Lord (1980) e van der Linden & Glas (2000), test adattivi su modello IRT: ogni domanda è scelta per essere massimamente informativa sul tuo θ.'],
   ['Una scala condivisa', 'Consiglio d’Europa, QCER (2001, aggiornato 2020): A1-C2 come riferimento per livelli e descrittori.'],

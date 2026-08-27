@@ -36,11 +36,17 @@ Una tappa per iterazione. Ogni tappa finisce quando è **implementata, provata
       produrre. *(Decodifica fonologica; per il russo si appoggia alla voce
       online.)*
 
-- [ ] **4. Percorso a unità** — le frasi raggruppate in unità tematiche con un
+- [x] **4. Percorso a unità** — le frasi raggruppate in unità tematiche con un
       percorso visibile, stato di completamento e sblocco progressivo, invece
       di una coda piatta. È la differenza strutturale più grossa con Duolingo.
       Lo scheduler resta il padrone dei ripassi: il percorso governa solo
       l'ordine in cui il materiale nuovo entra.
+      Fatto: unità da 4-10 frasi per livello e settore, ordine deterministico,
+      il settore scelto riordina il cammino invece di essere ignorato; il
+      cammino parte dal livello uscito dal test e le unità sotto restano
+      aperte come facoltative; un'unità apre la successiva al 60% imparato o
+      quando è stata vista tutta; toccando un'unità aperta si fa una sessione
+      con le sole sue frasi. *(Bandura & Schunk 1981 sui traguardi vicini.)*
 
 - [ ] **5. Ripasso degli errori** — una sezione dedicata alle carte sbagliate
       di recente, con un giro corto e mirato. *(Il ripasso concentrato sugli

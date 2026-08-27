@@ -136,6 +136,58 @@ check('lingua scelta in barra', (await page.textContent('#bar-title')).includes(
 check('copertura del corpus mostrata', (await page.locator('.levels__row').count()) === 6);
 await shot('5-home');
 
+console.log('\n▸ Percorso');
+check('riquadro del percorso in home', (await page.locator('.unit-card').count()) === 1);
+const unitCard = (await page.textContent('.unit-card')).replace(/\s+/g, ' ');
+check('il riquadro dice a che unità si è', /unità \d+ di \d+/.test(unitCard), unitCard.slice(0, 80));
+check('e quante frasi ne mancano', /\d+\/\d+ frasi imparate/.test(unitCard), unitCard.slice(0, 80));
+
+// il percorso si guarda da principiante: così le unità chiuse ci sono davvero
+const realProfile = await page.evaluate(() => {
+  const s = JSON.parse(localStorage.getItem('frasi/v1'));
+  const keep = JSON.stringify(s.decks.de.profile);
+  s.decks.de.profile = { ...s.decks.de.profile, theta: -1.6, cefr: 'A2' };
+  localStorage.setItem('frasi/v1', JSON.stringify(s));
+  return keep;
+});
+await page.reload({ waitUntil: 'networkidle' });
+await tap('.unit-card');
+await page.waitForSelector('.path');
+const unitRows = await page.locator('.unit-row').count();
+check('il percorso elenca tutte le unità', unitRows > 10, `${unitRows} unità`);
+check('un’unità è quella in corso', (await page.locator('.unit-row--on').count()) === 1);
+check('le unità più avanti sono chiuse', (await page.locator('.unit-row--locked').count()) > 0);
+check('le unità chiuse non si possono toccare', await page.locator('.unit-row--locked').first().isDisabled());
+check('quelle sotto il livello del test restano facoltative', (await page.locator('.unit-row--behind').count()) > 0);
+check('i livelli fanno da intestazione', (await page.locator('.unit-level').count()) >= 5);
+const onUnit = (await page.textContent('.unit-row--on')).replace(/\s+/g, ' ');
+check('l’unità in corso dice quante frasi ne restano', /\d+\/\d+ imparate/.test(onUnit), onUnit.slice(0, 70));
+check('il percorso spiega che i ripassi non li governa lui',
+  (await page.textContent('.pad')).includes('I ripassi no'));
+await shot('5b-percorso');
+
+// toccare un'unità facoltativa apre una sessione fatta delle sue frasi
+const optional = page.locator('.unit-row--behind[data-unit]').first();
+const optionalId = await optional.getAttribute('data-unit');
+await optional.click();
+await page.waitForSelector('.study, .match');
+check('un’unità toccata apre una sessione', (await page.locator('.study, .match').count()) > 0, optionalId);
+await page.evaluate(() => localStorage.setItem('frasi/session-check', '1'));
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('[data-act="study"]');
+await page.evaluate((keep) => {
+  const s = JSON.parse(localStorage.getItem('frasi/v1'));
+  s.decks.de.profile = JSON.parse(keep);
+  s.decks.de.cards = {};
+  s.decks.de.log = [];
+  s.decks.de.daily = { day: null, introduced: 0, reviewed: 0, xp: 0, cleared: false };
+  localStorage.setItem('frasi/v1', JSON.stringify(s));
+  localStorage.removeItem('frasi/session-check');
+}, realProfile);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('[data-act="study"]');
+check('dal percorso si torna a casa con il livello del test', (await page.locator('.today').count()) === 1);
+
 console.log('\n▸ Abbina');
 await tap('[data-act="study"]');
 await page.waitForSelector('.study');
@@ -243,7 +295,11 @@ check('la curva dell’oblio è la prima cosa', (await page.textContent('section
 check('la soglia di ritenzione è segnata sulla curva', (await page.locator('.chart line[stroke-dasharray]').count()) >= 1);
 check('calendario dello studio disegnato', (await page.textContent('section')).includes('Calendario dello studio'));
 check('composizione del mazzo mostrata', (await page.locator('.split__seg').count()) === 3);
+const gramSeen = await page.locator('[data-gram]').count();
+check('mappa della grammatica sui punti incontrati', gramSeen >= 1, `(${gramSeen})`);
+await tap('[data-act="gram-all"]');
 check('mappa della grammatica interattiva', (await page.locator('[data-gram]').count()) > 5);
+await tap('[data-act="gram-all"]');
 check('ogni serie ha la sua etichetta, non solo il colore', (await page.locator('.legend .swatch').count()) >= 3);
 
 // il valore di un segno si legge toccandolo: sui telefoni non c'è il passaggio del mouse

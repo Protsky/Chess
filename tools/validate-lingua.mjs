@@ -8,7 +8,8 @@ import { LANGS, DOMAINS, LEVELS } from '../lingua/assets/js/corpus.js';
 import * as Fsrs from '../lingua/assets/js/fsrs.js';
 import * as Irt from '../lingua/assets/js/irt.js';
 import { diff, suggestGrade, normalize } from '../lingua/assets/js/check.js';
-import { buildQueue, cardId, unlocked, ladder, TYPES } from '../lingua/assets/js/scheduler.js';
+import { buildQueue, cardId, unlocked, ladder, TYPES, levelScore } from '../lingua/assets/js/scheduler.js';
+import * as Units from '../lingua/assets/js/units.js';
 import * as Ex from '../lingua/assets/js/exercises.js';
 import * as Tr from '../lingua/assets/js/translit.js';
 import * as Opt from '../lingua/assets/js/optimizer.js';
@@ -624,6 +625,136 @@ console.log('\n[scheduler] costruzione della sessione');
   const firstNew = mixed.queue.findIndex((c) => c.state === 'new');
   expect(firstNew > 0, 'le carte nuove sono tutte in testa invece che mescolate');
   ok(`ripassi e novità mescolati: la prima nuova arriva in posizione ${firstNew + 1}`);
+}
+
+/* ------------------------------- percorso -------------------------------- */
+
+console.log('\n[percorso] unità e sblocchi');
+
+for (const lang of LANGS) {
+  const units = Units.buildUnits(lang);
+
+  // ogni frase sta in una e una sola unità
+  const seen = new Set();
+  let doubles = 0;
+  for (const u of units) for (const s of u.sentences) { if (seen.has(s.id)) doubles++; seen.add(s.id); }
+  expect(doubles === 0, `[${lang.code}] ${doubles} frasi in più di un'unità`);
+  expect(seen.size === lang.sentences.length, `[${lang.code}] ${lang.sentences.length - seen.size} frasi fuori dal percorso`);
+
+  // nessuna unità troppo grande o troppo magra, e id irripetibili
+  const big = units.filter((u) => u.sentences.length > Units.UNIT_SIZE);
+  const thin = units.filter((u) => u.sentences.length < Units.MIN_UNIT);
+  expect(big.length === 0, `[${lang.code}] ${big.length} unità oltre le ${Units.UNIT_SIZE} frasi`);
+  expect(thin.length === 0, `[${lang.code}] ${thin.length} unità sotto le ${Units.MIN_UNIT} frasi`);
+  expect(new Set(units.map((u) => u.id)).size === units.length, `[${lang.code}] id di unità duplicati`);
+
+  // il percorso sale di livello e non torna indietro
+  const levels = units.map((u) => LEVELS.indexOf(u.level));
+  expect(levels.every((n, i) => i === 0 || n >= levels[i - 1]), `[${lang.code}] il percorso torna indietro di livello`);
+
+  // costruirlo due volte dà lo stesso percorso: niente unità che si riordinano
+  expect(Units.buildUnits(lang).map((u) => u.id).join() === units.map((u) => u.id).join(),
+    `[${lang.code}] il percorso non è deterministico`);
+
+  ok(`[${lang.code}] ${units.length} unità, ${Math.min(...units.map((u) => u.sentences.length))}-${Math.max(...units.map((u) => u.sentences.length))} frasi ciascuna`);
+}
+
+{
+  const lang = LANGS[0];
+  const empty = { profile: { theta: null }, cards: {}, log: [] };
+
+  // a mazzo vuoto è aperta solo la prima unità del cammino
+  const start = Units.pathState(lang, empty, 0);
+  expect(start.start === 0, 'un principiante non parte dalla prima unità');
+  expect(start.units.filter((u) => u.open).length === 1, 'a mazzo vuoto è aperta più di un\'unità');
+  expect(start.active === 0, 'l\'unità attiva non è la prima');
+  ok('a mazzo vuoto il percorso è chiuso a chiave dopo la prima unità');
+
+  // chi è stato misurato più in alto non ricomincia da A1
+  const high = Units.pathState(lang, { profile: { theta: 1.5 }, cards: {}, log: [] }, levelScore(1.5));
+  expect(high.start > 0, 'il test iniziale non sposta il punto di partenza');
+  expect(LEVELS.indexOf(high.unit.level) >= 3, `il cammino di un livello alto parte da ${high.unit.level}`);
+  expect(high.units.slice(0, high.start).every((u) => u.open && u.behind),
+    'le unità sotto il livello misurato non sono aperte come facoltative');
+  ok(`chi esce dal test a C1 comincia il cammino da ${high.unit.level}, con le precedenti aperte ma facoltative`);
+
+  // vedere tutta un'unità apre la successiva; prima no
+  const deck = { profile: { theta: null }, cards: {}, log: [] };
+  const first = Units.buildUnits(lang)[0];
+  first.sentences.slice(0, first.sentences.length - 1).forEach((s) => {
+    deck.cards[cardId(s.id, 'comp')] = { ...Fsrs.newCard(cardId(s.id, 'comp')), state: 'learning', reps: 1, s: 0.4 };
+  });
+  expect(Units.pathState(lang, deck, 0).units[1].open === false, 'la seconda unità si apre con la prima ancora incompleta');
+  const last = first.sentences[first.sentences.length - 1];
+  deck.cards[cardId(last.id, 'comp')] = { ...Fsrs.newCard(cardId(last.id, 'comp')), state: 'learning', reps: 1, s: 0.4 };
+  const after = Units.pathState(lang, deck, 0);
+  expect(after.units[1].open === true, 'vista tutta la prima unità, la seconda resta chiusa');
+  expect(after.units[0].learned === 0, 'una carta in apprendimento viene contata come imparata');
+  expect(after.units[0].seen === first.sentences.length, 'le frasi viste non vengono contate');
+  ok('un\'unità vista per intero apre la successiva, ma non conta come imparata');
+
+  // le frasi nuove escono dal cammino, e soprattutto dall'unità in corso
+  const fresh = { profile: { theta: null }, cards: {}, log: [] };
+  const pool = Units.newPool(lang, fresh, levelScore(null), []);
+  const inUnit = new Set(pool.path.unit.sentences.map((s) => s.id));
+  const picks = buildQueue({
+    lang,
+    deck: fresh,
+    settings: { newPerDay: 8, maxReviews: 120, direction: 'produce', domains: [] },
+    random: (() => { let n = 7; return () => ((n = (n * 9301 + 49297) % 233280) / 233280); })(),
+  }).queue.map((c) => c.id.split('|')[0]);
+  const outside = picks.filter((id) => !pool.allowed.has(id));
+  expect(picks.length === 8, `il percorso lascia solo ${picks.length} frasi nuove invece di 8`);
+  expect(outside.length === 0, `${outside.length} frasi nuove fuori dal cammino: ${outside.join(', ')}`);
+  const inFocus = picks.filter((id) => inUnit.has(id)).length;
+  expect(inFocus >= Math.min(picks.length, pool.path.unit.total),
+    `solo ${inFocus} delle ${picks.length} frasi nuove vengono dall'unità in corso`);
+  ok(`le ${picks.length} frasi nuove del primo giorno vengono dal cammino, ${inFocus} dall'unità in corso`);
+
+  // un'unità scelta a mano dà solo le sue frasi
+  const hand = Units.buildUnits(lang, [])[0];
+  const only = buildQueue({
+    lang,
+    deck: { profile: { theta: 1.2 }, cards: {}, log: [] },
+    settings: { newPerDay: 8, maxReviews: 120, direction: 'produce', domains: [], unit: hand.id },
+    random: () => 0.5,
+  }).queue.map((c) => c.id.split('|')[0]);
+  const ids = new Set(hand.sentences.map((s) => s.id));
+  expect(only.length > 0 && only.every((id) => ids.has(id)),
+    `l'unità scelta a mano dà frasi di altre unità: ${only.filter((id) => !ids.has(id)).join(', ')}`);
+  ok(`un'unità scelta a mano (${hand.id}) dà solo le sue frasi, anche a chi è di livello più alto`);
+
+  // il settore scelto riordina il percorso invece di essere ignorato
+  const plain = Units.buildUnits(lang, []);
+  const work = Units.buildUnits(lang, ['lavoro']);
+  expect(plain.map((u) => u.id).join() !== work.map((u) => u.id).join(),
+    'scegliere un settore non cambia l\'ordine del percorso');
+  const b1 = work.find((u) => u.level === 'B1');
+  const share = b1.sentences.filter((s) => s.dom.includes('lavoro')).length / b1.sentences.length;
+  expect(share >= 0.5, `la prima unità B1 di chi studia per lavoro ha solo il ${Math.round(share * 100)}% di frasi di lavoro`);
+  ok(`chi sceglie "lavoro" trova la prima unità B1 con il ${Math.round(share * 100)}% di frasi del settore`);
+
+  // il percorso non blocca mai la coda: venti giorni di risposte giuste avanzano
+  const sim = { profile: { theta: null }, cards: {}, log: [] };
+  const sched = Fsrs.createScheduler({ requestRetention: 0.9 });
+  let now = Date.now();
+  let empties = 0;
+  for (let d = 0; d < 20; d++) {
+    const { queue } = buildQueue({
+      lang,
+      deck: sim,
+      settings: { newPerDay: 8, maxReviews: 120, direction: 'produce', domains: [] },
+      now,
+      random: () => 0.5,
+    });
+    if (!queue.length) empties++;
+    for (const card of queue) sim.cards[card.id] = sched.review(card, Fsrs.GOOD, now);
+    now += DAY;
+  }
+  const done = Units.pathState(lang, sim, levelScore(null));
+  expect(empties === 0, `in venti giorni la coda si è svuotata ${empties} volte`);
+  expect(done.doneCount >= 3, `in venti giorni il percorso ha chiuso solo ${done.doneCount} unità`);
+  ok(`venti giorni di risposte giuste chiudono ${done.doneCount} unità senza mai lasciare la coda vuota`);
 }
 
 console.log(`\n${errors ? `${errors} problemi su ${checks} controlli` : `tutto a posto (${checks} controlli)`}`);
