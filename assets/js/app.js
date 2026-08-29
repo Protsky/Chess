@@ -7,6 +7,7 @@ import { Board } from './board.js';
 import * as Store from './store.js';
 import * as Tactics from './tactics.js';
 import * as Rating from './rating.js';
+import * as Percorso from './percorso.js';
 import { createScheduler, newCard, DEFAULT_W } from './fsrs.js';
 import * as Stats from './stats.js';
 import * as Chart from './chart.js';
@@ -127,16 +128,163 @@ function setBar({ title, back = null, action = null }) {
 
 /* ------------------------------- schermate ------------------------------ */
 
+/**
+ * La home risponde a tre domande, in quest'ordine: che cosa faccio adesso,
+ * dove sono nel percorso, dov'è il resto. Prima apriva sulle aperture, che sono
+ * il livello 6 di 8: era il posto sbagliato da cui cominciare.
+ */
 function renderHome() {
-  const all = Store.summarize(OPENINGS);
-  const last = Store.getLastOpening() && byId(Store.getLastOpening());
+  const aperture = Store.summarize(OPENINGS);
+  const rating = tacticState();
+  const carte = Store.cardStats(Tactics.PREFIX);
+  const daily = Store.getDaily();
+  const streak = Store.getStreak();
+  const settings = Store.getSettings();
+  const viste = Store.allCards(Tactics.PREFIX).length;
 
-  setBar({ title: 'Aperture di Scacchi', action: { label: '⚙︎', aria: 'Impostazioni', onClick: () => { location.hash = '#/impostazioni'; } } });
+  const oggi = Percorso.oggi({
+    due: carte.due,
+    introduced: daily.introduced,
+    settings,
+    size: Tactics.SESSION_SIZE,
+    maxNew: Tactics.MAX_NEW,
+    viste,
+  });
+
+  const avanzamenti = Percorso.avanzamenti({ rating: rating.rating, aperture });
+  const corrente = Percorso.livelloCorrente(avanzamenti);
+  const primaVolta = carte.total === 0;
+
+  const daRipassare = [...OPENINGS]
+    .map((o) => ({ o, p: Store.getProgress(o.id) }))
+    .sort((a, b) => a.p.stars - b.p.stars || (a.p.lastAt || 0) - (b.p.lastAt || 0))[0];
+
+  const testa = primaVolta
+    ? {
+      titolo: 'Si comincia dalla tattica',
+      riga: `${oggi.totale} posizioni mescolate, che si aggiustano da sole sulla tua forza. Circa ${oggi.minuti} minuti.`,
+      cta: 'Inizia la prima sessione',
+      hash: '#/tattica',
+    }
+    : oggi.totale > 0
+      ? {
+        titolo: 'La sessione di oggi',
+        riga: `${oggi.totale} ${oggi.totale === 1 ? 'posizione' : 'posizioni'}: ${oggi.ripassi} in scadenza`
+          + `${oggi.nuove ? ` e ${oggi.nuove} ${oggi.nuove === 1 ? 'nuova' : 'nuove'}` : ' e nessuna nuova, il tetto di oggi è pieno'}`
+          + ` · circa ${oggi.minuti} ${oggi.minuti === 1 ? 'minuto' : 'minuti'}.`,
+        cta: 'Inizia la sessione',
+        hash: '#/tattica',
+      }
+      : {
+        titolo: 'Per oggi la tattica è a posto',
+        riga: `Niente in scadenza e ${daily.introduced} ${daily.introduced === 1 ? 'posizione nuova' : 'posizioni nuove'} già introdotte.`
+          + ' Il tempo che avanza va bene per un’apertura.',
+        cta: daRipassare ? `Allena ${daRipassare.o.name}` : 'Guarda le aperture',
+        hash: daRipassare ? `#/apertura/${daRipassare.o.id}/allena` : '#/aperture',
+      };
+
+  setBar({ title: 'Scacchi', action: { label: '⚙︎', aria: 'Impostazioni', onClick: () => { location.hash = '#/impostazioni'; } } });
 
   const view = h(`<div class="stack">
     <div class="hero">
+      <div class="eyebrow">Oggi · livello ${corrente.code.slice(1)} di 8</div>
+      <h1>${esc(testa.titolo)}</h1>
+      <p>${testa.riga}</p>
+    </div>
+    <button class="btn btn--primary" data-go="${testa.hash}">${esc(testa.cta)}</button>
+    <div class="stats">
+      <div class="stat"><div class="stat__value stat__value--gold">${rating.rating}</div><div class="stat__label">Punteggio</div></div>
+      <div class="stat"><div class="stat__value">${streak}</div><div class="stat__label">Giorni di fila</div></div>
+      <div class="stat"><div class="stat__value">${daily.reviewed}</div><div class="stat__label">Fatte oggi</div></div>
+    </div>
+
+    <div class="section-title">Il percorso</div>
+    <div class="stack" id="path"></div>
+    <p class="hint-text">La forza si misura su tattica, finali e posizione: le aperture sono il livello 6, non il primo.
+      Oggi l’app copre <strong>L3</strong> e <strong>L6</strong>; gli altri sei sono da costruire, e finché non ci sono restano vuoti invece di fingere.</p>
+
+    <div class="section-title">Studio</div>
+    <button class="card tactic-card" data-go="#/tattica">
+      <div class="tactic-card__body">
+        <div class="level-card__name">🎯 Tattica — trova la mossa</div>
+        <div class="tactic-card__meta">${carte.total
+          ? `${carte.due} da ripassare · ${carte.total} carte · ${carte.solid} consolidate`
+          : 'Posizioni vere con la difficoltà che insegue la tua forza'}</div>
+      </div>
+      <div class="level-card__chevron">›</div>
+    </button>
+    <button class="card tactic-card" data-go="#/aperture">
+      <div class="tactic-card__body">
+        <div class="level-card__name">📖 Aperture — impara e allena</div>
+        <div class="tactic-card__meta">${aperture.stars}/${aperture.max} stelle · ${OPENINGS.length} aperture su ${LEVELS.length} livelli</div>
+      </div>
+      <div class="level-card__chevron">›</div>
+    </button>
+
+    <div class="section-title">Il quaderno</div>
+    <button class="card tactic-card" data-go="#/statistiche">
+      <div class="tactic-card__body">
+        <div class="level-card__name">📈 Come sta andando</div>
+        <div class="tactic-card__meta">Ritenzione vera, scadenze in arrivo, motivi deboli, taratura</div>
+      </div>
+      <div class="level-card__chevron">›</div>
+    </button>
+    <button class="card tactic-card" data-go="#/impostazioni">
+      <div class="tactic-card__body">
+        <div class="level-card__name">⚙︎ Impostazioni e backup</div>
+        <div class="tactic-card__meta">Posizioni nuove al giorno, ritenzione, esporta i dati</div>
+      </div>
+      <div class="level-card__chevron">›</div>
+    </button>
+
+    <div class="note">
+      <div class="note__label">Quello che l’app non può fare</div>
+      Una partita lenta a settimana, analizzata a mano <em>prima</em> di accendere il motore. È lì che si producono i tuoi errori,
+      ed è lo studio da soli — non le partite in sé — a predire il punteggio. Questo promemoria non lo posso misurare io.
+    </div>
+    <p class="hint-text">Da Safari: <strong>Condividi ▸ Aggiungi a Home</strong> per usarla a schermo intero e offline.
+      I dati stanno solo qui: ogni tanto esporta un backup.</p>
+  </div>`);
+
+  const path = view.querySelector('#path');
+  for (const livello of Percorso.LIVELLI) {
+    const avanzamento = avanzamenti[livello.code];
+    const attivo = livello.state === 'attivo';
+    const qui = livello.code === corrente.code;
+    const row = h(`<${attivo ? 'button' : 'div'} class="card path-row${attivo ? '' : ' path-row--soon'}${qui ? ' path-row--now' : ''}"${
+      attivo ? ` data-go="${livello.hash}"` : ''
+    }>
+      <div class="path-row__code">${livello.code}</div>
+      <div class="path-row__body">
+        <div class="path-row__name">${esc(livello.name)}${qui ? ' <span class="tag tag--gold">sei qui</span>' : ''}</div>
+        <div class="path-row__line">${esc(livello.line)}</div>
+        ${attivo && avanzamento
+          ? `<div class="bar"><div class="bar__fill" style="width:${avanzamento.percent}%"></div></div>
+             <div class="bar__label">${esc(avanzamento.label)} · si esce a: ${esc(livello.exit)}</div>`
+          : `<div class="bar__label">Da costruire · si uscirà a: ${esc(livello.exit)}</div>`}
+      </div>
+      ${attivo ? '<div class="level-card__chevron">›</div>' : '<div class="path-row__soon">in arrivo</div>'}
+    </${attivo ? 'button' : 'div'}>`);
+    path.appendChild(row);
+  }
+
+  mount(view);
+}
+
+/* ------------------------------- aperture ------------------------------- */
+
+/** Il livello 6, con la sua schermata: i tre gradini del repertorio. */
+function renderOpenings() {
+  const all = Store.summarize(OPENINGS);
+  const last = Store.getLastOpening() && byId(Store.getLastOpening());
+
+  setBar({ title: 'Aperture', back: '#/' });
+
+  const view = h(`<div class="stack">
+    <div class="hero">
+      <div class="eyebrow">Livello 6</div>
       <h1>Impara le aperture</h1>
-      <p>Studia le linee principali mossa dopo mossa, poi giocale a memoria sulla scacchiera. Tre livelli, ${OPENINGS.length} aperture.</p>
+      <p>Studia le linee mossa dopo mossa, poi giocale a memoria sulla scacchiera. ${OPENINGS.length} aperture su ${LEVELS.length} livelli.</p>
     </div>
     <div class="stats">
       <div class="stat"><div class="stat__value stat__value--gold">${all.stars}</div><div class="stat__label">Stelle</div></div>
@@ -148,26 +296,11 @@ function renderHome() {
       <div class="level-card__name" style="margin-top:8px">${esc(last.name)}</div>
       <div class="opening-card__meta">${esc(last.family)}</div>
     </button>` : ''}
-    <div class="section-title">Tattica</div>
-    <button class="card tactic-card" data-go="#/tattica">
-      <div class="tactic-card__body">
-        <div class="level-card__name">Trova la mossa</div>
-        <div class="tactic-card__meta" id="tactic-meta"></div>
-      </div>
-      <div class="level-card__chevron">›</div>
-    </button>
-    <div class="section-title">Aperture</div>
+    <div class="section-title">Livelli</div>
     <div class="stack" id="levels"></div>
-    <button class="btn btn--ghost" data-go="#/statistiche">📈 Come sta andando</button>
-    <p class="hint-text">Suggerimento: da Safari tocca <strong>Condividi ▸ Aggiungi a Home</strong> per usare l’app a schermo intero, anche offline.</p>
+    <p class="hint-text">Una linea imparata rende quando sai giocare la posizione che produce: per questo le aperture stanno
+      dopo la tattica, non prima.</p>
   </div>`);
-
-  const tactic = tacticState();
-  const tacticStats = Store.cardStats(Tactics.PREFIX);
-  const tacticCounts = Store.getCounts(Tactics.AXIS);
-  view.querySelector('#tactic-meta').innerHTML = tacticCounts.done
-    ? `Punteggio <strong>${tactic.rating}</strong> · ${tacticStats.due} da ripassare · ${tacticStats.total} ${tacticStats.total === 1 ? 'carta' : 'carte'}`
-    : `${Tactics.SESSION_SIZE} posizioni mescolate, e il punteggio si misura mentre giochi.`;
 
   const levels = view.querySelector('#levels');
   for (const level of LEVELS) {
@@ -1347,6 +1480,7 @@ function route() {
     const level = LEVELS.find((l) => l.id === Number(param));
     if (level) return renderTraining(pickQueue(level.id), `#/livello/${level.id}`, `Allenamento ${level.name}`);
   }
+  if (screen === 'aperture') return renderOpenings();
   if (screen === 'tattica') return renderTacticsSession();
   if (screen === 'statistiche') return renderStats();
   if (screen === 'impostazioni') return renderSettings();

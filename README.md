@@ -7,7 +7,19 @@ Nessuna dipendenza, nessun build: HTML, CSS e JavaScript puri.
 
 Il piano per esteso, con le fonti, sta in [`ROADMAP.md`](ROADMAP.md).
 
-## Le due parti
+## Come si usa
+
+La home apre su **quello che si fa oggi**: una sessione sola, già composta —
+le carte in scadenza più il materiale nuovo che il tetto giornaliero concede —
+con la durata stimata e un bottone. Sotto, **il percorso**: gli otto livelli con
+il criterio d'uscita di ciascuno, quello su cui stai adesso, e quali sono
+davvero costruiti. I sei che non ci sono ancora restano marcati «in arrivo»:
+mostrare un percorso monco è meglio che nasconderlo.
+
+Le aperture non sono più la prima schermata. Sono il livello 6 di 8, e stanno
+sotto *Studio* insieme alla tattica.
+
+## Le parti
 
 ### 🎯 Tattica — trova la mossa
 
@@ -108,6 +120,7 @@ python3 -m http.server 8080     # poi apri http://localhost:8080
 index.html               guscio dell'app e meta tag iOS
 assets/css/app.css       tema scuro, layout mobile, scacchiera
 assets/js/chess.js       motore: mosse legali, arrocco, presa al varco, notazione, FEN e UCI
+assets/js/percorso.js    gli otto livelli e la sessione di oggi (quello che la home mostra)
 assets/js/openings.js    il repertorio (dati)
 assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)
 assets/js/board.js       scacchiera interattiva (tocco-tocco)

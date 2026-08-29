@@ -302,6 +302,43 @@ for (const cattivo of ['{}', '[]', 'non json', JSON.stringify({ app: 'frasi', ca
 ok(respinto === 4, `dovrebbero essere respinti 4 file non validi, ne sono stati respinti ${respinto}`);
 ok(Store.allCards(Tactics.PREFIX).length === prontuario.cards, 'un file rifiutato ha comunque toccato i dati');
 
+/* ---------------------- 9. il percorso mostrato in home ------------------- */
+
+const Percorso = await import('../assets/js/percorso.js');
+
+ok(Percorso.LIVELLI.length === 8, 'i livelli del percorso devono essere otto');
+ok(Percorso.LIVELLI.every((l) => l.code && l.name && l.exit), 'ogni livello deve dire come ci si esce');
+
+const attivi = Percorso.LIVELLI.filter((l) => l.state === 'attivo');
+ok(attivi.length === 2 && attivi.every((l) => l.hash),
+  'attivi devono essere solo i due livelli davvero costruiti, e devono portare da qualche parte');
+ok(Percorso.LIVELLI.filter((l) => l.state === 'in-arrivo').length === 6,
+  'i sei livelli non ancora costruiti devono restare marcati "in arrivo"');
+
+const av = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99 } });
+ok(Object.keys(av).length === attivi.length, 'nessun avanzamento va calcolato per i livelli che non esistono');
+ok(av.L3.percent === 0, 'a punteggio di partenza il livello 3 deve stare a zero');
+ok(Percorso.avanzamenti({ rating: 1400, aperture: { percent: 0, stars: 0, max: 99 } }).L3.percent === 100,
+  'alla soglia d’uscita il livello 3 deve stare a 100');
+ok(Percorso.avanzamenti({ rating: 3000, aperture: { percent: 0, stars: 0, max: 99 } }).L3.percent === 100,
+  'l’avanzamento non può superare il 100%');
+
+/* La sessione di oggi: i numeri della home devono essere quelli veri. */
+const set = { newPerDay: 8, retention: 0.9 };
+const primoGiorno = Percorso.oggi({ due: 0, introduced: 0, settings: set, size: 12, maxNew: 8, viste: 0 });
+ok(primoGiorno.totale === 8 && primoGiorno.nuove === 8, 'il primo giorno la sessione è tutta materiale nuovo');
+ok(primoGiorno.minuti >= 1, 'la durata stimata non può essere zero');
+
+const conScadenze = Percorso.oggi({ due: 30, introduced: 0, settings: set, size: 12, maxNew: 8, viste: 100 });
+ok(conScadenze.totale === 12 && conScadenze.nuove === 0,
+  'con molte scadenze la sessione si riempie di ripassi, non di materiale nuovo');
+
+const tettoPieno = Percorso.oggi({ due: 0, introduced: 8, settings: set, size: 12, maxNew: 8, viste: 100 });
+ok(tettoPieno.totale === 0 && tettoPieno.tettoRaggiunto, 'a tetto pieno e senza scadenze non c’è sessione');
+
+const finito = Percorso.oggi({ due: 0, introduced: 0, settings: set, size: 12, maxNew: 8, viste: 999999 });
+ok(finito.nuove === 0 && finito.corpusFinito, 'finito il corpus non si possono promettere posizioni nuove');
+
 /* -------------------------------- verdetto ------------------------------- */
 
 console.log(`Controlli: ${checks}`);

@@ -95,6 +95,23 @@ documentata e pubblicata**.
       impostazioni, azzeramento e reimport, tetto giornaliero che ferma la
       sessione, forzatura che la riapre.
 
+- [x] **3c. La home diventa il percorso** — apriva su «Impara le aperture», che
+      è il livello 6 di 8: il posto sbagliato da cui cominciare, e nessuna
+      indicazione di che cosa fare oggi.
+      Fatto: la home ora apre su **la sessione di oggi** (scadenze + materiale
+      nuovo che il tetto concede, durata stimata, un bottone solo), poi mostra
+      **gli otto livelli** con criterio d'uscita, avanzamento misurato su quelli
+      costruiti e «in arrivo» sugli altri sei — un percorso monco mostrato è
+      meglio di un percorso nascosto. Le aperture hanno una schermata loro
+      (`#/aperture`, marcata livello 6) sotto *Studio*, insieme alla tattica;
+      statistiche e backup stanno sotto *Il quaderno*. Tre stati della home:
+      prima sessione, sessione del giorno, tetto raggiunto (e allora il bottone
+      propone l'apertura con meno stelle).
+      Provato: 96 controlli in `validate-percorso.mjs` (fra cui: attivi solo i
+      livelli davvero costruiti, nessun avanzamento inventato per gli altri, i
+      numeri della sessione di oggi nei quattro casi limite) e nel browser i tre
+      stati, con la navigazione home → aperture → livello → allenamento.
+
 - [ ] **4. C'è o non c'è** — un quarto delle posizioni è quieto e la risposta
       giusta è «nessuna combinazione». Serve un criterio verificabile di
       «quieta»: una ricerca di quiescenza sul motore di casa, o una valutazione
