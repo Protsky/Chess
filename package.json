@@ -6,6 +6,9 @@
   "description": "Due app web senza dipendenze: aperture di scacchi e studio di una lingua per frasi",
   "scripts": {
     "validate": "node tools/validate.mjs",
+    "validate:puzzles": "node tools/validate-puzzles.mjs",
+    "validate:percorso": "node tools/validate-percorso.mjs",
+    "build:puzzles": "node tools/build-puzzles.mjs",
     "validate:lingua": "node tools/validate-lingua.mjs",
     "smoke": "node tools/smoke.mjs",
     "smoke:lingua": "node tools/smoke-lingua.mjs",

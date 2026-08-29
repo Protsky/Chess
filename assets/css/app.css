@@ -627,6 +627,59 @@ p { margin: 0; }
 
 .empty { text-align: center; color: var(--muted); padding: 30px 10px; font-size: 14px; }
 
+
+/* ------------------------------- tattica -------------------------------- */
+
+.tactic-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.tactic-card__body { flex: 1; min-width: 0; }
+
+.tactic-card__meta {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.tactic-card__meta strong { color: var(--gold); }
+
+.prompt__aside { color: var(--muted); font-weight: 400; }
+
+/* riepilogo di fine sessione: una riga per posizione, motivo finalmente scoperto */
+.recap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.recap__mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex: none;
+}
+.recap__mark--ok { background: rgba(111, 202, 134, 0.16); color: var(--green); }
+.recap__mark--err { background: rgba(234, 109, 99, 0.16); color: var(--red); }
+
+.recap__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.recap__link {
+  color: var(--muted);
+  font-size: 12.5px;
+  text-decoration: none;
+  flex: none;
+}
+.recap__link:hover { color: var(--gold); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

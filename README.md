@@ -1,27 +1,49 @@
 # ♟ Aperture di Scacchi
 
-Gioco web per **memorizzare le aperture di scacchi più importanti**, divise per livello.
-Pensato per iPhone: si usa con il pollice, si aggiunge alla schermata Home e funziona anche offline.
+App web per **imparare a giocare a scacchi**, non solo per memorizzare aperture.
+Pensata per iPhone: si usa con il pollice, si aggiunge alla schermata Home e funziona anche offline.
 
 Nessuna dipendenza, nessun build: HTML, CSS e JavaScript puri.
 
-## Come funziona
+Il piano per esteso, con le fonti, sta in [`ROADMAP.md`](ROADMAP.md).
 
-Ogni apertura ha due modalità:
+## Le due parti
+
+### 🎯 Tattica — trova la mossa
+
+3235 posizioni dal database aperto di Lichess (CC0), ognuna col suo punteggio
+Glicko-2 calcolato su milioni di tentativi veri. Una sessione è **fino a 12
+posizioni**: prima le carte scadute, poi materiale nuovo.
+
+- **La difficoltà si insegue, non si sceglie.** Un aggiornamento alla Elo muove a
+  ogni risposta sia la tua forza sia quella della posizione, e le posizioni nuove
+  arrivano dove ne risolvi circa **tre su quattro**. (Klinkenberg, Straatemeier &
+  van der Maas 2011.)
+- **I motivi si mescolano.** Due posizioni con lo stesso motivo non si toccano
+  mai, e il motivo si scopre *dopo* aver risposto: in partita nessuno annuncia
+  che c'è un'inchiodatura. (Kornell & Bjork 2008.)
+- **Il voto non te lo chiede nessuno.** Scende dall'esito — pulita e veloce,
+  pulita, con un errore, svelata — e da lì FSRS decide quando rivedere la
+  posizione. Chi si autovaluta si dà ragione più spesso di quanto i dati
+  giustifichino.
+- **Gli errori tornano dentro la sessione**, al massimo due volte, e senza
+  contare una seconda volta per il punteggio: una carta appena vista risolvere
+  non è una prova indipendente.
+
+### 📖 Aperture — impara e allena
+
+Il repertorio di sempre: 33 aperture, tutte con linea principale, idea, piano e
+commenti in italiano, divise in tre livelli.
 
 - **Impara** — scorri la variante mossa dopo mossa (o falla scorrere da sola) con un commento
   su ogni mossa chiave, più il piano di gioco per entrambi i colori.
-- **Allena** — la scacchiera ti chiede le mosse della tua parte, l’avversario risponde da solo.
+- **Allena** — la scacchiera ti chiede le mosse della tua parte, l'avversario risponde da solo.
   Sbagli? Al primo tentativo ti dice solo che non è quella giusta, al secondo ti indica il pezzo.
   Alla fine ricevi precisione, tempo e da 1 a 3 stelle.
 
 Le stelle e i record restano salvati sul dispositivo (`localStorage`), livello per livello.
 Dalla schermata di un livello, **⚡ Allenamento del livello** mette in coda 4 aperture,
 dando la precedenza a quelle con meno stelle.
-
-## Il repertorio
-
-33 aperture, tutte con linea principale, idea, piano e commenti in italiano.
 
 | Livello | Contenuto | Aperture |
 | --- | --- | --- |
@@ -44,11 +66,11 @@ Serve un piccolo server locale (i moduli JavaScript non funzionano aprendo il fi
 python3 -m http.server 8080     # poi apri http://localhost:8080
 ```
 
-### Sull’iPhone
+### Sull'iPhone
 
 1. Pubblica la cartella (per esempio con **GitHub Pages**: *Settings ▸ Pages ▸ Deploy from a branch*).
-2. Apri l’indirizzo in Safari.
-3. **Condividi ▸ Aggiungi a Home**: l’app parte a schermo intero, senza barre del browser,
+2. Apri l'indirizzo in Safari.
+3. **Condividi ▸ Aggiungi a Home**: l'app parte a schermo intero, senza barre del browser,
    e dopo la prima visita funziona anche senza rete grazie al service worker.
 
 ## Struttura
@@ -56,31 +78,49 @@ python3 -m http.server 8080     # poi apri http://localhost:8080
 ```
 index.html               guscio dell'app e meta tag iOS
 assets/css/app.css       tema scuro, layout mobile, scacchiera
-assets/js/chess.js       motore: mosse legali, arrocco, presa al varco, notazione
+assets/js/chess.js       motore: mosse legali, arrocco, presa al varco, notazione, FEN e UCI
 assets/js/openings.js    il repertorio (dati)
+assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)
 assets/js/board.js       scacchiera interattiva (tocco-tocco)
-assets/js/store.js       progressi e impostazioni su localStorage
-assets/js/app.js         navigazione, modalità Impara e Allena
+assets/js/fsrs.js        ripetizione dilazionata (FSRS-5), la stessa macchina di Frasi
+assets/js/rating.js      forza e difficoltà sulla stessa scala, aggiornate insieme
+assets/js/tactics.js     coda della sessione e voto di ogni risposta (niente DOM)
+assets/js/store.js       progressi, carte e impostazioni su localStorage (v2)
+assets/js/app.js         navigazione, Impara, Allena, Tattica
 sw.js                    cache offline
-tools/                   validazione, prove end-to-end, generatore di icone
+tools/                   validazione, prove end-to-end, generatore del corpus e delle icone
 ```
 
 ## Sviluppo
 
 ```bash
-node tools/validate.mjs      # ogni linea è legale? la notazione coincide?
-node tools/smoke.mjs         # prova end-to-end su viewport iPhone (richiede playwright)
-node tools/smoke.mjs URL     # stessa prova contro un sito già pubblicato
-node tools/build-single.mjs  # genera la versione in un file solo, in dist/
-node tools/check-single.mjs  # verifica quel file aperto da disco (file://)
-python3 tools/make_icons.py  # rigenera le icone PNG
+node tools/validate.mjs           # ogni linea di apertura è legale? la notazione coincide?
+node tools/validate-puzzles.mjs   # ogni soluzione tattica rigiocata sul motore
+node tools/validate-percorso.mjs  # memoria, punteggio e coda: fanno quello che dicono?
+node tools/smoke.mjs              # prova end-to-end su viewport iPhone (richiede playwright)
+node tools/build-single.mjs       # genera la versione in un file solo, in dist/
+python3 tools/make_icons.py       # rigenera le icone PNG
 ```
 
-`validate.mjs` rigioca tutte le varianti sul motore: se una mossa è illegale o ambigua,
-o se la notazione scritta a mano non corrisponde a quella generata, fallisce.
-Da eseguire ogni volta che si tocca `openings.js`.
+`validate-percorso.mjs` non prova l'interfaccia: prova le tre macchine che
+decidono che cosa vedi e quando. Comprende una simulazione di 300 risposte di un
+giocatore di forza nota — se la stima non ci arriva, il punteggio mostrato
+sarebbe una decorazione, e il controllo fallisce.
 
-### Aggiungere un’apertura
+### Rigenerare il corpus tattico
+
+```bash
+curl -O https://database.lichess.org/lichess_db_puzzle.csv.zst   # ~290 MB, CC0
+node tools/build-puzzles.mjs lichess_db_puzzle.csv.zst
+node tools/validate-puzzles.mjs
+```
+
+La scelta è **deterministica**: stesso file in ingresso, stesso corpus in uscita.
+Lo strumento stampa quante posizioni ha trovato per fascia di punteggio e per
+motivo, e segna le quote non raggiunte: sotto i 700 punti il database ha poco
+materiale che superi i filtri di qualità, e si vede.
+
+### Aggiungere un'apertura
 
 Basta una voce in `assets/js/openings.js`:
 
@@ -92,7 +132,7 @@ Basta una voce in `assets/js/openings.js`:
   level: 1,                       // 1, 2 o 3
   side: 'w',                      // colore da allenare
   family: 'Aperture aperte · 1.e4 e5',
-  summary: 'Una o due frasi sull’idea.',
+  summary: 'Una o due frasi sull'idea.',
   plan: 'Il piano a medio termine.',
   line: 'e4 e5 Nf3 Nc6',          // notazione inglese, separata da spazi
   notes: { 0: 'Commento alla 1ª semimossa.' },   // indici da 0, facoltativi

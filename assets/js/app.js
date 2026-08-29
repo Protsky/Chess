@@ -2,9 +2,12 @@
  * app.js — navigazione, modalità "Impara" e modalità "Allena".
  */
 import { LEVELS, OPENINGS, byLevel, byId, plies } from './openings.js';
-import { playLine, sameMove, nameOf, moveNumber } from './chess.js';
+import { playLine, sameMove, nameOf, moveNumber, fromFen, playUci, legalMoves, inCheck, applyMove, other } from './chess.js';
 import { Board } from './board.js';
 import * as Store from './store.js';
+import * as Tactics from './tactics.js';
+import * as Rating from './rating.js';
+import { createScheduler, newCard } from './fsrs.js';
 
 /* ------------------------------- utilità ------------------------------- */
 
@@ -142,10 +145,25 @@ function renderHome() {
       <div class="level-card__name" style="margin-top:8px">${esc(last.name)}</div>
       <div class="opening-card__meta">${esc(last.family)}</div>
     </button>` : ''}
-    <div class="section-title">Livelli</div>
+    <div class="section-title">Tattica</div>
+    <button class="card tactic-card" data-go="#/tattica">
+      <div class="tactic-card__body">
+        <div class="level-card__name">Trova la mossa</div>
+        <div class="tactic-card__meta" id="tactic-meta"></div>
+      </div>
+      <div class="level-card__chevron">›</div>
+    </button>
+    <div class="section-title">Aperture</div>
     <div class="stack" id="levels"></div>
     <p class="hint-text">Suggerimento: da Safari tocca <strong>Condividi ▸ Aggiungi a Home</strong> per usare l’app a schermo intero, anche offline.</p>
   </div>`);
+
+  const tactic = tacticState();
+  const tacticStats = Store.cardStats(Tactics.PREFIX);
+  const tacticCounts = Store.getCounts(Tactics.AXIS);
+  view.querySelector('#tactic-meta').innerHTML = tacticCounts.done
+    ? `Punteggio <strong>${tactic.rating}</strong> · ${tacticStats.due} da ripassare · ${tacticStats.total} ${tacticStats.total === 1 ? 'carta' : 'carte'}`
+    : `${Tactics.SESSION_SIZE} posizioni mescolate, e il punteggio si misura mentre giochi.`;
 
   const levels = view.querySelector('#levels');
   for (const level of LEVELS) {
@@ -565,6 +583,291 @@ function renderTraining(queue, backHash, title) {
   loadOpening(0);
 }
 
+/* --------------------------------- tattica ------------------------------ */
+
+const scheduler = createScheduler();
+
+/** Stato del punteggio tattico: quello vero, o quello di partenza se non c'è. */
+function tacticState() {
+  return Store.getRating(Tactics.AXIS) || { rating: Rating.START_RATING, attempts: 0 };
+}
+
+/** La posizione è matto? Serve ad accettare i matti alternativi. */
+function isMate(state) {
+  return inCheck(state) && legalMoves(state).length === 0;
+}
+
+function renderTacticsSession() {
+  const now = Date.now();
+  const state = tacticState();
+  const cards = Store.allCards(Tactics.PREFIX);
+  const queue = Tactics.buildQueue({
+    due: Store.dueCards(Tactics.PREFIX, now),
+    known: new Set(cards.map((c) => c.id)),
+    rating: state.rating,
+  });
+
+  if (!queue.length) return renderHome();
+
+  setBar({ title: 'Tattica', back: '#/', action: { label: '⇅', aria: 'Gira la scacchiera', onClick: () => board.flip() } });
+
+  const results = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <div class="btn-row">
+      <button class="btn" id="reveal">👁 Mostra la mossa</button>
+    </div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci dalla sessione</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptDot = promptEl.querySelector('.prompt__dot');
+  const promptText = promptEl.querySelector('.prompt__text');
+
+  function setPrompt(text, kind = '') {
+    promptEl.className = `prompt${kind ? ` prompt--${kind}` : ''}`;
+    promptText.innerHTML = text;
+  }
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    queue.forEach((_, i) => {
+      const span = document.createElement('span');
+      const done = results[i];
+      if (done) span.className = done.correct ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function loadItem(index) {
+    const item = queue[index];
+    const start = fromFen(item.puzzle.f);
+    const line = playUci(item.puzzle.m.split(' '), start);
+    const side = other(start.turn);
+
+    current = {
+      ...item,
+      index,
+      states: line.states,
+      moves: line.moves,
+      sans: line.sans,
+      side,
+      ply: 0,
+      errors: 0,
+      revealed: false,
+      start: Date.now(),
+    };
+
+    headEl.innerHTML = `<h2>Posizione ${index + 1} di ${queue.length}</h2><p>${
+      item.fresh ? 'Nuova' : 'Ripasso'
+    } · giochi con il ${COLOR_IT[side]}${item.puzzle.p === 'endgame' ? ' · finale' : ''}</p>`;
+    promptDot.className = `prompt__dot prompt__dot--${side}`;
+
+    board.setOrientation(side);
+    board.setPosition(current.states[0], null);
+    board.setInteractive(false);
+    drawProgress();
+
+    // La prima mossa è dell'avversario: è l'errore che apre la combinazione.
+    setPrompt('Guarda la mossa dell’avversario…');
+    later(() => {
+      playMove();
+      beep('move');
+      current.start = Date.now();
+      askMove();
+    }, 800);
+  }
+
+  function playMove() {
+    board.setPosition(current.states[current.ply + 1], current.moves[current.ply]);
+    current.ply += 1;
+  }
+
+  function askMove() {
+    if (current.ply >= current.moves.length) return finish();
+    board.setInteractive(true);
+    const left = Math.ceil((current.moves.length - current.ply) / 2);
+    setPrompt(`Muove il <strong>${COLOR_IT[current.side]}</strong>: trova la mossa migliore.${
+      left > 1 ? ` <span class="prompt__aside">(${left} mosse da trovare)</span>` : ''
+    }`);
+  }
+
+  function opponentReplies() {
+    if (current.ply >= current.moves.length) return finish();
+    board.setInteractive(false);
+    setPrompt(`Il ${COLOR_IT[other(current.side)]} risponde…`);
+    later(() => {
+      playMove();
+      beep('move');
+      askMove();
+    }, 620);
+  }
+
+  function accepts(move) {
+    const expected = current.moves[current.ply];
+    if (sameMove(move, expected)) return true;
+    // Un matto vale un matto: se la variante finiva a matto e anche questa mossa
+    // lo dà, rifiutarla sarebbe pedanteria — in partita nessuno lo farebbe.
+    const here = current.states[current.ply];
+    if (current.ply !== current.moves.length - 1) return false;
+    return isMate(applyMove(here, expected)) && isMate(applyMove(here, move));
+  }
+
+  function onMove(move) {
+    if (!current || current.ply >= current.moves.length) return;
+
+    if (accepts(move)) {
+      board.setInteractive(false);
+      board.flash(move.to, 'good', 600);
+      beep('ok');
+      playMove();
+      setPrompt('<strong>Esatto.</strong>', 'good');
+      later(opponentReplies, 480);
+      return;
+    }
+
+    current.errors += 1;
+    board.flash(move.to, 'wrong', 500);
+    beep('err');
+
+    if (current.errors === 1) {
+      setPrompt('Non è la mossa. Guarda ancora: che cosa lascia scoperto?', 'bad');
+      return;
+    }
+    reveal();
+  }
+
+  function reveal() {
+    const expected = current.moves[current.ply];
+    current.revealed = true;
+    board.setInteractive(false);
+    board.flash(expected.from, 'hint', 1800);
+    setPrompt(`Era <strong>${esc(san(current.sans[current.ply]))}</strong>.`, 'bad');
+    later(() => {
+      playMove();
+      later(opponentReplies, 520);
+    }, 900);
+  }
+
+  function finish() {
+    board.setInteractive(false);
+    const seconds = Math.round((Date.now() - current.start) / 1000);
+    const { grade, correct } = Tactics.gradeOf(current.puzzle, {
+      errors: current.errors,
+      revealed: current.revealed,
+      seconds,
+    });
+
+    // Memoria: la carta esce con una scadenza vera, calcolata su come è andata.
+    const before = current.card || newCard(Tactics.cardIdOf(current.puzzle), { r: current.puzzle.r });
+    const card = scheduler.review(before, grade, Date.now());
+
+    /*
+     * Forza: si muove solo sulla risposta pulita, e muove anche l'item. Ma solo
+     * alla **prima** presentazione: una carta che torna dentro la sessione la si
+     * è appena vista risolvere, quindi non è una prova indipendente — contarla
+     * di nuovo gonfierebbe (o affosserebbe) il punteggio due volte per lo stesso
+     * errore. Lo scheduler invece la registra eccome: quello è un ripasso vero.
+     */
+    const first = !current.repeat;
+    const itemRating = before.r ?? current.puzzle.r;
+    const next = first
+      ? Rating.update(tacticState(), itemRating, correct)
+      : { ...tacticState(), item: itemRating, delta: 0 };
+    card.r = next.item;
+    Store.saveCard(card);
+    if (first) {
+      Store.setRating(Tactics.AXIS, { rating: next.rating, attempts: next.attempts });
+      Store.addCount(Tactics.AXIS, correct);
+    }
+
+    results[current.index] = { correct, seconds, first, delta: next.delta, card, puzzle: current.puzzle };
+
+    // Una carta sbagliata non finisce la giornata qui: torna in fondo alla coda.
+    if (Tactics.shouldRepeat(card, { repeats: current.repeat || 0, queued: queue.length })) {
+      queue.push({ puzzle: current.puzzle, card, fresh: false, repeat: (current.repeat || 0) + 1 });
+    }
+    beep(correct ? 'win' : 'err');
+    drawProgress();
+
+    const days = card.ivl || 0;
+    setPrompt(`${correct ? '<strong>Risolta.</strong>' : 'Risolta con aiuto.'} Motivo: <strong>${
+      esc(Tactics.themeName(current.puzzle))
+    }</strong> · ${first ? `${next.delta >= 0 ? '+' : ''}${next.delta} punti` : 'ripasso, niente punti'} · si rivede ${
+      days ? `fra ${days} ${days === 1 ? 'giorno' : 'giorni'}` : 'oggi stesso'
+    }.`, correct ? 'good' : '');
+
+    later(() => {
+      if (current.index + 1 < queue.length) loadItem(current.index + 1);
+      else renderSummary();
+    }, 1600);
+  }
+
+  function renderSummary() {
+    // Solo le prime presentazioni: i rientri della stessa carta sono correzioni,
+    // non altre posizioni, e contarli farebbe un totale che non vuol dire niente.
+    const done = results.filter((r) => r && r.first);
+    const clean = done.filter((r) => r.correct).length;
+    const delta = done.reduce((sum, r) => sum + r.delta, 0);
+    const state2 = tacticState();
+    const counts = Store.getCounts(Tactics.AXIS);
+    const stats = Store.cardStats(Tactics.PREFIX);
+
+    const panel = h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">Sessione finita</div>
+        <div class="result__sub">${clean} ${clean === 1 ? 'posizione risolta' : 'posizioni risolte'} su ${done.length} al primo colpo</div>
+        <div class="result__grid">
+          <div class="stat"><div class="stat__value stat__value--gold">${state2.rating}</div><div class="stat__label">Punteggio</div></div>
+          <div class="stat"><div class="stat__value">${delta >= 0 ? '+' : ''}${delta}</div><div class="stat__label">Sessione</div></div>
+          <div class="stat"><div class="stat__value">${stats.total}</div><div class="stat__label">Carte</div></div>
+        </div>
+      </div>
+      <div class="note"><div class="note__label">Dove sei</div>
+        ${counts.done} risposte in tutto, ${counts.correct} pulite (${
+          counts.done ? Math.round((counts.correct / counts.done) * 100) : 0
+        }%). Le posizioni arrivano dove ne risolvi circa tre su quattro: se la percentuale sta lì, la difficoltà è tarata.
+      </div>
+      <div class="stack" id="recap"></div>
+      <button class="btn btn--primary" id="more">Un’altra sessione</button>
+      <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+    </div>`);
+
+    const recap = panel.querySelector('#recap');
+    done.forEach((r) => {
+      recap.appendChild(h(`<div class="card recap">
+        <span class="recap__mark recap__mark--${r.correct ? 'ok' : 'err'}">${r.correct ? '✓' : '✗'}</span>
+        <span class="recap__name">${esc(Tactics.themeName(r.puzzle))}</span>
+        <span class="tag">${r.puzzle.r}</span>
+        <a class="recap__link" href="https://lichess.org/training/${r.puzzle.id}" target="_blank" rel="noopener">rivedi ↗</a>
+      </div>`));
+    });
+
+    mount(panel);
+    panel.querySelector('#more').onclick = () => renderTacticsSession();
+  }
+
+  view.querySelector('#reveal').onclick = () => {
+    if (!board.interactive) return;
+    current.errors = Math.max(current.errors, 1);
+    reveal();
+  };
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+
+  session = { onMove: (move) => onMove(move) };
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  loadItem(0);
+}
+
 /* ------------------------------ impostazioni ---------------------------- */
 
 function renderSettings() {
@@ -660,6 +963,7 @@ function route() {
     const level = LEVELS.find((l) => l.id === Number(param));
     if (level) return renderTraining(pickQueue(level.id), `#/livello/${level.id}`, `Allenamento ${level.name}`);
   }
+  if (screen === 'tattica') return renderTacticsSession();
   if (screen === 'impostazioni') return renderSettings();
   return renderHome();
 }

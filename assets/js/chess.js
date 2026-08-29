@@ -368,3 +368,83 @@ export function fen(state) {
 export function moveNumber(ply) {
   return Math.floor(ply / 2) + 1;
 }
+
+/**
+ * Legge una posizione da FEN. Serve alle posizioni tattiche, che arrivano
+ * dal database di Lichess come FEN e non come linea dalla posizione iniziale.
+ * Restituisce null se il campo non è leggibile: chi chiama deve poterlo dire.
+ */
+export function fromFen(text) {
+  const parts = String(text || '').trim().split(/\s+/);
+  if (parts.length < 4) return null;
+  const [placement, turn, rights, epName] = parts;
+
+  const board = new Array(64).fill(null);
+  const rows = placement.split('/');
+  if (rows.length !== 8) return null;
+  for (let r = 0; r < 8; r++) {
+    let c = 0;
+    for (const ch of rows[r]) {
+      if (ch >= '1' && ch <= '8') c += Number(ch);
+      else if ('prnbqkPRNBQK'.includes(ch)) { if (c > 7) return null; board[idx(r, c)] = ch; c += 1; }
+      else return null;
+    }
+    if (c !== 8) return null;
+  }
+  if (turn !== 'w' && turn !== 'b') return null;
+
+  return {
+    board,
+    turn,
+    castling: {
+      K: rights.includes('K'), Q: rights.includes('Q'),
+      k: rights.includes('k'), q: rights.includes('q'),
+    },
+    ep: epName && epName !== '-' ? idxOf(epName) : null,
+    half: Number(parts[4] ?? 0) || 0,
+    full: Number(parts[5] ?? 1) || 1,
+  };
+}
+
+/**
+ * Mossa legale corrispondente a una stringa UCI ("e2e4", "e7e8q", "e1g1").
+ * È il formato del database di Lichess. Null se in questa posizione non è legale.
+ */
+export function fromUci(state, uci, moves = legalMoves(state)) {
+  const text = String(uci || '').trim();
+  if (text.length < 4) return null;
+  const from = idxOf(text.slice(0, 2));
+  const to = idxOf(text.slice(2, 4));
+  const promo = text[4] ? text[4].toLowerCase() : null;
+  return moves.find((m) => {
+    if (m.from !== from || m.to !== to) return false;
+    if (!promo) return !m.promo;
+    return !!m.promo && m.promo.toLowerCase() === promo;
+  }) || null;
+}
+
+/** Forma UCI di una mossa: il verso opposto di `fromUci`. */
+export function toUci(move) {
+  return nameOf(move.from) + nameOf(move.to) + (move.promo ? move.promo.toLowerCase() : '');
+}
+
+/**
+ * Riproduce una linea di mosse UCI da una posizione.
+ * Stesso contratto di `playLine`, ma per le posizioni tattiche.
+ */
+export function playUci(ucis, start) {
+  const states = [start];
+  const moves = [];
+  const sans = [];
+  let state = start;
+  ucis.forEach((uci, i) => {
+    const legal = legalMoves(state);
+    const move = fromUci(state, uci, legal);
+    if (!move) throw new Error(`Mossa UCI non legale "${uci}" alla semimossa ${i + 1}`);
+    sans.push(toSan(state, move, legal));
+    moves.push(move);
+    state = applyMove(state, move);
+    states.push(state);
+  });
+  return { states, moves, sans };
+}
