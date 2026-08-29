@@ -47,6 +47,27 @@ E per chi entra dalla tattica senza passare di lì, la **partenza è morbida**:
 finché il punteggio è provvisorio (le prime 25 risposte) arrivano solo posizioni
 a una mossa sola e sui motivi elementari.
 
+### ♔ L2 · I finali che si vincono a memoria
+
+Re e Donna, Re e Torre. È l'unico posto del gioco dove la correzione **non è un
+parere**: con tre pezzi il risultato con gioco perfetto si conosce per intero,
+quindi l'app può dire «questa mossa butta via la vittoria» e avere ragione.
+
+La tavola la genera `tools/build-endgames.mjs` con analisi retrograda — 345.404
+posizioni vinte con la Donna, 376.868 con la Torre, matto più lungo 10 e 16
+mosse, che sono i numeri da manuale. Ridotta con le otto simmetrie della
+scacchiera e spedita solo per metà (il valore col Bianco al tratto si ricava in
+una mossa): **89 kB** invece di 3,5 MB.
+
+- **Una mossa che perde il matto forzato non viene giocata**: si annulla e si
+  spiega perché. È l'unico momento in cui vale la pena fermare qualcuno.
+- **Ogni mossa che mantiene il matto è accettata**, anche se non è la più
+  rapida — si corregge l'esito, non lo stile. Se allunga, lo dice.
+- **Il Nero difende al meglio possibile**: allenarsi contro una difesa sciocca
+  insegna a vincere contro una difesa sciocca.
+- Opposizione, Lucena e Philidor hanno quattro o cinque pezzi: tavola molto più
+  grande, e per ora non ci sono. Scritto nell'app, invece di fingere.
+
 ### 🎯 Tattica — trova la mossa
 
 3235 posizioni dal database aperto di Lichess (CC0), ognuna col suo punteggio
@@ -148,6 +169,8 @@ assets/css/app.css       tema scuro, layout mobile, scacchiera
 assets/js/chess.js       motore: mosse legali, arrocco, presa al varco, notazione, FEN e UCI
 assets/js/percorso.js    gli otto livelli e la sessione di oggi (quello che la home mostra)
 assets/js/basics.js      L0 e L1: item generati dal motore, nessun corpus
+assets/js/endgames.js    L2: la tavola dei finali, e chi la interroga
+assets/js/endgames-data.js  la tavola (dati, generata — non si tocca a mano)
 assets/js/openings.js    il repertorio (dati)
 assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)
 assets/js/board.js       scacchiera interattiva (tocco-tocco)
@@ -168,7 +191,8 @@ tools/                   validazione, prove end-to-end, generatore del corpus e 
 ```bash
 node tools/validate.mjs           # ogni linea di apertura è legale? la notazione coincide?
 node tools/validate-puzzles.mjs   # ogni soluzione tattica rigiocata sul motore
-node tools/validate-percorso.mjs  # memoria, punteggio e coda: fanno quello che dicono?
+node tools/validate-percorso.mjs  # memoria, punteggio, coda, livelli, finali
+node tools/build-endgames.mjs     # rigenera la tavola dei finali (qualche secondo)
 node tools/smoke.mjs              # prova end-to-end su viewport iPhone (richiede playwright)
 node tools/build-single.mjs       # genera la versione in un file solo, in dist/
 python3 tools/make_icons.py       # rigenera le icone PNG

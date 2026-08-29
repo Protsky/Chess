@@ -310,7 +310,7 @@ ok(Percorso.LIVELLI.length === 8, 'i livelli del percorso devono essere otto');
 ok(Percorso.LIVELLI.every((l) => l.code && l.name && l.exit), 'ogni livello deve dire come ci si esce');
 
 const attivi = Percorso.LIVELLI.filter((l) => l.state === 'attivo');
-const costruiti = ['L0', 'L1', 'L3', 'L6'];
+const costruiti = ['L0', 'L1', 'L2', 'L3', 'L6'];
 ok(attivi.length === costruiti.length && attivi.every((l) => l.hash && costruiti.includes(l.code)),
   'attivi devono essere solo i livelli davvero costruiti, e devono portare da qualche parte');
 ok(Percorso.LIVELLI.filter((l) => l.state === 'in-arrivo').length === 8 - costruiti.length,
@@ -421,6 +421,84 @@ ok(primi.every((x) => Tactics.userPlyCount(x.puzzle) === 1),
 const dopoTaratura = Tactics.buildQueue({ due: [], known: new Set(), rating: 800, attempts: 40 });
 ok(dopoTaratura.some((x) => Tactics.userPlyCount(x.puzzle) > 1),
   'a punteggio tarato devono tornare anche le posizioni più lunghe');
+
+/* ----------------------- 11. i finali, con la tavola ---------------------- */
+
+globalThis.atob = globalThis.atob || ((b) => Buffer.from(b, 'base64').toString('binary'));
+const Endgames = await import('../assets/js/endgames.js');
+
+/*
+ * La prova che conta: si gioca ogni finale fino in fondo, Bianco con la tavola
+ * e Nero con la difesa migliore. Se il matto non arriva **esattamente** nelle
+ * semimosse annunciate, la tavola sta mentendo — e mentirebbe a chi studia.
+ */
+function giocaFinale(fen) {
+  let st = Chess.fromFen(fen);
+  let semimosse = 0;
+  while (semimosse < 120) {
+    if (Endgames.isMatto(st)) return { esito: 'matto', semimosse };
+    if (Endgames.isStallo(st)) return { esito: 'stallo', semimosse };
+    if (st.turn === 'w') {
+      let migliore = null;
+      let valore = 999;
+      for (const m of Chess.legalMoves(st)) {
+        const v = Endgames.valoreDopo(Chess.applyMove(st, m));
+        if (v === Endgames.NON_VINTA || v === Endgames.ILLEGALE) continue;
+        if (v < valore) { valore = v; migliore = m; }
+      }
+      if (!migliore) return { esito: 'vittoria persa', semimosse };
+      st = Chess.applyMove(st, migliore);
+    } else {
+      const risposta = Endgames.difesa(st);
+      if (!risposta) return { esito: 'senza mosse', semimosse };
+      st = Chess.applyMove(st, risposta);
+    }
+    semimosse += 1;
+  }
+  return { esito: 'troppo lunga', semimosse };
+}
+
+const finali = [...Endgames.partenze('Q'), ...Endgames.partenze('R')];
+ok(finali.length >= 60, `le partenze dei finali dovrebbero essere almeno 60, sono ${finali.length}`);
+
+let esatti = 0;
+for (const f of finali) {
+  const r = giocaFinale(f.fen);
+  if (r.esito === 'matto' && r.semimosse === f.dtm) esatti += 1;
+}
+ok(esatti === finali.length,
+  `${finali.length - esatti} finali non finiscono a matto nelle semimosse annunciate dalla tavola`);
+
+// I massimi noti: 10 mosse con la Donna, 16 con la Torre. Se cambiano, la
+// generazione è sbagliata — sono numeri da manuale, non opinioni.
+const massimo = (tipo) => {
+  let max = 0;
+  for (let wk = 0; wk < 64; wk++) {
+    for (let pezzo = 0; pezzo < 64; pezzo++) {
+      for (let bk = 0; bk < 64; bk++) {
+        const v = Endgames.valoreNero(tipo, wk, pezzo, bk);
+        if (v !== Endgames.ILLEGALE && v !== Endgames.NON_VINTA && v > max) max = v;
+      }
+    }
+  }
+  return max;
+};
+ok(massimo('Q') === 20, `col la Donna il matto più lungo deve essere 20 semimosse, è ${massimo('Q')}`);
+ok(massimo('R') === 32, `con la Torre il matto più lungo deve essere 32 semimosse, è ${massimo('R')}`);
+
+// Una posizione senza il pezzo non è vinta: se la tavola dicesse altro, l'app
+// accetterebbe mosse che perdono la Donna.
+const senzaPezzo = Chess.fromFen('8/8/8/3k4/8/8/8/4K3 b - - 0 1');
+ok(Endgames.valoreDopo(senzaPezzo) === Endgames.NON_VINTA, 'Re contro Re non può risultare vinto');
+
+// Difesa: il Nero deve prendere il pezzo indifeso invece di farsi mattare.
+const preda = Chess.fromFen('8/8/8/3k4/3Q4/8/8/4K3 b - - 0 1');
+const mossaNera = Endgames.difesa(preda);
+ok(mossaNera && Chess.nameOf(mossaNera.to) === 'd4', 'la difesa deve catturare la Donna indifesa');
+
+const uscitaFinali = Percorso.uscitaDi(Endgames.AXIS,
+  Array.from({ length: 6 }, () => ({ axis: Endgames.AXIS, correct: true, t: Date.now() })));
+ok(uscitaFinali.percent === 100, 'sei finali puliti devono chiudere il livello 2');
 
 /* -------------------------------- verdetto ------------------------------- */
 

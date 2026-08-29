@@ -2,13 +2,14 @@
  * app.js — navigazione, modalità "Impara" e modalità "Allena".
  */
 import { LEVELS, OPENINGS, byLevel, byId, plies } from './openings.js';
-import { playLine, sameMove, nameOf, moveNumber, fromFen, playUci, legalMoves, inCheck, applyMove, other } from './chess.js';
+import { playLine, sameMove, nameOf, moveNumber, fromFen, playUci, legalMoves, inCheck, applyMove, other, toSan } from './chess.js';
 import { Board } from './board.js';
 import * as Store from './store.js';
 import * as Tactics from './tactics.js';
 import * as Rating from './rating.js';
 import * as Percorso from './percorso.js';
 import * as Basics from './basics.js';
+import * as Endgames from './endgames.js';
 import { createScheduler, newCard, DEFAULT_W, AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 import * as Stats from './stats.js';
 import * as Chart from './chart.js';
@@ -160,7 +161,7 @@ function renderHome() {
     .map((o) => ({ o, p: Store.getProgress(o.id) }))
     .sort((a, b) => a.p.stars - b.p.stars || (a.p.lastAt || 0) - (b.p.lastAt || 0))[0];
 
-  const base = corrente.code === 'L0' || corrente.code === 'L1';
+  const base = ['L0', 'L1', 'L2'].includes(corrente.code);
   const testa = base
     ? {
       // Chi comincia non parte dalla tattica: parte dal gradino che ha davanti.
@@ -211,7 +212,7 @@ function renderHome() {
     <div class="section-title">Il percorso</div>
     <div class="stack" id="path"></div>
     <p class="hint-text">La forza si misura su tattica, finali e posizione: le aperture sono il livello 6, non il primo.
-      Oggi l’app copre <strong>L0</strong>, <strong>L1</strong>, <strong>L3</strong> e <strong>L6</strong>; gli altri quattro sono da costruire, e finché non ci sono restano vuoti invece di fingere.</p>
+      Oggi l’app copre <strong>L0</strong>, <strong>L1</strong>, <strong>L2</strong>, <strong>L3</strong> e <strong>L6</strong>; gli altri tre sono da costruire, e finché non ci sono restano vuoti invece di fingere.</p>
 
     <div class="section-title">Studio</div>
     <button class="card tactic-card" data-go="#/tattica">
@@ -1319,6 +1320,239 @@ function renderBasicsSession(axis) {
   loadItem(0);
 }
 
+/* -------------------------------- i finali ------------------------------- */
+
+/**
+ * Il livello 2. Qui la correzione non è un parere: con tre pezzi la tavola
+ * conosce il risultato con gioco perfetto, quindi «questa mossa butta via la
+ * vittoria» è un fatto. Una mossa che perde il matto forzato **non viene
+ * giocata**: si annulla e si dice perché, che è l'unico momento in cui vale la
+ * pena fermare qualcuno.
+ */
+function renderFinaliSession() {
+  const now = Date.now();
+  const scheduler = makeScheduler();
+  const cards = Store.allCards(Endgames.PREFIX);
+  const giro = Store.getCounts(Endgames.AXIS).done || 0;
+  const queue = Endgames.buildQueue({ known: new Set(cards.map((c) => c.id)), giro });
+
+  if (!queue.length) return renderHome();
+
+  setBar({ title: 'Finali', back: '#/', action: { label: '⇅', aria: 'Gira la scacchiera', onClick: () => board.flip() } });
+
+  const results = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot prompt__dot--w"></span><span class="prompt__text"></span></div>
+    <div class="btn-row">
+      <button class="btn" id="hint">💡 Mostra una mossa che vince</button>
+    </div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci dalla sessione</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptText = promptEl.querySelector('.prompt__text');
+
+  function setPrompt(html, kind = '') {
+    promptEl.className = `prompt${kind ? ` prompt--${kind}` : ''}`;
+    promptText.innerHTML = html;
+  }
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    queue.forEach((_, i) => {
+      const span = document.createElement('span');
+      const done = results[i];
+      if (done) span.className = done.correct ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function loadItem(index) {
+    const item = queue[index];
+    current = {
+      item,
+      index,
+      state: fromFen(item.fen),
+      card: Store.getCard(item.id),
+      mosse: 0,
+      buttate: 0,
+      lente: 0,
+      aiuti: 0,
+      start: Date.now(),
+    };
+
+    headEl.innerHTML = `<h2>${esc(item.nome)}</h2><p>Finale ${index + 1} di ${queue.length} · `
+      + `matto in ${Math.ceil(item.dtm / 2)} mosse con gioco perfetto</p>`;
+
+    board.setOrientation('w');
+    board.setPosition(current.state, null);
+    drawProgress();
+    chiedi();
+  }
+
+  function chiedi() {
+    const restanti = Endgames.valoreBianco(current.state);
+    board.setInteractive(true);
+    setPrompt(`Muove il <strong>Bianco</strong>: porta a casa il matto.`
+      + ` <span class="prompt__aside">${restanti === Endgames.NON_VINTA ? '' : `matto in ${Math.ceil(restanti / 2)}`}</span>`);
+  }
+
+  function onMove(move) {
+    if (!current || !board.interactive) return;
+    const prima = Endgames.valoreBianco(current.state);
+    const dopo = applyMove(current.state, move);
+    const valore = Endgames.valoreDopo(dopo);
+
+    // La mossa che perde il matto forzato non si gioca: si annulla e si spiega.
+    if (valore === Endgames.NON_VINTA || valore === Endgames.ILLEGALE) {
+      current.buttate += 1;
+      board.flash(move.to, 'wrong', 900);
+      beep('err');
+      const perso = Endgames.pezziDi(dopo).pezzo < 0;
+      setPrompt(`<strong>No.</strong> ${perso
+        ? 'Così il pezzo si perde, e con tre pezzi in meno non c’è più matto.'
+        : 'Con questa mossa il matto forzato non c’è più: è patta.'} La posizione torna com’era.`, 'bad');
+      board.setPosition(current.state, null);
+      return;
+    }
+
+    board.setInteractive(false);
+    current.mosse += 1;
+    // Accettata anche se non è la più rapida: si corregge l'esito, non lo stile.
+    const ottimale = valore === prima - 1;
+    if (!ottimale) current.lente += 1;
+    current.state = dopo;
+    board.setPosition(current.state, move);
+    beep('move');
+
+    if (Endgames.isMatto(current.state)) return finisci(true);
+    if (Endgames.isStallo(current.state)) return finisci(false, 'Stallo: il Nero non ha mosse e non è sotto scacco. È patta.');
+
+    setPrompt(ottimale ? 'Bene.' : 'Vale ancora: vinci lo stesso, ma allunghi.', ottimale ? 'good' : '');
+
+    later(() => {
+      const risposta = Endgames.difesa(current.state);
+      if (!risposta) return finisci(false, 'Il Nero non ha mosse.');
+      current.state = applyMove(current.state, risposta);
+      board.setPosition(current.state, risposta);
+      beep('move');
+      if (Endgames.isMatto(current.state)) return finisci(true);
+      if (current.mosse >= Endgames.MOSSE_MAX) {
+        return finisci(false, `Sono passate ${Endgames.MOSSE_MAX} mosse: la vittoria c’è ancora, ma la tecnica è quella di arrivarci.`);
+      }
+      chiedi();
+    }, 620);
+  }
+
+  function finisci(vinto, motivo = '') {
+    board.setInteractive(false);
+    const secondi = Math.round((Date.now() - current.start) / 1000);
+    const pulito = vinto && current.buttate === 0 && current.aiuti === 0;
+    const grade = !vinto || current.buttate >= 2 ? AGAIN
+      : current.buttate === 1 || current.aiuti ? HARD
+        : current.lente <= 2 ? EASY : GOOD;
+
+    const before = current.card || newCard(current.item.id, { r: current.item.difficulty });
+    const card = scheduler.review(before, grade, Date.now());
+    const stato = Store.getRating(Endgames.AXIS) || { rating: Endgames.START, attempts: 0 };
+    const next = Rating.update(stato, before.r ?? current.item.difficulty, pulito);
+    card.r = next.item;
+    Store.saveCard(card);
+    Store.setRating(Endgames.AXIS, { rating: next.rating, attempts: next.attempts });
+    Store.addCount(Endgames.AXIS, pulito);
+    Store.logReview({
+      id: card.id,
+      t: Date.now(),
+      g: grade,
+      isNew: !before.reps,
+      wasReview: before.state === 'review',
+      correct: pulito,
+      ivl: card.ivl,
+      axis: Endgames.AXIS,
+      ms: secondi * 1000,
+      theme: current.item.tipo === 'Q' ? 'donna' : 'torre',
+      rating: next.rating,
+    });
+
+    results[current.index] = { correct: pulito, item: current.item, mosse: current.mosse, buttate: current.buttate, lente: current.lente };
+    drawProgress();
+    beep(vinto ? 'win' : 'err');
+
+    setPrompt(vinto
+      ? `<strong>Matto in ${current.mosse} mosse.</strong>`
+        + `${current.buttate ? ` Con ${current.buttate} ${current.buttate === 1 ? 'mossa che buttava' : 'mosse che buttavano'} la vittoria.` : ''}`
+        + `${current.lente ? ` ${current.lente} ${current.lente === 1 ? 'mossa allungava' : 'mosse allungavano'} il matto.` : ' Nessuna mossa sprecata.'}`
+      : `<strong>Finito senza matto.</strong> ${esc(motivo)}`, vinto ? 'good' : 'bad');
+
+    later(() => {
+      if (current.index + 1 < queue.length) loadItem(current.index + 1);
+      else riepilogo();
+    }, 2200);
+  }
+
+  function riepilogo() {
+    const fatti = results.filter(Boolean);
+    const puliti = fatti.filter((r) => r.correct).length;
+    const stato = Store.getRating(Endgames.AXIS) || { rating: Endgames.START, attempts: 0 };
+    const uscita = Percorso.uscitaDi(Endgames.AXIS, Store.getLog());
+
+    const panel = h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">${puliti === fatti.length ? 'Tutti portati a casa' : 'Sessione finita'}</div>
+        <div class="result__sub">${puliti} ${puliti === 1 ? 'finale vinto' : 'finali vinti'} su ${fatti.length} senza mai perdere l’esito</div>
+        <div class="result__grid">
+          <div class="stat"><div class="stat__value stat__value--gold">${stato.rating}</div><div class="stat__label">Punteggio</div></div>
+          <div class="stat"><div class="stat__value">${uscita.percent}%</div><div class="stat__label">Verso l’uscita</div></div>
+          <div class="stat"><div class="stat__value">${Store.cardStats(Endgames.PREFIX).total}</div><div class="stat__label">Carte</div></div>
+        </div>
+      </div>
+      <div class="note"><div class="note__label">Per passare oltre</div>${esc(uscita.label)}</div>
+      <div class="note">
+        <div class="note__label">Che cosa copre questo livello</div>
+        Re e Donna, Re e Torre: le due tecniche che una tavola a tre pezzi risolve per intero. Opposizione, Lucena e Philidor
+        hanno quattro o cinque pezzi — una tavola molto più grande — e per ora non ci sono. Meglio dirlo che fingere di allenarle.
+      </div>
+      <button class="btn btn--primary" id="more">Un’altra sessione</button>
+      <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+    </div>`);
+
+    mount(panel);
+    panel.querySelector('#more').onclick = () => renderFinaliSession();
+  }
+
+  view.querySelector('#hint').onclick = () => {
+    if (!board.interactive) return;
+    const mosse = legalMoves(current.state);
+    let migliore = null;
+    let valore = 999;
+    for (const m of mosse) {
+      const v = Endgames.valoreDopo(applyMove(current.state, m));
+      if (v === Endgames.NON_VINTA || v === Endgames.ILLEGALE) continue;
+      if (v < valore) { valore = v; migliore = m; }
+    }
+    if (!migliore) return;
+    current.aiuti += 1;
+    board.flash(migliore.from, 'hint', 2600);
+    board.flash(migliore.to, 'hint', 2600);
+    setPrompt(`Una che vince: <strong>${esc(san(toSan(current.state, migliore)))}</strong>.`);
+  };
+
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+
+  session = { onMove: (move) => onMove(move) };
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  loadItem(0);
+}
+
 /* ------------------------------ statistiche ----------------------------- */
 
 /** Toccare un segno di un grafico ne scrive il valore sotto. */
@@ -1702,6 +1936,7 @@ function route() {
     const level = LEVELS.find((l) => l.id === Number(param));
     if (level) return renderTraining(pickQueue(level.id), `#/livello/${level.id}`, `Allenamento ${level.name}`);
   }
+  if (screen === 'finali') return renderFinaliSession();
   if (screen === 'vista') return renderBasicsSession(Basics.VISTA);
   if (screen === 'sicurezza') return renderBasicsSession(Basics.SICUREZZA);
   if (screen === 'aperture') return renderOpenings();
@@ -1722,8 +1957,31 @@ document.addEventListener('click', (e) => {
 window.addEventListener('hashchange', route);
 route();
 
+/*
+ * Registrazione e aggiornamento.
+ *
+ * `update()` a ogni apertura chiede al server se `sw.js` è cambiato; se sì, il
+ * nuovo service worker si installa (riscaricando i file senza cache HTTP) e
+ * prende il posto del vecchio. Quando questo succede si ricarica **una volta
+ * sola** — la guardia serve perché `controllerchange` scatta anche alla prima
+ * installazione, e senza si finirebbe in un giro di ricariche.
+ */
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline non disponibile */ });
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('sw.js');
+      registration.update().catch(() => { /* offline: si riprova alla prossima apertura */ });
+
+      if (navigator.serviceWorker.controller) {
+        let ricaricato = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (ricaricato) return;
+          ricaricato = true;
+          window.location.reload();
+        });
+      }
+    } catch {
+      /* offline non disponibile: l'app funziona lo stesso, senza cache */
+    }
   });
 }

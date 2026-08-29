@@ -19,6 +19,7 @@
 import { PUZZLES } from './puzzles.js';
 import * as Rating from './rating.js';
 import * as Basics from './basics.js';
+import * as Endgames from './endgames.js';
 import * as Stats from './stats.js';
 
 export const LIVELLI = [
@@ -43,9 +44,11 @@ export const LIVELLI = [
   {
     code: 'L2',
     name: 'I finali che si vincono a memoria',
-    line: 'Re e Donna, Re e Torre, opposizione, quadrato del pedone, Lucena, Philidor.',
-    exit: 'le sei tecniche portate a casa senza mai perdere l’esito',
-    state: 'in-arrivo',
+    line: 'Re e Donna, Re e Torre: matto forzato, con la tavola dei finali a fare da giudice.',
+    exit: 'sei finali portati a casa senza mai perdere l’esito',
+    state: 'attivo',
+    hash: '#/finali',
+    action: 'Allenati',
   },
   {
     code: 'L3',
@@ -105,6 +108,7 @@ export function avanzamenti({ rating, aperture, log = [] }) {
   // L0 e L1: il criterio è "come stai andando adesso", non un totale.
   out.L0 = uscitaDi(Basics.VISTA, log);
   out.L1 = uscitaDi(Basics.SICUREZZA, log);
+  out.L2 = uscitaDi(Endgames.AXIS, log);
 
   // L3: dal punteggio di partenza alla soglia d'uscita.
   const da = Rating.START_RATING;
@@ -131,6 +135,22 @@ export function avanzamenti({ rating, aperture, log = [] }) {
  * il punto è proprio che certe cose diventino automatiche.
  */
 export function uscitaDi(axis, log) {
+  /*
+   * I finali non si misurano sulle ultime venti risposte ma sui finali portati
+   * a casa **per intero e senza mai perdere l'esito**: è una tecnica, e o la si
+   * esegue fino al matto o non la si ha.
+   */
+  if (axis === Endgames.AXIS) {
+    const puliti = log.filter((e) => e.axis === Endgames.AXIS && e.correct).length;
+    const soglia = Endgames.USCITA.puliti;
+    return {
+      percent: Math.min(100, Math.round((puliti / soglia) * 100)),
+      label: puliti
+        ? `${puliti} ${puliti === 1 ? 'finale portato a casa' : 'finali portati a casa'} su ${soglia}, senza mai perdere l'esito`
+        : `Servono ${soglia} finali portati a casa senza mai perdere l'esito`,
+    };
+  }
+
   const ultime = Stats.recentByAxis(log, axis, 20);
   const giuste = ultime.filter((e) => e.correct).length;
   const mediana = Stats.medianMs(ultime);

@@ -1,5 +1,5 @@
 /* Service worker: rende l'app utilizzabile offline dopo la prima visita. */
-const CACHE = 'aperture-scacchi-v5';
+const CACHE = 'aperture-scacchi-v6';
 
 const ASSETS = [
   './',
@@ -15,6 +15,8 @@ const ASSETS = [
   'assets/js/rating.js',
   'assets/js/percorso.js',
   'assets/js/basics.js',
+  'assets/js/endgames.js',
+  'assets/js/endgames-data.js',
   'assets/js/fsrs.js',
   'assets/js/stats.js',
   'assets/js/chart.js',
@@ -25,8 +27,20 @@ const ASSETS = [
   'assets/icons/icon-512.png',
 ];
 
+/*
+ * In installazione i file si scaricano con `cache: 'reload'`, cioè **saltando la
+ * cache HTTP del browser**. Senza, succede questo: GitHub Pages manda
+ * `max-age=600`, e per dieci minuti dopo una pubblicazione il telefono che ha già
+ * visitato l'app continua a ricevere i file vecchi — che il service worker poi
+ * congela nella sua cache, facendoli durare molto più di dieci minuti.
+ * (Visto succedere: due volte di fila, sul sito vero.)
+ */
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+  event.waitUntil(
+    caches.open(CACHE)
+      .then((cache) => Promise.all(ASSETS.map((url) => cache.add(new Request(url, { cache: 'reload' })))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -43,7 +57,10 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(request).then((cached) => {
-      const network = fetch(request)
+      // Anche a regime si chiede al server la versione fresca, scavalcando la
+      // cache HTTP: la risposta serve solo ad aggiornare la copia per la
+      // prossima apertura, quindi il ritardo non lo vede nessuno.
+      const network = fetch(new Request(request, { cache: 'no-cache' }))
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();

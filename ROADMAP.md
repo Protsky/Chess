@@ -145,8 +145,33 @@ documentata e pubblicata**.
       le opzioni arrivavano a quattro), e le prime sei domande erano tutte dello
       stesso tipo perché il serbatoio non era mescolato.
 
-- [ ] **7. Finali con la tavola (L2)** — giocati fino in fondo contro la difesa
-      migliore, corretti **per esito** e non per mossa preferita.
+- [x] **7. Finali con la tavola (L2)** — la tavola dei finali a tre pezzi, fatta
+      in casa: `tools/build-endgames.mjs` la genera con analisi retrograda
+      (345.404 posizioni vinte con la Donna, 376.868 con la Torre; matto più
+      lungo 10 e 16 mosse, cioè i numeri da manuale). Ridotta con le otto
+      simmetrie e spedita solo per metà — il valore col Bianco al tratto si
+      ricava in una mossa — sta in **89 kB** invece di 3,5 MB.
+      Fatto: una mossa che perde il matto forzato **non viene giocata**, si
+      annulla e si spiega perché; ogni mossa che lo mantiene è accettata anche se
+      allunga (si corregge l'esito, non lo stile, e se allunga lo dice); il Nero
+      difende al meglio possibile; si gioca fino al matto, che è la parte che di
+      solito non si sa fare. Si esce con sei finali portati a casa senza mai
+      perdere l'esito.
+      Provato: 126 controlli in `validate-percorso.mjs`, fra cui **tutti gli 80
+      finali giocati fino in fondo** con la tavola da una parte e la difesa
+      migliore dall'altra — il matto arriva esattamente nelle semimosse
+      annunciate — e i due massimi da manuale ricalcolati sulla tavola letta a
+      runtime. Nel browser: una mossa che buttava la vittoria rifiutata e
+      annullata, tre finali giocati, due puliti, il riepilogo che conta solo
+      quelli senza errori.
+      Da dire: opposizione, Lucena e Philidor hanno quattro o cinque pezzi (una
+      tavola molto più grande) e **non ci sono**. È scritto nell'app, in fondo
+      alla sessione, invece di lasciar credere che il livello le alleni.
+      Corretti mentre si costruiva: la propagazione retrograda si fermava dopo
+      due passate (i valori del Bianco sono dispari e quelli del Nero pari, e
+      cercare «esattamente d» salta un giro su due), e il triangolo delle
+      simmetrie usciva annidato nel file generato, così a runtime la tavola
+      sembrava tutta illegale.
 
 - [ ] **8. Le aperture rifatte (L6)** — repertorio ristretto (una col Bianco, due
       col Nero), ogni linea legata alla struttura di mediogioco che genera, e
