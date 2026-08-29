@@ -43,7 +43,7 @@ export const MAX_NEW = 8;
  *   rating:  forza attuale, per scegliere la difficoltà del materiale nuovo
  */
 export function buildQueue({ due = [], known = new Set(), rating = Rating.START_RATING,
-  size = SESSION_SIZE, maxNew = MAX_NEW, pool = PUZZLES } = {}) {
+  size = SESSION_SIZE, maxNew = MAX_NEW, pool = PUZZLES, attempts = Infinity } = {}) {
   const items = [];
 
   for (const card of due) {
@@ -54,13 +54,32 @@ export function buildQueue({ due = [], known = new Set(), rating = Rating.START_
 
   const room = Math.min(maxNew, size - items.length);
   if (room > 0) {
-    const unseen = pool.filter((p) => !known.has(cardIdOf(p)));
+    const unseen = poolFor(pool, attempts).filter((p) => !known.has(cardIdOf(p)));
     for (const puzzle of Rating.pickByDifficulty(unseen, rating, room)) {
       items.push({ puzzle, card: null, fresh: true });
     }
   }
 
   return interleave(items);
+}
+
+/**
+ * Le prime risposte non dicono ancora niente sulla forza: il punteggio parte da
+ * un valore di comodo e ci mette una ventina di risposte a diventare una stima.
+ * Nel frattempo pescare col bersaglio abituale vuol dire servire a un principiante
+ * sacrifici a due mosse — l'ho misurato, ed era esattamente quello che succedeva.
+ *
+ * Quindi finché la stima è provvisoria si resta sulle posizioni a **una mossa
+ * sola** e sui motivi elementari: è il gradino che il livello 1 allena a parte,
+ * e serve anche a chi entra dalla tattica senza passare di lì.
+ */
+export const RISPOSTE_TARATURA = 25;
+const ELEMENTARI = new Set(['hangingPiece', 'mateIn1', 'fork', 'pin', 'skewer', 'backRankMate']);
+
+export function poolFor(pool, attempts) {
+  if (attempts >= RISPOSTE_TARATURA) return pool;
+  const semplici = pool.filter((p) => userPlyCount(p) === 1 && ELEMENTARI.has(p.t));
+  return semplici.length >= 40 ? semplici : pool;
 }
 
 /**

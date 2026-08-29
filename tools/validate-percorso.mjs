@@ -310,10 +310,11 @@ ok(Percorso.LIVELLI.length === 8, 'i livelli del percorso devono essere otto');
 ok(Percorso.LIVELLI.every((l) => l.code && l.name && l.exit), 'ogni livello deve dire come ci si esce');
 
 const attivi = Percorso.LIVELLI.filter((l) => l.state === 'attivo');
-ok(attivi.length === 2 && attivi.every((l) => l.hash),
-  'attivi devono essere solo i due livelli davvero costruiti, e devono portare da qualche parte');
-ok(Percorso.LIVELLI.filter((l) => l.state === 'in-arrivo').length === 6,
-  'i sei livelli non ancora costruiti devono restare marcati "in arrivo"');
+const costruiti = ['L0', 'L1', 'L3', 'L6'];
+ok(attivi.length === costruiti.length && attivi.every((l) => l.hash && costruiti.includes(l.code)),
+  'attivi devono essere solo i livelli davvero costruiti, e devono portare da qualche parte');
+ok(Percorso.LIVELLI.filter((l) => l.state === 'in-arrivo').length === 8 - costruiti.length,
+  'i livelli non ancora costruiti devono restare marcati "in arrivo"');
 
 const av = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99 } });
 ok(Object.keys(av).length === attivi.length, 'nessun avanzamento va calcolato per i livelli che non esistono');
@@ -338,6 +339,88 @@ ok(tettoPieno.totale === 0 && tettoPieno.tettoRaggiunto, 'a tetto pieno e senza 
 
 const finito = Percorso.oggi({ due: 0, introduced: 0, settings: set, size: 12, maxNew: 8, viste: 999999 });
 ok(finito.nuove === 0 && finito.corpusFinito, 'finito il corpus non si possono promettere posizioni nuove');
+
+/* ------------------- 10. i fondamentali, L0 e L1 -------------------------- */
+
+const Basics = await import('../assets/js/basics.js');
+const Chess = await import('../assets/js/chess.js');
+
+/* L0: le risposte se le calcola il motore, quindi si possono ricontrollare. */
+const vista = Basics.vistaPool();
+ok(vista.length >= 180, `il livello 0 dovrebbe avere almeno 180 item, ne ha ${vista.length}`);
+ok(new Set(vista.map((i) => i.id)).size === vista.length, 'due item della vista hanno lo stesso identificativo');
+ok(vista.every((i) => i.options.filter((o) => o.ok).length === 1), 'ogni domanda deve avere una sola risposta giusta');
+
+// a1 è scura, h1 è chiara, a8 è chiara: se questo si rompe, si rompe tutto L0.
+ok(!Basics.isLight(Chess.idxOf('a1')), 'a1 deve essere scura');
+ok(Basics.isLight(Chess.idxOf('h1')), 'h1 deve essere chiara');
+ok(Basics.isLight(Chess.idxOf('a8')), 'a8 deve essere chiara');
+
+const colore = vista.filter((i) => i.id.includes('colore'));
+ok(colore.length === 64, 'il colore va chiesto su tutte e 64 le case');
+ok(colore.every((i) => {
+  const casa = Chess.idxOf(i.id.split(':')[2]);
+  const chiaraGiusta = i.options.find((o) => o.ok).label === 'Chiara';
+  return chiaraGiusta === Basics.isLight(casa);
+}), 'una domanda sul colore ha la risposta sbagliata');
+
+const cavalli = vista.filter((i) => i.id.includes('cavallo'));
+ok(cavalli.every((i) => {
+  const [from, to] = i.id.split(':')[2].split('-');
+  const passi = Chess.knightDistance(Chess.idxOf(from), Chess.idxOf(to));
+  return Number(i.options.find((o) => o.ok).label) === passi;
+}), 'una domanda sul cavallo non corrisponde alla distanza vera');
+ok(Chess.knightDistance(Chess.idxOf('a1'), Chess.idxOf('b2')) === 4, 'a1→b2 sono quattro salti, non tre');
+ok(Chess.knightDistance(Chess.idxOf('g1'), Chess.idxOf('f3')) === 1, 'g1→f3 è un salto solo');
+
+/* L1: la risposta deve essere una cattura legale su una casa non difesa. */
+const sicurezza = Basics.sicurezzaPool(60);
+ok(sicurezza.length >= 40, `il livello 1 dovrebbe ricavare almeno 40 item dal corpus, ne ricava ${sicurezza.length}`);
+
+let verificati = 0;
+for (const item of sicurezza) {
+  const start = Chess.fromFen(item.fen);
+  const prima = Chess.legalMoves(start).find((m) => Chess.nameOf(m.from) + Chess.nameOf(m.to) === item.firstMove.slice(0, 4));
+  if (!prima) continue;
+  const dopo = Chess.applyMove(start, prima);
+  const cattura = Chess.legalMoves(dopo).some((m) => m.to === item.answer && dopo.board[m.to]);
+  const difensori = Chess.attackersOf(dopo.board, item.answer, Chess.other(dopo.turn)).length;
+  if (cattura && difensori === 0) verificati += 1;
+}
+ok(verificati === sicurezza.length,
+  `${sicurezza.length - verificati} item del livello 1 non sono catture legali su case indifese`);
+
+/* Le code dei fondamentali: scadenze prima, tipi mescolati. */
+const codaVista = Basics.buildQueue({ axis: Basics.VISTA, due: [], known: new Set(), pool: vista });
+ok(codaVista.length === Math.min(Basics.SESSION_SIZE, Basics.MAX_NEW), 'la sessione di L0 non ha la lunghezza attesa');
+const attaccati = codaVista.filter((x, i) => i > 0 && Basics.tipoDi(x.item) === Basics.tipoDi(codaVista[i - 1].item)).length;
+ok(attaccati === 0, `${attaccati} domande dello stesso tipo attaccate: vanno mescolate`);
+
+/* I criteri d'uscita si leggono dal registro, non da un contatore a parte. */
+const finto = [];
+for (let i = 0; i < 20; i++) finto.push({ id: 'v:x', t: Date.now(), g: 3, axis: Basics.VISTA, correct: i < 19, ms: 2000, rating: 600 });
+const uscitaVista = Percorso.uscitaDi(Basics.VISTA, finto);
+ok(uscitaVista.percent === 100, `19 giuste su 20 e mediana 2 s devono bastare (dà ${uscitaVista.percent}%)`);
+const lente = finto.map((e) => ({ ...e, ms: 9000 }));
+ok(Percorso.uscitaDi(Basics.VISTA, lente).percent === 99, 'giuste ma lente non devono chiudere il livello');
+ok(Percorso.uscitaDi(Basics.VISTA, []).percent === 0, 'senza risposte il livello sta a zero');
+
+const sicuro = finto.map((e) => ({ ...e, axis: Basics.SICUREZZA, rating: 800 }));
+ok(Percorso.uscitaDi(Basics.SICUREZZA, sicuro).percent === 100, 'a punteggio 800 il livello 1 è chiuso');
+
+/* Il percorso ora comincia da L0, e la home ci manda lì. */
+const nessunDato = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99 }, log: [] });
+ok(Percorso.livelloCorrente(nessunDato).code === 'L0', 'chi comincia deve trovarsi sul livello 0, non sul 3');
+const vistaFatta = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99 }, log: finto });
+ok(Percorso.livelloCorrente(vistaFatta).code === 'L1', 'chiuso L0 si passa a L1');
+
+/* Partenza morbida della tattica: le prime risposte sono a una mossa sola. */
+const primi = Tactics.buildQueue({ due: [], known: new Set(), rating: 800, attempts: 0 });
+ok(primi.every((x) => Tactics.userPlyCount(x.puzzle) === 1),
+  'finché il punteggio è provvisorio le posizioni devono avere una mossa sola');
+const dopoTaratura = Tactics.buildQueue({ due: [], known: new Set(), rating: 800, attempts: 40 });
+ok(dopoTaratura.some((x) => Tactics.userPlyCount(x.puzzle) > 1),
+  'a punteggio tarato devono tornare anche le posizioni più lunghe');
 
 /* -------------------------------- verdetto ------------------------------- */
 

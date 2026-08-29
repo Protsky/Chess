@@ -14,6 +14,9 @@ export class Board {
     this.el.setAttribute('aria-label', 'Scacchiera');
 
     this.onMove = onMove || (() => {});
+    // Modalità «tocca una casa»: i livelli di base non chiedono mosse ma case
+    // («quale pezzo è in presa?»), e lì il tocco non deve muovere niente.
+    this.onSelect = null;
     this.orientation = 'w';
     this.state = null;
     this.lastMove = null;
@@ -81,6 +84,8 @@ export class Board {
   }
 
   setInteractive(on) {
+    // Chi torna a chiedere mosse esce dalla modalità scelta, sempre.
+    if (on) this.onSelect = null;
     this.interactive = on;
     this.el.classList.toggle('board--locked', !on);
     if (!on) {
@@ -117,7 +122,20 @@ export class Board {
     }
   }
 
+  /** In modalità scelta il tocco riporta la casa e non muove: si spegne con null. */
+  setSelectMode(onSelect) {
+    this.onSelect = onSelect;
+    this.selected = null;
+    this.candidates = [];
+    this.interactive = !!onSelect;
+    this.render();
+  }
+
   handleTap(i) {
+    if (this.onSelect) {
+      if (this.interactive) this.onSelect(i);
+      return;
+    }
     if (!this.interactive || !this.state) return;
 
     if (this.selected !== null) {

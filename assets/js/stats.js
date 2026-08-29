@@ -105,6 +105,23 @@ export function byTheme(log, min = 3) {
     .sort((a, b) => a.rate - b.rate);
 }
 
+/**
+ * Le ultime `n` risposte di un asse, dalla più vecchia. Serve ai criteri
+ * d'uscita dei primi livelli, che non parlano di totali ma di **come stai
+ * andando adesso**: diciotto giuste sulle ultime venti, non sulle ultime mille.
+ */
+export function recentByAxis(log, axis, n = 20) {
+  return log.filter((e) => e.axis === axis).slice(-n);
+}
+
+/** Mediana dei tempi di risposta (ms), o null se non ce ne sono. */
+export function medianMs(entries) {
+  const valori = entries.map((e) => e.ms).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  if (!valori.length) return null;
+  const mid = Math.floor(valori.length / 2);
+  return valori.length % 2 ? valori[mid] : Math.round((valori[mid - 1] + valori[mid]) / 2);
+}
+
 /** Andamento del punteggio: l'ultimo valore di ogni giornata. */
 export function ratingTrend(log, days = 30) {
   const from = Date.now() - days * DAY;

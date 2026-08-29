@@ -13,13 +13,39 @@ La home apre su **quello che si fa oggi**: una sessione sola, già composta —
 le carte in scadenza più il materiale nuovo che il tetto giornaliero concede —
 con la durata stimata e un bottone. Sotto, **il percorso**: gli otto livelli con
 il criterio d'uscita di ciascuno, quello su cui stai adesso, e quali sono
-davvero costruiti. I sei che non ci sono ancora restano marcati «in arrivo»:
+davvero costruiti. Quelli che non ci sono ancora restano marcati «in arrivo»:
 mostrare un percorso monco è meglio che nasconderlo.
+
+Chi apre l'app la prima volta si trova sul **livello 0**, non sulla tattica.
 
 Le aperture non sono più la prima schermata. Sono il livello 6 di 8, e stanno
 sotto *Studio* insieme alla tattica.
 
 ## Le parti
+
+### 🪜 I primi due gradini — vista e sicurezza
+
+Prima si cominciava dalla tattica, e non andava bene: le posizioni più facili del
+database di Lichess sono facili *per chi gioca su Lichess*. Misurate, le prime
+quaranta che l'app sceglieva erano nove sacrifici, sette forchette e due mosse in
+media da trovare. Non è il primo gradino di nessuno.
+
+Ora i due gradini che venivano prima ci sono, e non hanno bisogno di corpus:
+gli item se li fabbrica il motore.
+
+- **L0 · Vista della scacchiera** — di che colore è d5, come si chiama la casa
+  illuminata, in quante mosse il cavallo va da b1 a e5 (visita in ampiezza, non
+  una tabella). Si esce con 18 risposte giuste sulle ultime 20 **e** mediana
+  sotto i 3 secondi: qui conta che sia automatico, non che sia giusto.
+- **L1 · Non regalare pezzi** — «quale pezzo puoi prendere senza perdere
+  niente?», su posizioni vere del corpus. Un pezzo è gratis solo se la cattura è
+  **legale** e la casa non è difesa da nessuno: entrambe le cose si calcolano sul
+  motore, non si stimano. Si esce a punteggio 800 con al massimo un errore sulle
+  ultime venti.
+
+E per chi entra dalla tattica senza passare di lì, la **partenza è morbida**:
+finché il punteggio è provvisorio (le prime 25 risposte) arrivano solo posizioni
+a una mossa sola e sui motivi elementari.
 
 ### 🎯 Tattica — trova la mossa
 
@@ -121,6 +147,7 @@ index.html               guscio dell'app e meta tag iOS
 assets/css/app.css       tema scuro, layout mobile, scacchiera
 assets/js/chess.js       motore: mosse legali, arrocco, presa al varco, notazione, FEN e UCI
 assets/js/percorso.js    gli otto livelli e la sessione di oggi (quello che la home mostra)
+assets/js/basics.js      L0 e L1: item generati dal motore, nessun corpus
 assets/js/openings.js    il repertorio (dati)
 assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)
 assets/js/board.js       scacchiera interattiva (tocco-tocco)

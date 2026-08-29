@@ -8,7 +8,8 @@ import * as Store from './store.js';
 import * as Tactics from './tactics.js';
 import * as Rating from './rating.js';
 import * as Percorso from './percorso.js';
-import { createScheduler, newCard, DEFAULT_W } from './fsrs.js';
+import * as Basics from './basics.js';
+import { createScheduler, newCard, DEFAULT_W, AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 import * as Stats from './stats.js';
 import * as Chart from './chart.js';
 import * as Optimizer from './optimizer.js';
@@ -151,7 +152,7 @@ function renderHome() {
     viste,
   });
 
-  const avanzamenti = Percorso.avanzamenti({ rating: rating.rating, aperture });
+  const avanzamenti = Percorso.avanzamenti({ rating: rating.rating, aperture, log: Store.getLog() });
   const corrente = Percorso.livelloCorrente(avanzamenti);
   const primaVolta = carte.total === 0;
 
@@ -159,29 +160,38 @@ function renderHome() {
     .map((o) => ({ o, p: Store.getProgress(o.id) }))
     .sort((a, b) => a.p.stars - b.p.stars || (a.p.lastAt || 0) - (b.p.lastAt || 0))[0];
 
-  const testa = primaVolta
+  const base = corrente.code === 'L0' || corrente.code === 'L1';
+  const testa = base
     ? {
-      titolo: 'Si comincia dalla tattica',
-      riga: `${oggi.totale} posizioni mescolate, che si aggiustano da sole sulla tua forza. Circa ${oggi.minuti} minuti.`,
-      cta: 'Inizia la prima sessione',
-      hash: '#/tattica',
+      // Chi comincia non parte dalla tattica: parte dal gradino che ha davanti.
+      titolo: corrente.name,
+      riga: `${corrente.line} <span class="prompt__aside">${avanzamenti[corrente.code].label}.</span>`,
+      cta: primaVolta && !Store.getLog().length ? 'Comincia da qui' : 'Continua da qui',
+      hash: corrente.hash,
     }
-    : oggi.totale > 0
+    : primaVolta
       ? {
-        titolo: 'La sessione di oggi',
-        riga: `${oggi.totale} ${oggi.totale === 1 ? 'posizione' : 'posizioni'}: ${oggi.ripassi} in scadenza`
-          + `${oggi.nuove ? ` e ${oggi.nuove} ${oggi.nuove === 1 ? 'nuova' : 'nuove'}` : ' e nessuna nuova, il tetto di oggi è pieno'}`
-          + ` · circa ${oggi.minuti} ${oggi.minuti === 1 ? 'minuto' : 'minuti'}.`,
-        cta: 'Inizia la sessione',
+        titolo: 'Si comincia dalla tattica',
+        riga: `${oggi.totale} posizioni mescolate, che si aggiustano da sole sulla tua forza. Circa ${oggi.minuti} minuti.`,
+        cta: 'Inizia la prima sessione',
         hash: '#/tattica',
       }
-      : {
-        titolo: 'Per oggi la tattica è a posto',
-        riga: `Niente in scadenza e ${daily.introduced} ${daily.introduced === 1 ? 'posizione nuova' : 'posizioni nuove'} già introdotte.`
-          + ' Il tempo che avanza va bene per un’apertura.',
-        cta: daRipassare ? `Allena ${daRipassare.o.name}` : 'Guarda le aperture',
-        hash: daRipassare ? `#/apertura/${daRipassare.o.id}/allena` : '#/aperture',
-      };
+      : oggi.totale > 0
+        ? {
+          titolo: 'La sessione di oggi',
+          riga: `${oggi.totale} ${oggi.totale === 1 ? 'posizione' : 'posizioni'}: ${oggi.ripassi} in scadenza`
+            + `${oggi.nuove ? ` e ${oggi.nuove} ${oggi.nuove === 1 ? 'nuova' : 'nuove'}` : ' e nessuna nuova, il tetto di oggi è pieno'}`
+            + ` · circa ${oggi.minuti} ${oggi.minuti === 1 ? 'minuto' : 'minuti'}.`,
+          cta: 'Inizia la sessione',
+          hash: '#/tattica',
+        }
+        : {
+          titolo: 'Per oggi la tattica è a posto',
+          riga: `Niente in scadenza e ${daily.introduced} ${daily.introduced === 1 ? 'posizione nuova' : 'posizioni nuove'} già introdotte.`
+            + ' Il tempo che avanza va bene per un’apertura.',
+          cta: daRipassare ? `Allena ${daRipassare.o.name}` : 'Guarda le aperture',
+          hash: daRipassare ? `#/apertura/${daRipassare.o.id}/allena` : '#/aperture',
+        };
 
   setBar({ title: 'Scacchi', action: { label: '⚙︎', aria: 'Impostazioni', onClick: () => { location.hash = '#/impostazioni'; } } });
 
@@ -193,7 +203,7 @@ function renderHome() {
     </div>
     <button class="btn btn--primary" data-go="${testa.hash}">${esc(testa.cta)}</button>
     <div class="stats">
-      <div class="stat"><div class="stat__value stat__value--gold">${rating.rating}</div><div class="stat__label">Punteggio</div></div>
+      <div class="stat"><div class="stat__value stat__value--gold">${avanzamenti[corrente.code]?.percent ?? 0}%</div><div class="stat__label">Verso il ${corrente.code}</div></div>
       <div class="stat"><div class="stat__value">${streak}</div><div class="stat__label">Giorni di fila</div></div>
       <div class="stat"><div class="stat__value">${daily.reviewed}</div><div class="stat__label">Fatte oggi</div></div>
     </div>
@@ -201,7 +211,7 @@ function renderHome() {
     <div class="section-title">Il percorso</div>
     <div class="stack" id="path"></div>
     <p class="hint-text">La forza si misura su tattica, finali e posizione: le aperture sono il livello 6, non il primo.
-      Oggi l’app copre <strong>L3</strong> e <strong>L6</strong>; gli altri sei sono da costruire, e finché non ci sono restano vuoti invece di fingere.</p>
+      Oggi l’app copre <strong>L0</strong>, <strong>L1</strong>, <strong>L3</strong> e <strong>L6</strong>; gli altri quattro sono da costruire, e finché non ci sono restano vuoti invece di fingere.</p>
 
     <div class="section-title">Studio</div>
     <button class="card tactic-card" data-go="#/tattica">
@@ -764,6 +774,7 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     due,
     known: new Set(cards.map((c) => c.id)),
     rating: state.rating,
+    attempts: state.attempts,
     maxNew: Math.min(Tactics.MAX_NEW, roomToday),
   });
 
@@ -1095,6 +1106,217 @@ function renderTacticsEmpty({ cards, daily, now }) {
 
   view.querySelector('#more').onclick = () => renderTacticsSession({ extraNew: 5 });
   mount(view);
+}
+
+/* ----------------------------- fondamentali ----------------------------- */
+
+const VUOTA = '8/8/8/8/8/8/8/8 w - - 0 1';
+
+const TITOLI = {
+  [Basics.VISTA]: { barra: 'Vista', titolo: 'Vista della scacchiera' },
+  [Basics.SICUREZZA]: { barra: 'Sicurezza', titolo: 'Non regalare pezzi' },
+};
+
+/** Stato del punteggio di un asse dei fondamentali. */
+function basicsState(axis) {
+  return Store.getRating(axis) || { rating: Basics.START, attempts: 0 };
+}
+
+/**
+ * La sessione dei livelli 0 e 1. Stessa impalcatura della tattica — scadenze
+ * prima, tipi mescolati, voto dedotto dall'esito — su item che non vengono da
+ * un corpus ma dal motore: qui la risposta giusta si calcola, non si consulta.
+ */
+function renderBasicsSession(axis) {
+  const now = Date.now();
+  const prefix = Basics.PREFIX[axis];
+  const scheduler = makeScheduler();
+  const pool = axis === Basics.VISTA ? Basics.vistaPool() : Basics.sicurezzaPool();
+  const cards = Store.allCards(prefix);
+
+  const queue = Basics.buildQueue({
+    axis,
+    due: Store.dueCards(prefix, now),
+    known: new Set(cards.map((c) => c.id)),
+    pool,
+  });
+
+  if (!queue.length) return renderHome();
+
+  setBar({ title: TITOLI[axis].barra, back: '#/' });
+
+  const results = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__text"></span></div>
+    <div class="stack" id="options"></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci dalla sessione</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptText = promptEl.querySelector('.prompt__text');
+  const optionsEl = view.querySelector('#options');
+  const boardHost = view.querySelector('#board-host');
+
+  function setPrompt(html, kind = '') {
+    promptEl.className = `prompt${kind ? ` prompt--${kind}` : ''}`;
+    promptText.innerHTML = html;
+  }
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    queue.forEach((_, i) => {
+      const span = document.createElement('span');
+      const done = results[i];
+      if (done) span.className = done.correct ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function loadItem(index) {
+    const { item, card } = queue[index];
+    current = { item, card, index, start: Date.now(), risposto: false };
+
+    headEl.innerHTML = `<h2>Domanda ${index + 1} di ${queue.length}</h2><p>${
+      queue[index].fresh ? 'Nuova' : 'Ripasso'
+    } · ${TITOLI[axis].titolo}</p>`;
+
+    // La scacchiera serve solo ad alcune domande: le altre si fanno a mente.
+    const mostraScacchiera = !!(item.fen || item.empty);
+    boardHost.hidden = !mostraScacchiera;
+    if (mostraScacchiera) {
+      if (!boardHost.contains(board.el)) boardHost.appendChild(board.el);
+      let stato = fromFen(item.fen || VUOTA);
+      let ultima = null;
+      if (item.firstMove) {
+        // Come nella tattica: si vede la mossa dell'avversario, poi tocca a te.
+        const mossa = legalMoves(stato).find((m) => nameOf(m.from) + nameOf(m.to) === item.firstMove.slice(0, 4));
+        if (mossa) { ultima = mossa; stato = applyMove(stato, mossa); }
+      }
+      board.setOrientation(item.side || 'w');
+      board.setInteractive(false);
+      board.setPosition(stato, ultima);
+      (item.marks || []).forEach((m) => board.flash(m.square, m.kind || 'hint', 60000));
+    }
+
+    setPrompt(`${item.prompt}${item.hint ? ` <span class="prompt__aside">${esc(item.hint)}</span>` : ''}`);
+    drawProgress();
+
+    optionsEl.textContent = '';
+    if (item.kind === 'opzioni') {
+      item.options.forEach((opt, i) => {
+        const btn = h(`<button class="btn" data-opt="${i}">${esc(opt.label)}</button>`);
+        btn.onclick = () => rispondi(opt.ok, btn);
+        optionsEl.appendChild(btn);
+      });
+    } else {
+      board.setSelectMode((square) => rispondi(square === item.answer, null, square));
+    }
+  }
+
+  function rispondi(giusta, btn, square = null) {
+    if (current.risposto) return;
+    current.risposto = true;
+    board.setSelectMode(null);
+    board.clearFlash('hint');
+
+    const secondi = (Date.now() - current.start) / 1000;
+    const pace = Basics.paceFor(current.item);
+    const grade = !giusta ? AGAIN : secondi <= pace.quick ? EASY : secondi >= pace.slow ? HARD : GOOD;
+
+    if (btn) {
+      btn.classList.add(giusta ? 'btn--good' : 'btn--bad');
+      // Anche la risposta giusta va mostrata: sapere di aver sbagliato non basta.
+      if (!giusta) {
+        [...optionsEl.children].forEach((b, i) => {
+          if (current.item.options[i].ok) b.classList.add('btn--good');
+        });
+      }
+    }
+    if (current.item.kind === 'tocco') {
+      if (square !== null) board.flash(square, giusta ? 'good' : 'wrong', 1500);
+      if (!giusta) board.flash(current.item.answer, 'good', 2500);
+    }
+    beep(giusta ? 'ok' : 'err');
+
+    const before = current.card || newCard(current.item.id, { r: current.item.difficulty });
+    const card = scheduler.review(before, grade, Date.now());
+    const stato = basicsState(axis);
+    const next = Rating.update(stato, before.r ?? current.item.difficulty, giusta);
+    card.r = next.item;
+    Store.saveCard(card);
+    Store.setRating(axis, { rating: next.rating, attempts: next.attempts });
+    Store.addCount(axis, giusta);
+    Store.logReview({
+      id: card.id,
+      t: Date.now(),
+      g: grade,
+      isNew: !before.reps,
+      wasReview: before.state === 'review',
+      correct: giusta,
+      ivl: card.ivl,
+      axis,
+      ms: Math.round(secondi * 1000),
+      theme: Basics.tipoDi(current.item),
+      rating: next.rating,
+    });
+
+    results[current.index] = { correct: giusta, item: current.item, delta: next.delta };
+    drawProgress();
+    setPrompt(`${giusta ? '<strong>Giusto.</strong>' : '<strong>No.</strong>'} ${esc(current.item.explain)}`, giusta ? 'good' : 'bad');
+
+    later(() => {
+      if (current.index + 1 < queue.length) loadItem(current.index + 1);
+      else renderBasicsSummary();
+    }, giusta ? 1200 : 2400);
+  }
+
+  function renderBasicsSummary() {
+    const fatte = results.filter(Boolean);
+    const giuste = fatte.filter((r) => r.correct).length;
+    const stato = basicsState(axis);
+    const uscita = Percorso.uscitaDi(axis, Store.getLog());
+
+    const panel = h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">${giuste === fatte.length ? 'Tutte giuste' : 'Sessione finita'}</div>
+        <div class="result__sub">${giuste} ${giuste === 1 ? 'risposta giusta' : 'risposte giuste'} su ${fatte.length}</div>
+        <div class="result__grid">
+          <div class="stat"><div class="stat__value stat__value--gold">${stato.rating}</div><div class="stat__label">Punteggio</div></div>
+          <div class="stat"><div class="stat__value">${uscita.percent}%</div><div class="stat__label">Verso l’uscita</div></div>
+          <div class="stat"><div class="stat__value">${Store.cardStats(Basics.PREFIX[axis]).total}</div><div class="stat__label">Carte</div></div>
+        </div>
+      </div>
+      <div class="note"><div class="note__label">Per passare oltre</div>${esc(uscita.label)}</div>
+      <div class="stack" id="recap"></div>
+      <button class="btn btn--primary" id="more">Un’altra sessione</button>
+      <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+    </div>`);
+
+    const recap = panel.querySelector('#recap');
+    fatte.filter((r) => !r.correct).forEach((r) => {
+      recap.appendChild(h(`<div class="card recap">
+        <span class="recap__mark recap__mark--err">✗</span>
+        <span class="recap__name">${esc(r.item.explain)}</span>
+      </div>`));
+    });
+
+    mount(panel);
+    panel.querySelector('#more').onclick = () => renderBasicsSession(axis);
+  }
+
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+
+  session = null;
+  mount(view);
+  loadItem(0);
 }
 
 /* ------------------------------ statistiche ----------------------------- */
@@ -1480,6 +1702,8 @@ function route() {
     const level = LEVELS.find((l) => l.id === Number(param));
     if (level) return renderTraining(pickQueue(level.id), `#/livello/${level.id}`, `Allenamento ${level.name}`);
   }
+  if (screen === 'vista') return renderBasicsSession(Basics.VISTA);
+  if (screen === 'sicurezza') return renderBasicsSession(Basics.SICUREZZA);
   if (screen === 'aperture') return renderOpenings();
   if (screen === 'tattica') return renderTacticsSession();
   if (screen === 'statistiche') return renderStats();

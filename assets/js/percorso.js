@@ -18,6 +18,8 @@
 
 import { PUZZLES } from './puzzles.js';
 import * as Rating from './rating.js';
+import * as Basics from './basics.js';
+import * as Stats from './stats.js';
 
 export const LIVELLI = [
   {
@@ -25,14 +27,18 @@ export const LIVELLI = [
     name: 'Vista della scacchiera',
     line: 'Colore di una casa, salti del cavallo, chi attacca cosa. Da automatizzare.',
     exit: '18 risposte giuste su 20, mediana sotto i 3 secondi',
-    state: 'in-arrivo',
+    state: 'attivo',
+    hash: '#/vista',
+    action: 'Allenati',
   },
   {
     code: 'L1',
     name: 'Non regalare pezzi',
     line: 'Che cosa resta in presa dopo la tua mossa. Il livello che rende di più a chi comincia.',
     exit: 'punteggio 800 e non più di un errore su 20 controlli di sicurezza',
-    state: 'in-arrivo',
+    state: 'attivo',
+    hash: '#/sicurezza',
+    action: 'Allenati',
   },
   {
     code: 'L2',
@@ -93,8 +99,12 @@ export function livelloCorrente(avanzamenti) {
  * Per quelli non costruiti non si restituisce niente: una barra al 12% su un
  * livello che non si può allenare sarebbe un numero inventato.
  */
-export function avanzamenti({ rating, aperture }) {
+export function avanzamenti({ rating, aperture, log = [] }) {
   const out = {};
+
+  // L0 e L1: il criterio è "come stai andando adesso", non un totale.
+  out.L0 = uscitaDi(Basics.VISTA, log);
+  out.L1 = uscitaDi(Basics.SICUREZZA, log);
 
   // L3: dal punteggio di partenza alla soglia d'uscita.
   const da = Rating.START_RATING;
@@ -111,6 +121,43 @@ export function avanzamenti({ rating, aperture }) {
   };
 
   return out;
+}
+
+/**
+ * Quanto manca all'uscita dai due livelli di base, sui dati veri del registro.
+ *
+ * Non si misura «quante ne hai fatte» ma «come stai andando sulle ultime venti»:
+ * un criterio cumulativo lo si supera studiando a lungo anche sbagliando, e qui
+ * il punto è proprio che certe cose diventino automatiche.
+ */
+export function uscitaDi(axis, log) {
+  const ultime = Stats.recentByAxis(log, axis, 20);
+  const giuste = ultime.filter((e) => e.correct).length;
+  const mediana = Stats.medianMs(ultime);
+
+  if (axis === Basics.VISTA) {
+    const soglia = Basics.USCITA[Basics.VISTA];
+    const abbastanzaVeloce = mediana !== null && mediana <= soglia.mediana;
+    const percent = Math.min(100, Math.round((giuste / soglia.giuste) * 100));
+    return {
+      percent: percent === 100 && !abbastanzaVeloce ? 99 : percent,
+      label: ultime.length
+        ? `${giuste} giuste sulle ultime ${ultime.length}${mediana !== null ? `, mediana ${(mediana / 1000).toFixed(1)} s` : ''}`
+          + ` · servono ${soglia.giuste} su ${soglia.su} con mediana sotto i 3 secondi`
+        : `Servono ${soglia.giuste} risposte giuste su ${soglia.su}, con mediana sotto i 3 secondi`,
+    };
+  }
+
+  const soglia = Basics.USCITA[Basics.SICUREZZA];
+  const punteggio = ultime.length ? (ultime[ultime.length - 1].rating ?? Basics.START) : Basics.START;
+  const errori = ultime.filter((e) => !e.correct).length;
+  const percent = Math.max(0, Math.min(100, Math.round(((punteggio - Basics.START) / (soglia.punteggio - Basics.START)) * 100)));
+  return {
+    percent: percent === 100 && ultime.length >= soglia.su && errori > soglia.erroriMax ? 99 : percent,
+    label: ultime.length
+      ? `punteggio ${punteggio} di ${soglia.punteggio}, ${errori} ${errori === 1 ? 'errore' : 'errori'} sulle ultime ${ultime.length}`
+      : `Servono punteggio ${soglia.punteggio} e non più di un errore sulle ultime ${soglia.su}`,
+  };
 }
 
 /**

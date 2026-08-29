@@ -448,3 +448,78 @@ export function playUci(ucis, start) {
   });
   return { states, moves, sans };
 }
+
+/**
+ * Le case da cui `by` attacca `target`, non solo "se" la attacca.
+ * Serve ai livelli di base: per dire che un pezzo è in presa bisogna saper
+ * contare chi lo attacca e chi lo difende, non solo che qualcuno lo tocca.
+ */
+export function attackersOf(board, target, by) {
+  const out = [];
+  const r = rowOf(target);
+  const c = colOf(target);
+  const enemyPawn = by === 'w' ? 'P' : 'p';
+  const dir = by === 'w' ? 1 : -1;          // il pedone bianco attacca verso l'alto
+
+  for (const dc of [-1, 1]) {
+    const rr = r + dir;
+    const cc = c + dc;
+    if (inside(rr, cc) && board[idx(rr, cc)] === enemyPawn) out.push(idx(rr, cc));
+  }
+
+  const jump = (deltas, letters) => {
+    for (const [dr, dc] of deltas) {
+      const rr = r + dr;
+      const cc = c + dc;
+      if (!inside(rr, cc)) continue;
+      const p = board[idx(rr, cc)];
+      if (p && colorOf(p) === by && letters.includes(p.toUpperCase())) out.push(idx(rr, cc));
+    }
+  };
+  jump(KNIGHT_D, 'N');
+  jump([...QUEEN_D], 'K');
+
+  const slide = (deltas, letters) => {
+    for (const [dr, dc] of deltas) {
+      let rr = r + dr;
+      let cc = c + dc;
+      while (inside(rr, cc)) {
+        const p = board[idx(rr, cc)];
+        if (p) {
+          if (colorOf(p) === by && letters.includes(p.toUpperCase())) out.push(idx(rr, cc));
+          break;
+        }
+        rr += dr;
+        cc += dc;
+      }
+    }
+  };
+  slide(BISHOP_D, 'BQ');
+  slide(ROOK_D, 'RQ');
+
+  return out;
+}
+
+/** Mosse minime di un cavallo da una casa all'altra, su scacchiera vuota. */
+export function knightDistance(from, to) {
+  if (from === to) return 0;
+  const visto = new Set([from]);
+  let bordo = [from];
+  let passi = 0;
+  while (bordo.length && passi < 6) {
+    passi += 1;
+    const prossimo = [];
+    for (const casa of bordo) {
+      for (const [dr, dc] of KNIGHT_D) {
+        const rr = rowOf(casa) + dr;
+        const cc = colOf(casa) + dc;
+        if (!inside(rr, cc)) continue;
+        const i = idx(rr, cc);
+        if (i === to) return passi;
+        if (!visto.has(i)) { visto.add(i); prossimo.push(i); }
+      }
+    }
+    bordo = prossimo;
+  }
+  return -1;
+}

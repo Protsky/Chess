@@ -511,6 +511,20 @@ p { margin: 0; }
 .btn--primary { background: linear-gradient(180deg, #efc478, var(--gold)); color: #1a1408; border-color: var(--gold); }
 .btn--ghost { background: transparent; }
 .btn--danger { color: var(--red); }
+
+/* Risposte dei fondamentali: il verde e il rosso stanno sul bottone toccato,
+   e la risposta giusta si accende comunque — sapere di aver sbagliato non basta. */
+.btn--good {
+  color: var(--green);
+  border-color: rgba(111, 202, 134, 0.55);
+  background: rgba(111, 202, 134, 0.12);
+}
+.btn--bad {
+  color: var(--red);
+  border-color: rgba(234, 109, 99, 0.55);
+  background: rgba(234, 109, 99, 0.12);
+}
+
 .btn-row { display: flex; gap: 10px; }
 
 /* ------------------------- allenamento --------------------------- */

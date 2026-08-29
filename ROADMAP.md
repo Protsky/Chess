@@ -122,9 +122,28 @@ documentata e pubblicata**.
       Chess Test; il percorso si riordina attorno all'asse debole, come il
       settore riordina le unità in *Frasi*. *(Riuso di `lingua/assets/js/irt.js`.)*
 
-- [ ] **6. Sicurezza e vista (L0-L1)** — item generati dal motore, senza corpus:
-      colore della casa, cavallo in *n* mosse, chi attacca una casa, pezzi in
-      presa, matto in uno.
+- [x] **6. Sicurezza e vista (L0-L1)** — *portata avanti nell'ordine*, perché
+      l'app faceva cominciare dalla tattica: misurate, le prime quaranta
+      posizioni che serviva a un principiante erano nove sacrifici, sette
+      forchette e due mosse in media da trovare. Il primo gradino non c'era.
+      Fatto: `basics.js` genera gli item dal motore, senza corpus — colore della
+      casa, nome della casa illuminata, salti del cavallo (visita in ampiezza) —
+      e ricava da posizioni vere «quale pezzo puoi prendere senza perdere
+      niente», dove *gratis* vuol dire cattura **legale** su una casa che
+      nessuno difende, calcolato e non stimato (`attackersOf` nuovo nel motore).
+      In più: partenza morbida della tattica (finché il punteggio è provvisorio,
+      solo posizioni a una mossa e motivi elementari) e criteri d'uscita letti
+      dal registro — 18 su 20 con mediana sotto i 3 secondi per L0, punteggio
+      800 e al massimo un errore sulle ultime venti per L1.
+      Provato: 119 controlli in `validate-percorso.mjs` (fra cui il ricalcolo
+      indipendente di ogni distanza del cavallo, di ogni colore di casa e di
+      tutte le catture del livello 1) e nel browser una sessione intera di L0
+      con le risposte ricalcolate dal test, tre item di L1 risolti e uno
+      sbagliato di proposito.
+      Trovati e corretti mentre si provava: alcune domande sul cavallo non
+      avevano nessuna risposta giusta fra le opzioni (la distanza massima è sei,
+      le opzioni arrivavano a quattro), e le prime sei domande erano tutte dello
+      stesso tipo perché il serbatoio non era mescolato.
 
 - [ ] **7. Finali con la tavola (L2)** — giocati fino in fondo contro la difesa
       migliore, corretti **per esito** e non per mossa preferita.
