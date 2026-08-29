@@ -22,7 +22,7 @@ globalThis.localStorage = {
 const Store = await import('../assets/js/store.js');
 const Rating = await import('../assets/js/rating.js');
 const Tactics = await import('../assets/js/tactics.js');
-const { createScheduler, newCard, AGAIN, HARD, GOOD, EASY } = await import('../assets/js/fsrs.js');
+const { createScheduler, newCard, AGAIN, HARD, GOOD, EASY, DEFAULT_W } = await import('../assets/js/fsrs.js');
 const { PUZZLES } = await import('../assets/js/puzzles.js');
 
 let checks = 0;
@@ -200,6 +200,107 @@ near(state.rating, TRUE_SKILL, 150, 'dopo 300 risposte la stima non arriva alla 
 near(lateSolved / lateCount, Rating.TARGET_SUCCESS, 0.12,
   'a regime la quota di risposte giuste non sta al bersaglio');
 ok(solved > 150, 'con la difficoltà tarata si dovrebbe risolvere la maggioranza delle posizioni');
+
+/* ------------------- 7. registro, statistiche, taratura ------------------- */
+
+const Stats = await import('../assets/js/stats.js');
+const Optimizer = await import('../assets/js/optimizer.js');
+
+memory.clear();
+
+/*
+ * Si finge un mese di studio: dieci carte, un ripasso al giorno ciascuna, con
+ * un errore ogni sei. Serve a due cose — che il registro regga i conti, e che
+ * l'ottimizzatore, rigiocando quelle storie, non peggiori le previsioni.
+ */
+const sim = createScheduler({ random: () => 0.5 });
+const T0 = Date.UTC(2026, 6, 1, 8, 0, 0);
+let risposte = 0;
+
+for (let c = 0; c < 10; c++) {
+  let carta = newCard(`t:sim${c}`);
+  for (let giorno = 0; giorno < 12; giorno++) {
+    const quando = T0 + (giorno * 2 + c % 2) * DAY;
+    const voto = (c + giorno) % 6 === 0 ? AGAIN : GOOD;
+    const eraReview = carta.state === 'review';
+    const nuova = carta.reps === 0;
+    carta = sim.review(carta, voto, quando);
+    Store.saveCard(carta);
+    Store.logReview({
+      id: carta.id, t: quando, g: voto, isNew: nuova, wasReview: eraReview,
+      correct: voto !== AGAIN, ivl: carta.ivl, theme: c % 2 ? 'fork' : 'pin', rating: 900 + giorno * 5,
+    });
+    risposte += 1;
+  }
+}
+
+ok(Store.getLog().length === risposte, 'il registro non ha tenuto tutte le risposte');
+ok(Store.allCards(Tactics.PREFIX).length === 10, 'le carte simulate non sono tutte salvate');
+
+const perGiorno = Stats.reviewsByDay(Store.getLog(), 14);
+ok(perGiorno.length === 14, 'le risposte per giorno non coprono la finestra chiesta');
+ok(perGiorno.every((d) => d.ok + d.again === d.total), 'tenute e da rifare non tornano col totale');
+
+const previsione = Stats.forecast(Store.allCards(Tactics.PREFIX), 14);
+ok(previsione.length === 14 && previsione.every((d) => d.total >= 0), 'la previsione delle scadenze è malformata');
+
+const maturita = Stats.stateCounts(Store.allCards(Tactics.PREFIX));
+ok(maturita.total === 10 && maturita.learning + maturita.young + maturita.mature === 10,
+  'la distribuzione per maturità non somma alle carte');
+
+const motivi = Stats.byTheme(Store.getLog());
+ok(motivi.length === 2 && motivi.every((m) => m.rate >= 0 && m.rate <= 1), 'la resa per motivo non torna');
+ok(motivi[0].rate <= motivi[1].rate, 'i motivi vanno dal peggiore al migliore');
+
+// La ritenzione vera si calcola solo sui ripassi di carte già mature.
+const ritenzione = Stats.trueRetention(Store.getLog(), 3650);
+ok(ritenzione && ritenzione.n > 0 && ritenzione.rate > 0.5, 'la ritenzione vera non è calcolabile sui dati simulati');
+ok(Stats.trueRetention([], 30) === null, 'senza ripassi la ritenzione deve essere nulla, non zero');
+
+// Ottimizzatore: rigioca le storie e non deve peggiorare l'errore di previsione.
+const storie = Optimizer.replay(Store.getLog());
+ok(storie.length === 10, `dal registro dovrebbero uscire 10 storie, ne escono ${storie.length}`);
+const prima = Optimizer.score(storie, DEFAULT_W);
+const tarato = Optimizer.optimize(storie, { passes: 2 });
+const dopo = Optimizer.score(storie, tarato.w);
+ok(dopo.logLoss <= prima.logLoss + 1e-9, 'la taratura ha peggiorato le previsioni');
+ok(tarato.w.length === 19 && tarato.w.every(Number.isFinite), 'i pesi tarati non sono 19 numeri validi');
+
+Store.setWeights(tarato.w, { reviews: risposte });
+ok(Store.getWeights().length === 19, 'i pesi tarati non si rileggono');
+const suoi = createScheduler({ w: Store.getWeights(), requestRetention: 0.9 });
+ok(suoi.review(newCard('t:x'), GOOD, T0).due > T0, 'lo scheduler non parte con i pesi tarati');
+Store.clearWeights();
+ok(Store.getWeights() === null, 'i pesi di serie non tornano dopo il ripristino');
+
+/* --------------------------- 8. backup: fuori e dentro -------------------- */
+
+const backup = Store.exportJson();
+const info = Store.inspectBackup(backup);
+ok(info.carte === 10, `il backup dovrebbe contenere 10 carte, ne dichiara ${info.carte}`);
+ok(info.ripassi === risposte, 'il backup non contiene tutto il registro');
+
+const prontuario = {
+  cards: Store.allCards(Tactics.PREFIX).length,
+  log: Store.getLog().length,
+  settings: Store.getSettings().retention,
+};
+
+Store.reset();
+ok(Store.allCards(Tactics.PREFIX).length === 0, 'l’azzeramento non ha tolto le carte');
+
+Store.importJson(backup);
+ok(Store.allCards(Tactics.PREFIX).length === prontuario.cards, 'l’import non ha rimesso le carte');
+ok(Store.getLog().length === prontuario.log, 'l’import non ha rimesso il registro');
+ok(Store.getSettings().retention === prontuario.settings, 'l’import non ha rimesso le impostazioni');
+
+// Un backup di un'altra app, o un file qualunque, non deve entrare.
+let respinto = 0;
+for (const cattivo of ['{}', '[]', 'non json', JSON.stringify({ app: 'frasi', cards: {} })]) {
+  try { Store.inspectBackup(cattivo); } catch { respinto += 1; }
+}
+ok(respinto === 4, `dovrebbero essere respinti 4 file non validi, ne sono stati respinti ${respinto}`);
+ok(Store.allCards(Tactics.PREFIX).length === prontuario.cards, 'un file rifiutato ha comunque toccato i dati');
 
 /* -------------------------------- verdetto ------------------------------- */
 

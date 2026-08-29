@@ -18,10 +18,35 @@ const DEFAULTS = {
   cards: {},          // id carta -> stato FSRS (vedi fsrs.js)
   rating: {},         // asse -> { rating, attempts }
   counts: {},         // asse -> { done, correct }
-  settings: { notation: 'it', sounds: true, showMoves: true },
+  log: [],            // registro dei ripassi: senza, niente ritenzione vera né taratura
+  daily: { day: null, introduced: 0, reviewed: 0 },
+  streak: { count: 0, last: null },
+  fsrs: { w: null, fittedAt: null, reviews: 0 },   // pesi tarati sui propri ripassi
+  settings: {
+    notation: 'it',
+    sounds: true,
+    showMoves: true,
+    newPerDay: 8,     // quante posizioni nuove al giorno: il nuovo costa più del ripasso
+    retention: 0.9,   // probabilità di ricordare a cui si punta quando arriva la scadenza
+  },
   lastOpening: null,
   trainings: 0,
 };
+
+/*
+ * Il registro non cresce all'infinito: tremila risposte bastano e avanzano per
+ * misurare la ritenzione e rifare i pesi, e stanno larghe dentro localStorage.
+ */
+const LOG_MAX = 3000;
+
+const DAY = 86400000;
+
+/** Giorno locale in forma AAAA-MM-GG: le giornate contano dove sei tu, non a Greenwich. */
+export function dayKey(ts = Date.now()) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 const EMPTY_PROGRESS = { stars: 0, best: 0, attempts: 0, lastAt: null };
 
@@ -55,6 +80,10 @@ function read() {
       cards: state.cards || {},
       rating: state.rating || {},
       counts: state.counts || {},
+      log: state.log || [],
+      daily: { ...DEFAULTS.daily, ...(state.daily || {}) },
+      streak: { ...DEFAULTS.streak, ...(state.streak || {}) },
+      fsrs: { ...DEFAULTS.fsrs, ...(state.fsrs || {}) },
     };
   } catch {
     return structuredClone(DEFAULTS);
@@ -201,6 +230,128 @@ export function addCount(axis, correct) {
     state.counts[axis] = c;
     return c;
   });
+}
+
+/* ------------------------- registro dei ripassi -------------------------- */
+
+/**
+ * Registra una risposta. È la riga che permette poi di dire due cose che
+ * altrimenti sarebbero opinioni: quanta parte dei ripassi arrivati a scadenza
+ * è andata bene (la ritenzione vera), e quali pesi di FSRS spiegano meglio
+ * *i tuoi* ripassi invece di quelli di tutti.
+ *
+ *   { id, t, g, isNew, wasReview, correct, ivl }
+ */
+export function logReview(entry) {
+  return edit((state) => {
+    state.log.push(entry);
+    if (state.log.length > LOG_MAX) state.log.splice(0, state.log.length - LOG_MAX);
+
+    const today = dayKey(entry.t);
+    if (state.daily.day !== today) state.daily = { day: today, introduced: 0, reviewed: 0 };
+    state.daily.reviewed += 1;
+    if (entry.isNew) state.daily.introduced += 1;
+
+    if (state.streak.last !== today) {
+      const yesterday = dayKey(entry.t - DAY);
+      state.streak.count = state.streak.last === yesterday ? state.streak.count + 1 : 1;
+      state.streak.last = today;
+    }
+    return state.daily;
+  });
+}
+
+export function getLog() {
+  return read().log;
+}
+
+/** Conteggi di oggi: se il giorno è cambiato, sono zero. */
+export function getDaily() {
+  const state = read();
+  const today = dayKey();
+  return state.daily.day === today ? state.daily : { day: today, introduced: 0, reviewed: 0 };
+}
+
+/** Giorni di fila: vale oggi o ieri, altrimenti la serie è rotta. */
+export function getStreak() {
+  const { streak } = read();
+  if (!streak.last) return 0;
+  const today = dayKey();
+  return streak.last === today || streak.last === dayKey(Date.now() - DAY) ? streak.count : 0;
+}
+
+/* ---------------------------- pesi tarati in casa ------------------------- */
+
+export function getFsrs() {
+  return read().fsrs;
+}
+
+/** Pesi da usare: i tuoi se sono stati tarati, altrimenti quelli di serie. */
+export function getWeights() {
+  const { fsrs } = read();
+  return Array.isArray(fsrs.w) && fsrs.w.length === 19 ? fsrs.w : null;
+}
+
+export function setWeights(w, meta = {}) {
+  return edit((state) => {
+    state.fsrs = { w, fittedAt: Date.now(), ...meta };
+    return state.fsrs;
+  });
+}
+
+export function clearWeights() {
+  edit((state) => { state.fsrs = { w: null, fittedAt: null, reviews: 0 }; });
+}
+
+/* --------------------------- backup: esporta e importa -------------------- */
+
+/**
+ * Tutto sta su questo telefono e basta. Il backup è l'unica cosa che sopravvive
+ * a un telefono nuovo, alla cronologia cancellata o a Safari che libera spazio
+ * (in iOS il deposito di un sito non usato per sette settimane può sparire).
+ */
+export function exportJson() {
+  const state = read();
+  return JSON.stringify({
+    app: 'aperture-scacchi',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    ...state,
+  }, null, 2);
+}
+
+/** Che cosa c'è dentro un backup, senza importarlo: si guarda prima di sovrascrivere. */
+export function inspectBackup(text) {
+  const parsed = JSON.parse(text);
+  if (!parsed || typeof parsed !== 'object') throw new Error('non è un file JSON');
+  if (parsed.app && parsed.app !== 'aperture-scacchi') throw new Error(`è il backup di un'altra app (${parsed.app})`);
+  if (!parsed.cards && !parsed.progress) throw new Error('non contiene né carte né progressi');
+  return {
+    parsed,
+    esportato: parsed.exportedAt || null,
+    carte: Object.keys(parsed.cards || {}).length,
+    aperture: Object.keys(parsed.progress || {}).length,
+    ripassi: (parsed.log || []).length,
+    punteggio: parsed.rating?.tattica?.rating ?? null,
+  };
+}
+
+/** Sostituisce tutto con il backup. Chi chiama deve aver chiesto conferma. */
+export function importJson(text) {
+  const { parsed } = inspectBackup(text);
+  const clean = { ...parsed };
+  delete clean.app;
+  delete clean.exportedAt;
+  write({
+    ...structuredClone(DEFAULTS),
+    ...clean,
+    version: 2,
+    settings: { ...DEFAULTS.settings, ...(parsed.settings || {}) },
+    daily: { ...DEFAULTS.daily, ...(parsed.daily || {}) },
+    streak: { ...DEFAULTS.streak, ...(parsed.streak || {}) },
+    fsrs: { ...DEFAULTS.fsrs, ...(parsed.fsrs || {}) },
+  });
+  return inspectBackup(text);
 }
 
 /* --------------------------------- azzera -------------------------------- */

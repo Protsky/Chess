@@ -30,6 +30,35 @@ posizioni**: prima le carte scadute, poi materiale nuovo.
   contare una seconda volta per il punteggio: una carta appena vista risolvere
   non è una prova indipendente.
 
+### 📈 Statistiche e backup
+
+La ripetizione dilazionata è un modello che fa promesse: «questa posizione la
+ricorderai fra sedici giorni con il 90% di probabilità». La pagina delle
+statistiche serve a controllare se quelle promesse le mantiene.
+
+- **Ritenzione vera** — quanti dei ripassi arrivati a scadenza sono andati bene,
+  accanto alla ritenzione che hai chiesto. Se le due si scostano, sono le
+  scadenze a essere sbagliate, non tu.
+- **Risposte per giorno**, **scadenze in arrivo** (14 giorni), **andamento del
+  punteggio** e **i motivi che scappano**: quale tema continui a sbagliare, che
+  in sessione non si può vedere perché i motivi sono mescolati.
+- **Taratura di FSRS sui tuoi ripassi.** I 19 pesi di serie vengono dai ripassi
+  di altri; sopra 120 ripassi utilizzabili si possono rifare sui tuoi, con una
+  discesa a coordinate che gira sul telefono. La pagina mostra l'errore di
+  previsione prima e dopo e la curva di calibrazione: previsto contro accaduto.
+  Sotto quella soglia il bottone non compare — sarebbe rumore, non taratura.
+- **Backup.** Tutto sta su questo telefono e basta: nessun account, nessun
+  server. Da *Impostazioni* si esporta un file JSON (o si copia negli appunti) e
+  lo si rimette da file o incollandolo. Prima di sovrascrivere, l'app dice che
+  cosa c'è dentro il backup — data, carte, ripassi, punteggio — e chiede
+  conferma. Serve davvero: in iOS il deposito di un sito non aperto per sette
+  settimane può essere liberato.
+
+Due parametri, in *Impostazioni*: **posizioni nuove al giorno** (il materiale
+nuovo genera i ripassi dei mesi prossimi: il tetto è ciò che tiene la coda di
+domani a una misura fattibile) e **ritenzione richiesta** (85, 90 o 95%). Il
+secondo cambia direttamente gli intervalli, quindi cambia quanto lavoro fai.
+
 ### 📖 Aperture — impara e allena
 
 Il repertorio di sempre: 33 aperture, tutte con linea principale, idea, piano e
@@ -83,9 +112,12 @@ assets/js/openings.js    il repertorio (dati)
 assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)
 assets/js/board.js       scacchiera interattiva (tocco-tocco)
 assets/js/fsrs.js        ripetizione dilazionata (FSRS-5), la stessa macchina di Frasi
+assets/js/optimizer.js   rifà i 19 pesi di FSRS sui propri ripassi
+assets/js/stats.js       ritenzione vera, scadenze, motivi deboli: numeri sui dati veri
+assets/js/chart.js       grafici in SVG, senza librerie
 assets/js/rating.js      forza e difficoltà sulla stessa scala, aggiornate insieme
 assets/js/tactics.js     coda della sessione e voto di ogni risposta (niente DOM)
-assets/js/store.js       progressi, carte e impostazioni su localStorage (v2)
+assets/js/store.js       progressi, carte, registro dei ripassi e backup (localStorage v2)
 assets/js/app.js         navigazione, Impara, Allena, Tattica
 sw.js                    cache offline
 tools/                   validazione, prove end-to-end, generatore del corpus e delle icone

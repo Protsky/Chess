@@ -76,6 +76,25 @@ documentata e pubblicata**.
       volta per il punteggio (non è una prova indipendente), e la sessione non
       cresce oltre 20 posizioni.
 
+- [x] **3b. Il quaderno: registro, statistiche, taratura e backup** — la parte
+      di *Frasi* che rende controllabile lo scheduler, portata di qua.
+      Fatto: registro dei ripassi (fino a 3000, con voto, scadenza, motivo e
+      punteggio); pagina **Statistiche** con ritenzione vera contro ritenzione
+      richiesta, risposte per giorno, scadenze in arrivo, andamento del
+      punteggio e motivi deboli; **taratura di FSRS sui propri ripassi**
+      (`optimizer.js`, discesa a coordinate, soglia dichiarata a 120 ripassi)
+      con errore di previsione prima/dopo e curva di calibrazione; due
+      impostazioni che contano davvero — posizioni nuove al giorno e ritenzione
+      richiesta — e una schermata «per oggi basta» che spiega perché il tetto
+      esiste, invece di una coda vuota; **backup** in JSON, esportabile su file
+      o negli appunti, reimportabile da file o incollato, con anteprima di che
+      cosa contiene e conferma prima di sovrascrivere.
+      Provato: 83 controlli in `validate-percorso.mjs` (registro, statistiche,
+      ottimizzatore che non peggiora le previsioni, andata e ritorno del backup,
+      quattro file non validi respinti) e nel browser — segmenti che scrivono le
+      impostazioni, azzeramento e reimport, tetto giornaliero che ferma la
+      sessione, forzatura che la riapre.
+
 - [ ] **4. C'è o non c'è** — un quarto delle posizioni è quieto e la risposta
       giusta è «nessuna combinazione». Serve un criterio verificabile di
       «quieta»: una ricerca di quiescenza sul motore di casa, o una valutazione

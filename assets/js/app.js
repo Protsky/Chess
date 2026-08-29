@@ -7,7 +7,10 @@ import { Board } from './board.js';
 import * as Store from './store.js';
 import * as Tactics from './tactics.js';
 import * as Rating from './rating.js';
-import { createScheduler, newCard } from './fsrs.js';
+import { createScheduler, newCard, DEFAULT_W } from './fsrs.js';
+import * as Stats from './stats.js';
+import * as Chart from './chart.js';
+import * as Optimizer from './optimizer.js';
 
 /* ------------------------------- utilità ------------------------------- */
 
@@ -155,6 +158,7 @@ function renderHome() {
     </button>
     <div class="section-title">Aperture</div>
     <div class="stack" id="levels"></div>
+    <button class="btn btn--ghost" data-go="#/statistiche">📈 Come sta andando</button>
     <p class="hint-text">Suggerimento: da Safari tocca <strong>Condividi ▸ Aggiungi a Home</strong> per usare l’app a schermo intero, anche offline.</p>
   </div>`);
 
@@ -585,7 +589,19 @@ function renderTraining(queue, backHash, title) {
 
 /* --------------------------------- tattica ------------------------------ */
 
-const scheduler = createScheduler();
+/*
+ * Lo scheduler si costruisce all'inizio di ogni sessione, non una volta sola:
+ * la ritenzione richiesta e i pesi tarati in casa si possono cambiare fra una
+ * sessione e l'altra, e uno scheduler nato con i valori vecchi continuerebbe a
+ * dare scadenze che nessuno ha più chiesto.
+ */
+function makeScheduler() {
+  const w = Store.getWeights();
+  return createScheduler({
+    requestRetention: Store.getSettings().retention,
+    ...(w ? { w } : {}),
+  });
+}
 
 /** Stato del punteggio tattico: quello vero, o quello di partenza se non c'è. */
 function tacticState() {
@@ -597,17 +613,28 @@ function isMate(state) {
   return inCheck(state) && legalMoves(state).length === 0;
 }
 
-function renderTacticsSession() {
+function renderTacticsSession({ extraNew = 0 } = {}) {
   const now = Date.now();
   const state = tacticState();
   const cards = Store.allCards(Tactics.PREFIX);
+  const scheduler = makeScheduler();
+
+  /*
+   * Il tetto giornaliero al materiale nuovo non è un dettaglio di comodo: ogni
+   * posizione nuova genera i ripassi dei prossimi mesi, quindi la coda di
+   * domani la si decide oggi. Si può sfondare, ma dicendolo.
+   */
+  const daily = Store.getDaily();
+  const roomToday = Math.max(0, Store.getSettings().newPerDay - daily.introduced) + extraNew;
+  const due = Store.dueCards(Tactics.PREFIX, now);
   const queue = Tactics.buildQueue({
-    due: Store.dueCards(Tactics.PREFIX, now),
+    due,
     known: new Set(cards.map((c) => c.id)),
     rating: state.rating,
+    maxNew: Math.min(Tactics.MAX_NEW, roomToday),
   });
 
-  if (!queue.length) return renderHome();
+  if (!queue.length) return renderTacticsEmpty({ cards, daily, now });
 
   setBar({ title: 'Tattica', back: '#/', action: { label: '⇅', aria: 'Gira la scacchiera', onClick: () => board.flip() } });
 
@@ -789,6 +816,18 @@ function renderTacticsSession() {
       Store.addCount(Tactics.AXIS, correct);
     }
 
+    Store.logReview({
+      id: card.id,
+      t: Date.now(),
+      g: grade,
+      isNew: !before.reps,
+      wasReview: before.state === 'review',
+      correct,
+      ivl: card.ivl,
+      theme: current.puzzle.t,
+      ...(first ? { rating: next.rating } : {}),
+    });
+
     results[current.index] = { correct, seconds, first, delta: next.delta, card, puzzle: current.puzzle };
 
     // Una carta sbagliata non finisce la giornata qui: torna in fondo alla coda.
@@ -868,9 +907,243 @@ function renderTacticsSession() {
   loadItem(0);
 }
 
+/* --------------------- niente in coda: e va detto bene ------------------- */
+
+/**
+ * Non è una schermata di errore: è il momento in cui il metodo sta funzionando.
+ * Le scadenze non sono ancora arrivate e il tetto giornaliero al materiale nuovo
+ * è stato raggiunto. Si può forzare — ma sapendo che le posizioni in più
+ * torneranno tutte, e che la coda di domani si sta decidendo adesso.
+ */
+function renderTacticsEmpty({ cards, daily, now }) {
+  setBar({ title: 'Tattica', back: '#/' });
+
+  const prossima = cards
+    .map((c) => c.due || 0)
+    .filter((d) => d > now)
+    .sort((a, b) => a - b)[0];
+
+  const quando = prossima
+    ? (() => {
+      const ore = (prossima - now) / 3600000;
+      if (ore < 1) {
+        const minuti = Math.max(1, Math.round(ore * 60));
+        return `fra ${minuti} ${minuti === 1 ? 'minuto' : 'minuti'}`;
+      }
+      if (ore < 24) {
+        const tonde = Math.round(ore);
+        return `fra ${tonde} ${tonde === 1 ? 'ora' : 'ore'}`;
+      }
+      const giorni = Math.round(ore / 24);
+      return `fra ${giorni} ${giorni === 1 ? 'giorno' : 'giorni'}`;
+    })()
+    : null;
+
+  const settings = Store.getSettings();
+
+  const view = h(`<div class="stack">
+    <div class="hero">
+      <h1>Per oggi basta</h1>
+      <p>${daily.introduced
+        ? `Hai già introdotto <strong>${daily.introduced}</strong> ${daily.introduced === 1 ? 'posizione nuova' : 'posizioni nuove'}, il tetto che ti sei dato.`
+        : 'Non ci sono carte in scadenza adesso.'}
+      ${quando ? ` La prossima torna <strong>${quando}</strong>.` : ''}</p>
+    </div>
+    <div class="note">
+      <div class="note__label">Perché non ti do altro</div>
+      Ogni posizione nuova non finisce oggi: genera i ripassi delle settimane prossime. Il tetto giornaliero è ciò che tiene la coda
+      di domani a una misura che si riesce a fare — ed è l'unico modo perché «ripassare» resti dieci minuti e non un'ora.
+    </div>
+    <button class="btn" id="more">Studia lo stesso 5 posizioni nuove</button>
+    <button class="btn btn--ghost" data-go="#/statistiche">Guarda come sta andando ›</button>
+    <button class="btn btn--ghost" data-go="#/impostazioni">Cambia il tetto (ora ${settings.newPerDay} al giorno) ›</button>
+    <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+  </div>`);
+
+  view.querySelector('#more').onclick = () => renderTacticsSession({ extraNew: 5 });
+  mount(view);
+}
+
+/* ------------------------------ statistiche ----------------------------- */
+
+/** Toccare un segno di un grafico ne scrive il valore sotto. */
+function wireCharts(root) {
+  root.querySelectorAll('.chart-card').forEach((card) => {
+    const out = card.querySelector('.chart__readout');
+    if (!out) return;
+    const show = (e) => {
+      const mark = e.target.closest('[data-readout]');
+      if (mark) out.textContent = mark.dataset.readout;
+    };
+    card.addEventListener('pointerdown', show);
+    card.addEventListener('pointermove', show);
+  });
+}
+
+const pct = (x) => `${Math.round(x * 100)}%`;
+
+function renderStats() {
+  setBar({ title: 'Statistiche', back: '#/' });
+
+  const log = Store.getLog();
+  const cards = Store.allCards(Tactics.PREFIX);
+  const settings = Store.getSettings();
+  const rating = tacticState();
+  const counts = Store.getCounts(Tactics.AXIS);
+  const daily = Store.getDaily();
+  const streak = Store.getStreak();
+  const fsrs = Store.getFsrs();
+
+  const retention = Stats.trueRetention(log);
+  const state = Stats.stateCounts(cards);
+  const stability = Stats.medianStability(cards);
+  const perDay = Stats.reviewsByDay(log, 14);
+  const forecast = Stats.forecast(cards, 14);
+  const trend = Stats.ratingTrend(log, 30);
+  const themes = Stats.byTheme(log);
+  const sequences = Optimizer.replay(log);
+  const reviewCount = sequences.reduce((sum, s) => sum + s.length, 0);
+
+  const view = h(`<div class="stack">
+    <div class="hero">
+      <h1>Come sta andando</h1>
+      <p>Tutto quello che c'è qui è calcolato sulle tue risposte. Dove i dati non bastano, lo dice invece di inventare una media.</p>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat__value stat__value--gold">${rating.rating}</div><div class="stat__label">Punteggio</div></div>
+      <div class="stat"><div class="stat__value">${streak}</div><div class="stat__label">Giorni di fila</div></div>
+      <div class="stat"><div class="stat__value">${daily.reviewed}</div><div class="stat__label">Oggi</div></div>
+    </div>
+
+    <div class="section-title">La misura che conta</div>
+    <div class="note">
+      <div class="note__label">Ritenzione vera</div>
+      ${retention
+        ? `Dei ripassi arrivati a scadenza negli ultimi 30 giorni ne hai indovinati il
+           <strong>${pct(retention.rate)}</strong> (su ${retention.n}). Ne avevi chiesti il
+           <strong>${pct(settings.retention)}</strong>.
+           ${Math.abs(retention.rate - settings.retention) < 0.07
+             ? 'Le scadenze cadono dove dovrebbero.'
+             : retention.rate < settings.retention
+               ? 'Gli intervalli sono lunghi rispetto a quello che chiedi: taralli sui tuoi ripassi, o alza la ritenzione.'
+               : 'Stai ripassando prima del necessario: potresti chiedere una ritenzione più bassa e vedere meno carte.'}`
+        : 'Ancora nessun ripasso arrivato a scadenza: questa misura compare quando le prime carte tornano, fra qualche giorno.'}
+    </div>
+
+    <div class="section-title">Le carte</div>
+    <div class="stats">
+      <div class="stat"><div class="stat__value">${state.learning}</div><div class="stat__label">In corso</div></div>
+      <div class="stat"><div class="stat__value">${state.young}</div><div class="stat__label">Giovani</div></div>
+      <div class="stat"><div class="stat__value">${state.mature}</div><div class="stat__label">Mature</div></div>
+    </div>
+    <p class="hint-text">Matura = intervallo di almeno 21 giorni.${
+      stability ? ` Stabilità mediana: <strong>${stability < 1 ? stability.toFixed(1) : Math.round(stability)} giorni</strong> — è l'intervallo al quale la probabilità di ricordare vale 0,9.` : ''
+    }</p>
+
+    <div class="section-title">Le risposte, giorno per giorno</div>
+    <div class="card chart-card">
+      <div class="chart-wrap">${Chart.bars({
+        rows: perDay.map((d) => ({
+          label: d.label,
+          values: [d.ok, d.again],
+          readout: `${d.label} ${d.month}: ${d.total} risposte, ${d.again} da rifare`,
+        })),
+        names: ['tenute', 'da rifare'],
+      })}</div>
+      <div class="chart__readout muted">${Chart.legend(['tenute', 'da rifare'])}</div>
+    </div>
+
+    <div class="section-title">Che cosa scade</div>
+    <div class="card chart-card">
+      <div class="chart-wrap">${Chart.bars({
+        rows: forecast.map((d) => ({ label: d.label, values: [d.total], readout: `${d.label}: ${d.total} carte` })),
+        names: ['in scadenza'],
+      })}</div>
+      <div class="chart__readout muted">Prossimi 14 giorni · ${Stats.estimateMinutes(forecast[0].total)} min oggi, se le fai tutte</div>
+    </div>
+
+    ${trend.length > 1 ? `<div class="section-title">Il punteggio</div>
+    <div class="card chart-card">
+      <div class="chart-wrap">${Chart.line({
+        points: trend.map((d, i) => ({ x: i, y: d.rating, readout: `${d.label}: ${d.rating}` })),
+        xLabels: trend.map((d) => d.label),
+      })}</div>
+      <div class="chart__readout muted">Ultimo valore di ogni giornata</div>
+    </div>` : ''}
+
+    ${themes.length ? `<div class="section-title">I motivi che scappano</div>
+    <div class="stack" id="themes"></div>
+    <p class="hint-text">Solo i motivi visti almeno tre volte. In sessione restano comunque mescolati: qui si guardano, non si allenano a blocchi.</p>` : ''}
+
+    <div class="section-title">La taratura</div>
+    <div class="note" id="fit">
+      <div class="note__label">FSRS sui tuoi ripassi</div>
+      ${reviewCount >= Optimizer.MIN_REVIEWS
+        ? `Hai ${reviewCount} ripassi utilizzabili${reviewCount < Optimizer.GOOD_REVIEWS ? ' (sopra i 400 i pesi cominciano a dire qualcosa di stabile)' : ''}.
+           ${fsrs.fittedAt ? `Ultima taratura: ${new Date(fsrs.fittedAt).toLocaleDateString('it-CH')} su ${fsrs.reviews || '?'} ripassi.` : 'Ora usi i pesi di serie, che vengono dai ripassi di altri.'}`
+        : `Servono almeno ${Optimizer.MIN_REVIEWS} ripassi a distanza di giorni per rifare i pesi: ne hai ${reviewCount}. Sotto quella soglia sarebbe rumore, non taratura.`}
+    </div>
+    ${reviewCount >= Optimizer.MIN_REVIEWS ? `<button class="btn" id="fit-run">⚙︎ Ricalibra sui miei ripassi</button>` : ''}
+    ${fsrs.w ? `<button class="btn btn--ghost" id="fit-clear">Torna ai pesi di serie</button>` : ''}
+    <div id="fit-out"></div>
+
+    <button class="btn btn--ghost" data-go="#/impostazioni">Impostazioni e backup ›</button>
+  </div>`);
+
+  const themeList = view.querySelector('#themes');
+  if (themeList) {
+    for (const row of themes.slice(0, 8)) {
+      themeList.appendChild(h(`<div class="card recap">
+        <span class="recap__name">${esc(Tactics.themeName({ t: row.theme }))}</span>
+        <span class="tag${row.rate < 0.5 ? ' tag--gold' : ''}">${pct(row.rate)}</span>
+        <span class="recap__link">${row.ok}/${row.n}</span>
+      </div>`));
+    }
+  }
+
+  const run = view.querySelector('#fit-run');
+  if (run) {
+    run.onclick = () => {
+      run.disabled = true;
+      run.textContent = 'Sto rifacendo i conti…';
+      const out = view.querySelector('#fit-out');
+      // Un giro di respiro prima di bloccare il thread: il bottone deve cambiare
+      // faccia prima che il telefono si metta a macinare.
+      later(() => {
+        const prima = Optimizer.score(sequences, Store.getWeights() || DEFAULT_W);
+        const fitted = Optimizer.optimize(sequences, { start: Store.getWeights() || DEFAULT_W });
+        const dopo = Optimizer.score(sequences, fitted.w);
+        Store.setWeights(fitted.w, { reviews: reviewCount });
+        out.innerHTML = `<div class="card chart-card">
+          <div class="note__label">Prima e dopo, sugli stessi ripassi</div>
+          <p class="hint-text">Errore medio della previsione: <strong>${prima.logLoss.toFixed(4)}</strong> →
+            <strong>${dopo.logLoss.toFixed(4)}</strong>${dopo.rmse != null ? ` · scarto di calibrazione ${pct(dopo.rmse)}` : ''}.
+            ${fitted.improvement > 0.001 ? 'I nuovi pesi spiegano meglio i tuoi ripassi e sono stati salvati.' : 'Il guadagno è minimo: i pesi di serie ti descrivevano già bene.'}</p>
+          <div class="chart-wrap chart-wrap--square">${Chart.calibration({ bins: Optimizer.calibration(dopo.rows) })}</div>
+          <div class="chart__readout muted">Previsto contro accaduto: più i punti stanno sulla diagonale, più le scadenze sono oneste.</div>
+        </div>`;
+        run.textContent = '✓ Ricalibrato';
+        wireCharts(out);
+      }, 60);
+    };
+  }
+
+  const clear = view.querySelector('#fit-clear');
+  if (clear) {
+    clear.onclick = () => {
+      Store.clearWeights();
+      renderStats();
+    };
+  }
+
+  mount(view);
+  wireCharts(view);
+}
+
 /* ------------------------------ impostazioni ---------------------------- */
 
-function renderSettings() {
+function renderSettings(message = '') {
   const settings = Store.getSettings();
   setBar({ title: 'Impostazioni', back: '#/' });
 
@@ -894,11 +1167,44 @@ function renderSettings() {
       </div>
       <button class="switch" id="showMoves" role="switch" aria-checked="${settings.showMoves}" aria-label="Elenco mosse"></button>
     </div>
+    <div class="section-title">Studio</div>
+    <div class="setting setting--stack">
+      <div class="setting__label">Posizioni nuove al giorno
+        <div class="setting__hint">Il materiale nuovo costa molto più del ripasso: ogni carta nuova torna, e la coda di domani la fai tu oggi.</div>
+      </div>
+      <div class="seg" id="newPerDay">
+        ${[4, 8, 12, 20].map((n) => `<button class="seg__btn${settings.newPerDay === n ? ' seg__btn--on' : ''}" data-val="${n}">${n}</button>`).join('')}
+      </div>
+    </div>
+    <div class="setting setting--stack">
+      <div class="setting__label">Ritenzione richiesta
+        <div class="setting__hint">La probabilità di ricordare quando la posizione torna. Più alta = meno dimenticanze e molte più ripetizioni; più bassa = meno lavoro e più buchi.</div>
+      </div>
+      <div class="seg" id="retention">
+        ${[0.85, 0.9, 0.95].map((r) => `<button class="seg__btn${Math.abs(settings.retention - r) < 0.001 ? ' seg__btn--on' : ''}" data-val="${r}">${Math.round(r * 100)}%</button>`).join('')}
+      </div>
+    </div>
+    <p class="hint-text">La ritenzione vera, misurata sui tuoi ripassi, sta in <a href="#/statistiche">Statistiche</a>: è lì che si vede se le scadenze cadono dove dovrebbero.</p>
+
     <div class="section-title">Dati</div>
     <div class="note">
-      Allenamenti completati: <strong>${Store.totalTrainings()}</strong> · stelle totali: <strong>${Store.summarize(OPENINGS).stars}</strong>.
-      I progressi restano su questo dispositivo.
+      Allenamenti completati: <strong>${Store.totalTrainings()}</strong> · stelle totali: <strong>${Store.summarize(OPENINGS).stars}</strong> ·
+      carte tattiche: <strong>${Store.cardStats(Tactics.PREFIX).total}</strong> · ripassi registrati: <strong>${Store.getLog().length}</strong>.
     </div>
+
+    <div class="section-title">Backup</div>
+    <div class="note">
+      <div class="note__label">Perché serve</div>
+      Tutto sta su questo telefono e basta: non c'è nessun account e nessun server. Se cancelli i dati del sito, cambi telefono, o iOS libera spazio
+      perché l'app non la apri da qualche settimana, i progressi se ne vanno con loro. Il backup è un file JSON: tienilo da parte ogni tanto.
+    </div>
+    <button class="btn" id="export">⬇︎ Esporta un backup</button>
+    <button class="btn btn--ghost" id="copy">Copia negli appunti</button>
+    <button class="btn btn--ghost" id="import">⬆︎ Importa da un file</button>
+    <button class="btn btn--ghost" id="paste">Incolla un backup</button>
+    <input type="file" id="file" accept="application/json,.json" hidden>
+    <div id="backup-out">${message ? `<div class="note">${message}</div>` : ''}</div>
+
     <button class="btn btn--ghost btn--danger" id="reset">Azzera i progressi</button>
     <p class="hint-text">Aperture: ${OPENINGS.length} su ${LEVELS.length} livelli. Notazione, commenti e piani sono in italiano.</p>
   </div>`);
@@ -916,6 +1222,84 @@ function renderSettings() {
   toggle('notation', () => Store.getSettings().notation === 'it', (v) => Store.setSetting('notation', v ? 'it' : 'en'));
   toggle('sounds', () => Store.getSettings().sounds, (v) => Store.setSetting('sounds', v));
   toggle('showMoves', () => Store.getSettings().showMoves, (v) => Store.setSetting('showMoves', v));
+
+  const segment = (id, current, apply) => {
+    const box = view.querySelector(`#${id}`);
+    if (!box) return;
+    box.onclick = (e) => {
+      const btn = e.target.closest('.seg__btn');
+      if (!btn) return;
+      apply(Number(btn.dataset.val));
+      box.querySelectorAll('.seg__btn').forEach((b) => b.classList.toggle('seg__btn--on', b === btn));
+      beep('move');
+    };
+  };
+
+  segment('newPerDay', settings.newPerDay, (v) => Store.setSetting('newPerDay', v));
+  segment('retention', settings.retention, (v) => Store.setSetting('retention', v));
+
+  /* --------------------------- backup: fuori e dentro --------------------- */
+
+  const out = view.querySelector('#backup-out');
+  const say = (html, kind = '') => { out.innerHTML = `<div class="note${kind ? ` note--${kind}` : ''}">${html}</div>`; };
+  const nomeFile = () => `scacchi-backup-${Store.dayKey()}.json`;
+
+  view.querySelector('#export').onclick = () => {
+    const blob = new Blob([Store.exportJson()], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nomeFile();
+    a.click();
+    later(() => URL.revokeObjectURL(a.href), 2000);
+    say(`Backup pronto: <strong>${nomeFile()}</strong>. Su iPhone finisce in File ▸ Download: spostalo dove non lo perdi.`);
+  };
+
+  view.querySelector('#copy').onclick = async () => {
+    const text = Store.exportJson();
+    try {
+      await navigator.clipboard.writeText(text);
+      say(`Copiato negli appunti: ${Math.round(text.length / 1024)} kB. Incollalo in una nota o in un messaggio a te stesso.`);
+    } catch {
+      // Senza permesso appunti (o senza https) resta il vecchio modo: si seleziona a mano.
+      say(`Gli appunti non sono disponibili qui. Usa <strong>Esporta un backup</strong>, oppure copia a mano da qui:
+        <textarea class="backup-text" readonly rows="4">${esc(text)}</textarea>`);
+    }
+  };
+
+  const file = view.querySelector('#file');
+  view.querySelector('#import').onclick = () => file.click();
+  file.onchange = async () => {
+    const f = file.files[0];
+    if (f) applyBackup(await f.text());
+    file.value = '';
+  };
+
+  view.querySelector('#paste').onclick = () => {
+    const text = window.prompt('Incolla qui il contenuto del backup:');
+    if (text) applyBackup(text);
+  };
+
+  /** Prima si guarda che cosa c'è dentro, poi si chiede, e solo alla fine si sovrascrive. */
+  function applyBackup(text) {
+    let info;
+    try {
+      info = Store.inspectBackup(text);
+    } catch (err) {
+      say(`Non è un backup leggibile: ${esc(err.message)}. Non ho toccato niente.`, 'warn');
+      return;
+    }
+    const quando = info.esportato ? new Date(info.esportato).toLocaleString('it-CH') : 'data sconosciuta';
+    const ok = window.confirm(
+      `Backup del ${quando}\n\n`
+      + `${info.carte} carte tattiche, ${info.aperture} aperture iniziate, ${info.ripassi} ripassi`
+      + `${info.punteggio ? `, punteggio ${info.punteggio}` : ''}.\n\n`
+      + 'Sostituisce tutto quello che c\'è ora su questo dispositivo. Procedo?',
+    );
+    if (!ok) return;
+    Store.importJson(text);
+    beep('win');
+    renderSettings(`Importato: <strong>${info.carte} ${info.carte === 1 ? 'carta' : 'carte'}</strong> e ${info.ripassi} ${info.ripassi === 1 ? 'ripasso' : 'ripassi'}. Le scadenze sono quelle del backup.`);
+  }
 
   view.querySelector('#reset').onclick = () => {
     if (window.confirm('Azzerare stelle e statistiche di tutte le aperture?')) {
@@ -964,6 +1348,7 @@ function route() {
     if (level) return renderTraining(pickQueue(level.id), `#/livello/${level.id}`, `Allenamento ${level.name}`);
   }
   if (screen === 'tattica') return renderTacticsSession();
+  if (screen === 'statistiche') return renderStats();
   if (screen === 'impostazioni') return renderSettings();
   return renderHome();
 }
