@@ -1,5 +1,5 @@
 /* Service worker: rende l'app utilizzabile offline dopo la prima visita. */
-const CACHE = 'aperture-scacchi-v8';
+const CACHE = 'aperture-scacchi-v9';
 
 const ASSETS = [
   './',
@@ -17,6 +17,7 @@ const ASSETS = [
   'assets/js/basics.js',
   'assets/js/endgames.js',
   'assets/js/sync.js',
+  'assets/js/trasloco.js',
   'assets/js/endgames-data.js',
   'assets/js/fsrs.js',
   'assets/js/stats.js',

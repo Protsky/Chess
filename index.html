@@ -32,6 +32,24 @@
     <p style="padding:24px;color:#96a2b8">Per giocare serve JavaScript attivo.</p>
   </noscript>
 
-  <script type="module" src="assets/js/app.js"></script>
+  <script type="module">
+    /*
+     * L'app vive su chess.donati.workers.dev. Su GitHub Pages resta una vecchia
+     * copia: stesso contenuto, ma altro deposito del browser — cioè un secondo
+     * mazzo che si crede il primo. Da lì non si avvia l'app, si avvia il
+     * trasloco: dice dove andare, salva quello che era rimasto, e stacca il
+     * service worker perché la copia non sopravviva offline.
+     *
+     * Il parametro "?trasloco" esiste per poterlo provare da qualunque indirizzo.
+     */
+    const vecchiaCasa = location.hostname.endsWith('github.io') || location.search.includes('trasloco');
+    if (vecchiaCasa) {
+      const { mostra } = await import('./assets/js/trasloco.js');
+      mostra(document.getElementById('view'));
+      document.getElementById('bar-title').textContent = 'Si è spostata';
+    } else {
+      await import('./assets/js/app.js');
+    }
+  </script>
 </body>
 </html>

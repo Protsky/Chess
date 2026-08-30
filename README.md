@@ -196,7 +196,13 @@ dalle impostazioni, insieme a suoni ed elenco mosse.
 
 ## In linea
 
-Pubblicata con GitHub Pages: **https://protsky.github.io/Chess/**
+**https://chess.donati.workers.dev/** — è l'indirizzo dell'app.
+
+GitHub Pages resta acceso ma non serve più l'app: da lì esce una pagina di
+trasloco che porta qui e permette di scaricare i progressi rimasti su quella
+origine (o di leggerne il codice di sincronizzazione, che è la via più corta).
+Due copie della stessa app non sono un doppione innocuo: il deposito del browser
+è legato all'indirizzo, quindi sono due studi separati che si credono uno.
 
 ### Anche su Cloudflare Pages
 
