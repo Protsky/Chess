@@ -528,6 +528,86 @@ const uscitaFinali = Percorso.uscitaDi(Endgames.AXIS,
   Array.from({ length: 6 }, () => ({ axis: Endgames.AXIS, correct: true, t: Date.now() })));
 ok(uscitaFinali.percent === 100, 'sei finali puliti devono chiudere il livello 2');
 
+/* ------------------- 12. l'unione fra due dispositivi --------------------- */
+
+const Sync = await import('../assets/js/sync.js');
+
+/*
+ * La parte che può far perdere mesi di ripassi se è sbagliata. «Vince l'ultimo
+ * che scrive» qui non va bene: chi ripassa sul telefono e poi apre il portatile
+ * perderebbe la sessione appena fatta. Si unisce carta per carta, e queste sono
+ * le regole scritte in sync.js, controllate una per una.
+ */
+const localeSim = {
+  cards: {
+    'v:colore:a1': { id: 'v:colore:a1', last: 100, s: 1 },     // più vecchia della remota
+    'v:colore:b2': { id: 'v:colore:b2', last: 500, s: 3 },     // solo qui
+  },
+  log: [{ id: 'v:colore:a1', t: 100, correct: true }, { id: 'v:colore:b2', t: 500, correct: true }],
+  counts: { vista: { done: 2, correct: 2 } },
+  rating: { vista: { rating: 520, attempts: 2 } },
+  progress: { italiana: { stars: 2, best: 80, attempts: 3, lastAt: 10 } },
+  settings: { notation: 'it', newPerDay: 4 },
+  fsrs: { w: null, reviews: 0 },
+  streak: { count: 2, last: '2026-08-29' },
+  daily: { day: '2026-08-29', introduced: 2, reviewed: 2 },
+  trainings: 3,
+};
+
+const remotoSim = {
+  cards: {
+    'v:colore:a1': { id: 'v:colore:a1', last: 900, s: 9 },     // ripassata dopo: vince
+    'v:cavallo:a1-b2': { id: 'v:cavallo:a1-b2', last: 700, s: 2 },  // solo là
+  },
+  log: [{ id: 'v:colore:a1', t: 100, correct: true }, { id: 'v:colore:a1', t: 900, correct: true }],
+  counts: { vista: { done: 12, correct: 9 } },                 // ha praticato di più
+  rating: { vista: { rating: 640, attempts: 12 } },
+  progress: { italiana: { stars: 3, best: 60, attempts: 1, lastAt: 99 } },
+  settings: { notation: 'en', newPerDay: 20 },
+  fsrs: { w: new Array(19).fill(1), reviews: 300 },
+  streak: { count: 9, last: '2026-08-30' },
+  daily: { day: '2026-08-30', introduced: 5, reviewed: 5 },
+  trainings: 1,
+};
+
+const unito = Sync.unisci(localeSim, remotoSim);
+
+ok(unito.cards['v:colore:a1'].last === 900, 'fra due copie della stessa carta deve vincere quella ripassata dopo');
+ok(unito.cards['v:colore:b2'] && unito.cards['v:cavallo:a1-b2'], 'le carte che stanno da una parte sola non si perdono');
+ok(Object.keys(unito.cards).length === 3, `dovrebbero restare 3 carte, ne restano ${Object.keys(unito.cards).length}`);
+
+ok(unito.log.length === 3, `il registro va unito senza doppioni: 3 voci attese, ${unito.log.length} trovate`);
+ok(unito.log[0].t <= unito.log[1].t && unito.log[1].t <= unito.log[2].t, 'il registro unito deve restare in ordine di tempo');
+
+ok(unito.counts.vista.done === 12, 'i conteggi vengono da chi ha risposto di più, non dal più recente');
+ok(unito.rating.vista.rating === 640, 'il punteggio segue i conteggi');
+ok(unito.progress.italiana.stars === 3 && unito.progress.italiana.best === 80,
+  'le aperture tengono il meglio delle due: 3 stelle e 80 di record');
+ok(unito.settings.notation === 'it' && unito.settings.newPerDay === 4,
+  'le impostazioni restano del dispositivo: sono preferenze, non progressi');
+ok(unito.fsrs.reviews === 300, 'i pesi tarati su più ripassi sono quelli buoni');
+ok(unito.streak.last === '2026-08-30' && unito.daily.day === '2026-08-30', 'serie e giornata prendono il giorno più avanti');
+ok(unito.trainings === 3, 'gli allenamenti delle aperture non calano mai');
+
+// L'unione non tocca gli originali: se lo facesse, un errore di rete lascerebbe
+// il dispositivo con dati mezzi mescolati.
+ok(localeSim.cards['v:colore:a1'].last === 100 && Object.keys(remotoSim.cards).length === 2,
+  'unisci() non deve modificare i due salvataggi di partenza');
+
+// Casi limite: senza uno dei due non si perde l'altro.
+ok(Sync.unisci(localeSim, null) === localeSim, 'senza remoto resta il locale');
+ok(Sync.unisci(null, remotoSim) === remotoSim, 'senza locale resta il remoto');
+
+/* I codici: sedici caratteri, senza le lettere che si confondono. */
+const codici = new Set();
+for (let i = 0; i < 200; i++) codici.add(Sync.nuovoCodice());
+ok(codici.size === 200, 'due codici generati non devono mai coincidere');
+ok([...codici].every((c) => Sync.CODICE_RE.test(c)), 'ogni codice generato deve passare la propria convalida');
+ok([...codici].every((c) => !/[ILOU]/.test(c)), 'I, L, O e U non devono comparire: si confondono a leggerle');
+ok(Sync.valido('kkjq-wcdp e9jk djac'.toUpperCase().replace(/[^0-9A-Z]/g, '')), 'un codice scritto con spazi e trattini deve essere accettato');
+ok(!Sync.valido('KKJQ'), 'un codice corto non è valido');
+ok(!Sync.valido('KKJQWCDPE9JKDJ3I'), 'un codice con una lettera vietata non è valido');
+
 /* -------------------------------- verdetto ------------------------------- */
 
 console.log(`Controlli: ${checks}`);

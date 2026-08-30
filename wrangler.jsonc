@@ -12,12 +12,27 @@
   // Non c'è nessun comando di build: l'app è statica. `directory: "."` vuol dire
   // che la radice del sito è la radice del repo, quindi `/` sono gli scacchi e
   // `/lingua/` è Frasi — la stessa forma che ha su GitHub Pages.
+  //
+  // Da quando esiste il deposito dei progressi c'è anche uno script (`main`):
+  // le rotte /api/* le serve lui, tutto il resto lo serve la cartella statica
+  // attraverso il binding ASSETS. Senza `main` il Worker sarebbe solo file.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chess",
+  "main": "src/worker.js",
   "compatibility_date": "2026-08-28",
   "assets": {
-    "directory": "."
+    "directory": ".",
+    "binding": "ASSETS"
   },
+  // Il bucket deve esistere prima di pubblicare, altrimenti wrangler si ferma:
+  //   npx wrangler r2 bucket create scacchi-progressi
+  // (o dal pannello: R2 ▸ Create bucket, stesso nome).
+  "r2_buckets": [
+    {
+      "binding": "PROGRESSI",
+      "bucket_name": "scacchi-progressi"
+    }
+  ],
   "observability": {
     "enabled": true
   }

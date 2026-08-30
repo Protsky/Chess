@@ -1,5 +1,5 @@
 /* Service worker: rende l'app utilizzabile offline dopo la prima visita. */
-const CACHE = 'aperture-scacchi-v7';
+const CACHE = 'aperture-scacchi-v8';
 
 const ASSETS = [
   './',
@@ -16,6 +16,7 @@ const ASSETS = [
   'assets/js/percorso.js',
   'assets/js/basics.js',
   'assets/js/endgames.js',
+  'assets/js/sync.js',
   'assets/js/endgames-data.js',
   'assets/js/fsrs.js',
   'assets/js/stats.js',
@@ -53,7 +54,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  const indirizzo = new URL(request.url);
+  if (request.method !== 'GET' || indirizzo.origin !== self.location.origin) return;
+
+  // Il deposito dei progressi non si mette MAI in cache: una risposta vecchia
+  // qui vorrebbe dire riprendere da carte che non sono piu' quelle.
+  if (indirizzo.pathname.startsWith('/api/')) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {

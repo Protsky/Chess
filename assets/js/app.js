@@ -10,6 +10,7 @@ import * as Rating from './rating.js';
 import * as Percorso from './percorso.js';
 import * as Basics from './basics.js';
 import * as Endgames from './endgames.js';
+import * as Sync from './sync.js';
 import { createScheduler, newCard, DEFAULT_W, AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 import * as Stats from './stats.js';
 import * as Chart from './chart.js';
@@ -126,6 +127,28 @@ function setBar({ title, back = null, action = null }) {
     barAction.hidden = true;
     barAction.onclick = null;
   }
+}
+
+/* --------------------------- invio dei progressi ------------------------- */
+
+/*
+ * Dopo ogni sessione la copia va nel deposito, se la sincronizzazione è accesa.
+ * Aspetta un secondo e mezzo e si accavalla con niente: chi finisce due sessioni
+ * di fila manda una volta sola. Se la rete non c'è non succede niente di male —
+ * il dispositivo resta la copia principale, e al prossimo giro riprova.
+ */
+let invioInCorso = null;
+
+function sincronizzaPresto() {
+  const { codice } = Store.getSync();
+  if (!codice) return;
+  clearTimeout(invioInCorso);
+  invioInCorso = window.setTimeout(async () => {
+    const esito = await Sync.spingi(codice, Store.exportJson());
+    Store.setSync(esito.ok
+      ? { ultimoInvio: Date.now(), ultimoErrore: null }
+      : { ultimoErrore: esito.motivo });
+  }, 1500);
 }
 
 /* ------------------------------- schermate ------------------------------ */
@@ -652,6 +675,7 @@ function renderTraining(queue, backHash, title) {
     const seconds = Math.round((Date.now() - current.start) / 1000);
 
     const saved = Store.saveResult(current.opening.id, { stars, accuracy });
+    sincronizzaPresto();
     results.push({ opening: current.opening, accuracy, stars, seconds });
     beep(stars === 3 ? 'win' : 'ok');
 
@@ -1036,6 +1060,7 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     });
 
     mount(panel);
+    sincronizzaPresto();
     panel.querySelector('#more').onclick = () => renderTacticsSession();
   }
 
@@ -1355,6 +1380,7 @@ function renderBasicsSession(axis) {
     });
 
     mount(panel);
+    sincronizzaPresto();
     panel.querySelector('#more').onclick = () => renderBasicsSession(axis);
   }
 
@@ -1570,6 +1596,7 @@ function renderFinaliSession() {
     </div>`);
 
     mount(panel);
+    sincronizzaPresto();
     panel.querySelector('#more').onclick = () => renderFinaliSession();
   }
 
@@ -1777,8 +1804,9 @@ function renderStats() {
 
 /* ------------------------------ impostazioni ---------------------------- */
 
-function renderSettings(message = '') {
+function renderSettings(message = '', syncMessage = '') {
   const settings = Store.getSettings();
+  const sync = Store.getSync();
   setBar({ title: 'Impostazioni', back: '#/' });
 
   const view = h(`<div class="stack">
@@ -1826,6 +1854,32 @@ function renderSettings(message = '') {
       carte tattiche: <strong>${Store.cardStats(Tactics.PREFIX).total}</strong> · ripassi registrati: <strong>${Store.getLog().length}</strong>.
     </div>
 
+    <div class="section-title">Sincronizza</div>
+    <div class="note">
+      <div class="note__label">Come funziona</div>
+      I progressi restano su questo dispositivo — l'app funziona offline, e non cambia. In più, se accendi la sincronizzazione,
+      una copia va in un deposito e torna indietro su qualunque altro telefono con lo stesso <strong>codice</strong>.
+      Niente account, niente email: <strong>il codice è la chiave</strong>, quindi chi ce l'ha vede questi progressi. Tienilo da parte.
+    </div>
+    ${sync.codice ? `
+    <div class="setting setting--stack">
+      <div class="setting__label">Il tuo codice
+        <div class="setting__hint">Scrivilo su un altro dispositivo per continuare da lì. ${
+          sync.ultimoInvio ? `Ultimo salvataggio: ${new Date(sync.ultimoInvio).toLocaleString('it-CH')}.` : 'Non ancora salvato.'
+        }${sync.ultimoErrore ? ` <strong>Ultimo tentativo fallito: ${esc(sync.ultimoErrore)}.</strong>` : ''}</div>
+      </div>
+      <div class="codice" id="codice">${esc(sync.codice.replace(/(.{4})/g, '$1 ').trim())}</div>
+    </div>
+    <button class="btn" id="sync-ora">⬆︎ Salva adesso nel deposito</button>
+    <button class="btn btn--ghost" id="sync-copia">Copia il codice</button>
+    <button class="btn btn--ghost" id="sync-altro">Usa un altro codice</button>
+    <button class="btn btn--ghost btn--danger" id="sync-stacca">Stacca questo dispositivo</button>
+    ` : `
+    <button class="btn" id="sync-attiva">☁︎ Attiva la sincronizzazione</button>
+    <button class="btn btn--ghost" id="sync-altro">Ho già un codice</button>
+    `}
+    <div id="sync-out">${syncMessage ? `<div class="note">${syncMessage}</div>` : ''}</div>
+
     <div class="section-title">Backup</div>
     <div class="note">
       <div class="note__label">Perché serve</div>
@@ -1871,6 +1925,89 @@ function renderSettings(message = '') {
 
   segment('newPerDay', settings.newPerDay, (v) => Store.setSetting('newPerDay', v));
   segment('retention', settings.retention, (v) => Store.setSetting('retention', v));
+
+  /* --------------------------- sincronizzazione --------------------------- */
+
+  const attivaSync = view.querySelector('#sync-attiva');
+  if (attivaSync) {
+    attivaSync.onclick = async () => {
+      const codice = Sync.nuovoCodice();
+      attivaSync.disabled = true;
+      attivaSync.textContent = 'Salvo…';
+      const esito = await Sync.spingi(codice, Store.exportJson());
+      if (!esito.ok) {
+        Store.setSync({ ultimoErrore: esito.motivo });
+        renderSettings('', `Non sono riuscito ad attivare la sincronizzazione: ${esc(esito.motivo)}. I progressi restano qui, come prima.`);
+        return;
+      }
+      Store.setSync({ codice, ultimoInvio: Date.now(), ultimoErrore: null });
+      renderSettings('', `Sincronizzazione attiva. <strong>Segnati il codice</strong>: senza, da un altro telefono questi progressi non si ritrovano.`);
+    };
+  }
+
+  const salvaOra = view.querySelector('#sync-ora');
+  if (salvaOra) {
+    salvaOra.onclick = async () => {
+      salvaOra.disabled = true;
+      salvaOra.textContent = 'Salvo…';
+      const esito = await Sync.spingi(sync.codice, Store.exportJson());
+      Store.setSync(esito.ok ? { ultimoInvio: Date.now(), ultimoErrore: null } : { ultimoErrore: esito.motivo });
+      renderSettings('', esito.ok
+        ? `Salvato: ${Math.round((esito.byte || 0) / 1024)} kB nel deposito.`
+        : `Non salvato: ${esc(esito.motivo)}. Sul dispositivo non è cambiato niente.`);
+    };
+  }
+
+  const copiaCodice = view.querySelector('#sync-copia');
+  if (copiaCodice) {
+    copiaCodice.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(sync.codice);
+        renderSettings('', 'Codice copiato negli appunti.');
+      } catch {
+        renderSettings('', `Gli appunti non sono disponibili qui. Il codice è <strong>${esc(sync.codice)}</strong>: copialo a mano.`);
+      }
+    };
+  }
+
+  const altroCodice = view.querySelector('#sync-altro');
+  if (altroCodice) {
+    altroCodice.onclick = async () => {
+      const scritto = window.prompt('Scrivi il codice dell’altro dispositivo (16 caratteri):');
+      if (!scritto) return;
+      const codice = Sync.pulisci(scritto);
+      if (!Sync.valido(codice)) {
+        renderSettings('', 'Quel codice non ha la forma giusta: sedici caratteri, senza I, L, O e U.');
+        return;
+      }
+      const esito = await Sync.tira(codice);
+      if (!esito.ok) {
+        renderSettings('', `Non ho trovato niente: ${esc(esito.motivo)}.`);
+        return;
+      }
+
+      /*
+       * Non si sovrascrive: si unisce. Chi ha studiato su due dispositivi non
+       * deve perdere una sessione perché ha toccato il bottone nell'ordine
+       * sbagliato — le carte si scelgono una per una, la più ripassata vince.
+       */
+      const prima = Store.cardStats().total;
+      const unito = Sync.unisci(Store.statoIntero(), esito.dati);
+      Store.applica({ ...unito, sync: { codice, ultimoInvio: Date.now(), ultimoErrore: null } });
+      const dopo = Store.cardStats().total;
+      beep('win');
+      renderSettings('', `Unito: da ${prima} carte a <strong>${dopo}</strong>. Ora questo dispositivo usa il codice ${esc(codice.slice(0, 4))}…`);
+    };
+  }
+
+  const stacca = view.querySelector('#sync-stacca');
+  if (stacca) {
+    stacca.onclick = () => {
+      if (!window.confirm('Stacco questo dispositivo dal deposito?\n\nI progressi restano qui e nel deposito: smette solo di mandarli.')) return;
+      Store.setSync({ codice: null, ultimoInvio: null, ultimoErrore: null });
+      renderSettings('', 'Staccato. I progressi restano su questo dispositivo, e nel deposito restano fermi all’ultimo salvataggio.');
+    };
+  }
 
   /* --------------------------- backup: fuori e dentro --------------------- */
 

@@ -112,6 +112,24 @@ documentata e pubblicata**.
       numeri della sessione di oggi nei quattro casi limite) e nel browser i tre
       stati, con la navigazione home → aperture → livello → allenamento.
 
+- [x] **3d. I progressi non stanno più solo sul telefono** — il backup su file
+      c'era già, ma va ricordato, e chi si ricorda di fare un backup non è chi ne
+      ha bisogno. Ora c'è un deposito: un Worker su Cloudflare con un bucket R2,
+      un oggetto JSON per codice.
+      Fatto: codice di sedici caratteri dal generatore crittografico (nessun
+      account, nessuna email); invio automatico a fine sessione; ripresa su un
+      altro dispositivo scrivendo il codice; e soprattutto **unione** invece di
+      sovrascrittura — carte per data di ripasso, registro senza doppioni,
+      conteggi dal salvataggio con più risposte, impostazioni locali.
+      Provato: 156 controlli in `validate-percorso.mjs` (dodici sull'unione, coi
+      due salvataggi che restano intatti) e nel browser il giro completo contro
+      un deposito finto: attivazione, salvataggio, telefono vuoto che scrive il
+      codice e si ritrova 4 carte, sessione che si salva da sola senza toccare
+      niente. **Non provato**: il Worker vero su R2 — serve il bucket, che si
+      crea con le credenziali di Gionata.
+      Da dire, e sta scritto nell'app: il codice è la chiave, e chi ce l'ha vede
+      quei progressi.
+
 - [ ] **4. C'è o non c'è** — un quarto delle posizioni è quieto e la risposta
       giusta è «nessuna combinazione». Serve un criterio verificabile di
       «quieta»: una ricerca di quiescenza sul motore di casa, o una valutazione

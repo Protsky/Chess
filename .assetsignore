@@ -13,6 +13,9 @@ node_modules
 .git
 .github
 
+# il codice del Worker: gira sul server, non si serve come file
+src
+
 # strumenti di sviluppo: girano su questa macchina, non nel browser
 tools
 package.json

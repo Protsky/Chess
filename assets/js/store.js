@@ -22,6 +22,7 @@ const DEFAULTS = {
   daily: { day: null, introduced: 0, reviewed: 0 },
   streak: { count: 0, last: null },
   fsrs: { w: null, fittedAt: null, reviews: 0 },   // pesi tarati sui propri ripassi
+  sync: { codice: null, ultimoInvio: null, ultimoErrore: null },   // deposito su Cloudflare
   settings: {
     notation: 'it',
     sounds: true,
@@ -84,6 +85,7 @@ function read() {
       daily: { ...DEFAULTS.daily, ...(state.daily || {}) },
       streak: { ...DEFAULTS.streak, ...(state.streak || {}) },
       fsrs: { ...DEFAULTS.fsrs, ...(state.fsrs || {}) },
+      sync: { ...DEFAULTS.sync, ...(state.sync || {}) },
     };
   } catch {
     return structuredClone(DEFAULTS);
@@ -301,6 +303,46 @@ export function setWeights(w, meta = {}) {
 
 export function clearWeights() {
   edit((state) => { state.fsrs = { w: null, fittedAt: null, reviews: 0 }; });
+}
+
+/* ------------------------------ sincronizzazione -------------------------- */
+
+/*
+ * Il codice del deposito e quando ci si è parlati l'ultima volta. Non è un
+ * progresso: è come si ritrovano i progressi da un altro dispositivo.
+ */
+export function getSync() {
+  return read().sync;
+}
+
+export function setSync(patch) {
+  return edit((state) => {
+    state.sync = { ...state.sync, ...patch };
+    return state.sync;
+  });
+}
+
+/** Lo stato intero, per mandarlo al deposito o per unirlo con quello che torna. */
+export function statoIntero() {
+  return read();
+}
+
+/**
+ * Scrive uno stato già unito. Diversamente da `importJson`, che sostituisce
+ * tutto con un backup, qui il chiamante ha già deciso che cosa tenere: lo store
+ * si limita a salvare, dopo aver rimesso i valori di serie per ciò che manca.
+ */
+export function applica(stato) {
+  const pulito = { ...stato };
+  delete pulito.app;
+  delete pulito.exportedAt;
+  return write({
+    ...structuredClone(DEFAULTS),
+    ...pulito,
+    version: 2,
+    settings: { ...DEFAULTS.settings, ...(stato.settings || {}) },
+    sync: { ...DEFAULTS.sync, ...(stato.sync || {}) },
+  });
 }
 
 /* --------------------------- backup: esporta e importa -------------------- */

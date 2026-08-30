@@ -92,6 +92,42 @@ posizioni**: prima le carte scadute, poi materiale nuovo.
   contare una seconda volta per il punteggio: una carta appena vista risolvere
   non è una prova indipendente.
 
+### ☁︎ I progressi anche fuori da questo telefono
+
+Il dispositivo resta la copia principale — l'app funziona offline e non cambia.
+In più, se si accende la sincronizzazione, una copia va in un deposito su
+Cloudflare R2 e torna indietro su qualunque altro telefono.
+
+- **Nessun account.** Niente email, niente password: c'è un **codice** di sedici
+  caratteri, generato dal browser con il generatore crittografico (~80 bit) e
+  leggibile ad alta voce senza sbagliare — l'alfabeto di Crockford toglie I, L,
+  O e U apposta. È anche il limite, e l'app lo dice: **chi ha il codice vede
+  quei progressi**.
+- **Si unisce, non si sovrascrive.** Chi studia su due dispositivi non deve
+  perdere la sessione appena fatta perché ha toccato i bottoni nell'ordine
+  sbagliato: le carte si scelgono una per una (vince quella ripassata più di
+  recente), il registro si fonde senza doppioni, punteggi e conteggi vengono dal
+  salvataggio con **più risposte** — non dal più recente, che potrebbe essere un
+  telefono appena reinstallato — e le impostazioni restano di chi sta usando
+  l'app, perché sono preferenze e non progressi.
+- **Si salva da solo** a fine sessione, con un secondo e mezzo di attesa perché
+  due sessioni di fila mandino una volta sola. Se la rete non c'è non succede
+  niente: al giro dopo riprova.
+- Nel deposito ci sono solo scacchi: nessun nome, nessuna email, nessun IP.
+
+Il pezzo di server sta in [`src/worker.js`](src/worker.js) — due rotte,
+`GET` e `PUT` su `/api/progressi/<codice>`, con limite di mezzo mega e un
+controllo che il contenuto somigli a un salvataggio di questa app. Se il bucket
+non è collegato le rotte rispondono 503 con il motivo e **il sito continua a
+funzionare**: un'app che si rompe perché manca una cosa che le serve solo per un
+extra è un'app scritta male.
+
+Prima di pubblicare, il bucket deve esistere:
+
+```bash
+npx wrangler r2 bucket create scacchi-progressi
+```
+
 ### 📈 Statistiche e backup
 
 La ripetizione dilazionata è un modello che fa promesse: «questa posizione la
@@ -200,6 +236,8 @@ assets/css/app.css       tema scuro, layout mobile, scacchiera
 assets/js/chess.js       motore: mosse legali, arrocco, presa al varco, notazione, FEN e UCI
 assets/js/percorso.js    gli otto livelli e la sessione di oggi (quello che la home mostra)
 assets/js/basics.js      L0 e L1: item generati dal motore, nessun corpus
+assets/js/sync.js        il deposito: codice, invio, e l'unione fra due dispositivi
+src/worker.js            il Worker su Cloudflare: /api/progressi su R2
 assets/js/endgames.js    L2: la tavola dei finali, e chi la interroga
 assets/js/endgames-data.js  la tavola (dati, generata — non si tocca a mano)
 assets/js/openings.js    il repertorio (dati)

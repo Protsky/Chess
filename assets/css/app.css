@@ -818,6 +818,22 @@ p { margin: 0; }
 .path-row--now { border-color: var(--gold-dim); }
 .path-row--now .path-row__code { color: var(--gold); border-color: var(--gold-dim); }
 
+
+/* Il codice del deposito: si legge ad alta voce, quindi grande e spaziato. */
+.codice {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  text-align: center;
+  user-select: all;
+  word-break: break-all;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
