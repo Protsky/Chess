@@ -1,0 +1,24 @@
+{
+  // Configurazione per Cloudflare (Workers con asset statici).
+  //
+  // Perché sta nel repo invece di lasciarla generare al build: senza, wrangler
+  // se la inventa a ogni pubblicazione, e la sua ipotesi è «pubblica tutta la
+  // cartella». Al momento del build la cartella contiene anche il node_modules
+  // che wrangler stesso si è appena installato — dentro c'è il binario workerd
+  // da 146 MiB, e nessun asset può superare i 25 MiB. Il build falliva lì.
+  //
+  // Che cosa entra e che cosa no lo dice `.assetsignore`, accanto a questo file.
+  //
+  // Non c'è nessun comando di build: l'app è statica. `directory: "."` vuol dire
+  // che la radice del sito è la radice del repo, quindi `/` sono gli scacchi e
+  // `/lingua/` è Frasi — la stessa forma che ha su GitHub Pages.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chess",
+  "compatibility_date": "2026-08-28",
+  "assets": {
+    "directory": "."
+  },
+  "observability": {
+    "enabled": true
+  }
+}

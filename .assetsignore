@@ -1,0 +1,28 @@
+# Che cosa NON va pubblicato. Sintassi come .gitignore, letta da wrangler
+# quando carica gli asset statici.
+#
+# La riga che conta è la prima: durante il build Cloudflare installa wrangler
+# nel repo, e node_modules contiene un binario da 146 MiB. Senza questa riga il
+# caricamento si ferma là, con «Asset too large», e non si pubblica niente.
+#
+# Le altre righe non sono necessarie: tolgono dal sito roba che sul sito non
+# serve a nessuno. Restano dentro, di proposito, `lingua/` (Frasi vive lì),
+# `_headers` (lo legge il server, non è un file del sito) e tutte le icone.
+
+node_modules
+.git
+.github
+
+# strumenti di sviluppo: girano su questa macchina, non nel browser
+tools
+package.json
+package-lock.json
+bun.lockb
+wrangler.jsonc
+.assetsignore
+
+# la versione in un file solo, che si genera e non si serve da qui
+dist
+
+# documentazione: sta su GitHub, non serve servirla dall'app
+*.md
