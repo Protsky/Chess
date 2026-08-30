@@ -26,10 +26,11 @@
   },
   // IL DEPOSITO DEI PROGRESSI, acceso il 30/08/2026.
   //
-  // Il namespace si chiama PROGRESSI ed è **condiviso con Frasi**, l'altra app
-  // dello stesso autore: lei scrive sotto il prefisso `frasi:`, qui si usa
-  // `scacchi:`. Un namespace solo, due app, nessuna sovrascrittura — deciso
-  // parlandosi, non per caso.
+  // Il namespace si chiama PROGRESSI. Era nato per essere condiviso con Frasi
+  // (lei sotto `frasi:`, qui sotto `scacchi:`), ma Frasi ha poi scelto un
+  // Durable Object con SQLite, che non richiede di creare risorse a mano: qui
+  // dentro adesso ci sono solo scacchi. Il prefisso `scacchi:` resta comunque,
+  // perché costa niente e tiene la porta aperta.
   //
   // Se un giorno il binding sparisse, l'app non si romperebbe: le rotte /api
   // rispondono 503 col motivo e il sito continua a funzionare.

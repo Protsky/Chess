@@ -59,10 +59,10 @@ const json = (dati, stato = 200) => new Response(JSON.stringify(dati), {
 });
 
 /*
- * Il prefisso non è decorazione: nello stesso repo vive anche Frasi, e un giorno
- * potrebbe usare lo stesso deposito. Con `scacchi:` davanti le due app
- * condividono il namespace senza sovrascriversi, e chi studia entrambe può
- * tenere un codice solo.
+ * Il prefisso non è decorazione: il namespace era nato per essere condiviso con
+ * Frasi. Poi Frasi ha scelto un'altra strada — un Durable Object con SQLite, che
+ * non chiede di creare risorse a mano — quindi qui dentro oggi ci sono solo
+ * scacchi. Il prefisso resta lo stesso: costa niente, e il giorno che serve serve.
  */
 const chiaveDi = (codice) => `scacchi:${codice}`;
 
