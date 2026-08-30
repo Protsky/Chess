@@ -114,8 +114,9 @@ documentata e pubblicata**.
 
 - [x] **3d. I progressi non stanno più solo sul telefono** — il backup su file
       c'era già, ma va ricordato, e chi si ricorda di fare un backup non è chi ne
-      ha bisogno. Ora c'è un deposito: un Worker su Cloudflare con un bucket R2,
-      un oggetto JSON per codice.
+      ha bisogno. Ora c'è un deposito: un Worker su Cloudflare con un namespace
+      KV, un valore JSON per codice. (KV e non R2: il dato è piccolo e scritto di
+      rado, e R2 chiede un metodo di pagamento anche nel piano gratuito.)
       Fatto: codice di sedici caratteri dal generatore crittografico (nessun
       account, nessuna email); invio automatico a fine sessione; ripresa su un
       altro dispositivo scrivendo il codice; e soprattutto **unione** invece di
@@ -125,8 +126,10 @@ documentata e pubblicata**.
       due salvataggi che restano intatti) e nel browser il giro completo contro
       un deposito finto: attivazione, salvataggio, telefono vuoto che scrive il
       codice e si ritrova 4 carte, sessione che si salva da sola senza toccare
-      niente. **Non provato**: il Worker vero su R2 — serve il bucket, che si
-      crea con le credenziali di Gionata.
+      niente. **Non provato**: il Worker vero su KV — serve il namespace, che si
+      crea con le credenziali di Gionata. Finché non c'è, il binding resta
+      commentato in `wrangler.jsonc`: il sito si pubblica e le rotte /api
+      rispondono 503 col motivo.
       Da dire, e sta scritto nell'app: il codice è la chiave, e chi ce l'ha vede
       quei progressi.
 

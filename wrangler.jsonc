@@ -24,15 +24,20 @@
     "directory": ".",
     "binding": "ASSETS"
   },
-  // Il bucket deve esistere prima di pubblicare, altrimenti wrangler si ferma:
-  //   npx wrangler r2 bucket create scacchi-progressi
-  // (o dal pannello: R2 ▸ Create bucket, stesso nome).
-  "r2_buckets": [
-    {
-      "binding": "PROGRESSI",
-      "bucket_name": "scacchi-progressi"
-    }
-  ],
+  // IL DEPOSITO DEI PROGRESSI — da accendere, e sta apposta commentato.
+  //
+  // Il namespace non esiste ancora, e un binding che punta a un id inventato fa
+  // fallire il deploy: finché resta commentato il sito si pubblica lo stesso e
+  // le rotte /api rispondono 503 col motivo, che è il guasto giusto (l'app
+  // funziona, manca solo l'extra).
+  //
+  // Per accenderlo, un comando e una riga:
+  //   npx wrangler kv namespace create PROGRESSI
+  // stampa un id: si scommentano le tre righe qui sotto e ci si mette quello.
+  //
+  // "kv_namespaces": [
+  //   { "binding": "PROGRESSI", "id": "<l-id-stampato-dal-comando>" }
+  // ],
   "observability": {
     "enabled": true
   }

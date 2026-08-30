@@ -3,7 +3,21 @@
  * tenere i progressi al sicuro anche quando il telefono li perde.
  *
  * Il resto dell'app resta com'è: statica, offline, con i dati su questo
- * dispositivo. Qui c'è solo un deposito: un oggetto JSON per codice, su R2.
+ * dispositivo. Qui c'è solo un deposito: un valore JSON per codice, su KV.
+ *
+ * PERCHÉ KV E NON R2
+ * R2 è fatto per gli oggetti grossi; qui si salva un JSON da cento kilobyte,
+ * scritto una volta a fine sessione. Per quella forma KV è la casa giusta: una
+ * chiave, un valore, fino a 25 MiB. E c'è una ragione pratica che pesa quanto
+ * quella tecnica — per abilitare R2 Cloudflare chiede un metodo di pagamento
+ * anche nel piano gratuito, mentre KV su questo account è già in uso. Il giorno
+ * in cui i dati diventassero grossi (PGN, analisi, audio) si cambia binding e
+ * il resto di questo file resta identico.
+ *
+ * KV è *eventualmente* consistente: una lettura può arrivare qualche secondo
+ * indietro. Qui non fa danno, perché il client **unisce** invece di
+ * sovrascrivere — una copia leggermente vecchia produce al più una fusione in
+ * più, non una sessione persa.
  *
  * PERCHÉ SERVE
  * Finora i progressi stavano solo nel browser. In iOS il deposito di un sito
@@ -25,7 +39,7 @@
  * nessuna email, nessun indirizzo IP salvato: nel deposito ci sono solo scacchi.
  *
  * SE IL DEPOSITO NON C'È
- * Finché il bucket R2 non è collegato, le rotte rispondono 503 con il motivo, e
+ * Finché il namespace KV non è collegato, le rotte rispondono 503 con il motivo, e
  * il sito continua a funzionare come prima. Un'app che si rompe perché manca una
  * cosa che le serve solo per un extra è un'app scritta male.
  */
@@ -44,17 +58,22 @@ const json = (dati, stato = 200) => new Response(JSON.stringify(dati), {
   },
 });
 
-const chiaveDi = (codice) => `progressi/${codice}.json`;
+/*
+ * Il prefisso non è decorazione: nello stesso repo vive anche Frasi, e un giorno
+ * potrebbe usare lo stesso deposito. Con `scacchi:` davanti le due app
+ * condividono il namespace senza sovrascriversi, e chi studia entrambe può
+ * tenere un codice solo.
+ */
+const chiaveDi = (codice) => `scacchi:${codice}`;
 
 async function leggi(env, codice) {
-  const oggetto = await env.PROGRESSI.get(chiaveDi(codice));
-  if (!oggetto) return json({ errore: 'nessun progresso con questo codice' }, 404);
-  const testo = await oggetto.text();
-  return new Response(testo, {
+  const { value, metadata } = await env.PROGRESSI.getWithMetadata(chiaveDi(codice), { type: 'text' });
+  if (value === null) return json({ errore: 'nessun progresso con questo codice' }, 404);
+  return new Response(value, {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
-      'x-aggiornato': oggetto.customMetadata?.aggiornato || oggetto.uploaded?.toISOString?.() || '',
+      'x-aggiornato': metadata?.aggiornato || '',
     },
   });
 }
@@ -83,17 +102,14 @@ async function scrivi(request, env, codice) {
   if (!dati.cards && !dati.progress) return json({ errore: 'non contiene né carte né progressi' }, 400);
 
   const aggiornato = new Date().toISOString();
-  await env.PROGRESSI.put(chiaveDi(codice), testo, {
-    httpMetadata: { contentType: 'application/json; charset=utf-8' },
-    customMetadata: { aggiornato },
-  });
+  await env.PROGRESSI.put(chiaveDi(codice), testo, { metadata: { aggiornato } });
 
   return json({ salvato: true, aggiornato, byte: testo.length });
 }
 
 async function api(request, env, url) {
   if (!env.PROGRESSI) {
-    return json({ errore: 'il deposito non è collegato a questo Worker (manca il bucket R2)' }, 503);
+    return json({ errore: 'il deposito non è collegato a questo Worker (manca il namespace KV)' }, 503);
   }
 
   const pezzi = url.pathname.split('/').filter(Boolean);          // ['api','progressi','<codice>']

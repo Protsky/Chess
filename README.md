@@ -96,7 +96,7 @@ posizioni**: prima le carte scadute, poi materiale nuovo.
 
 Il dispositivo resta la copia principale — l'app funziona offline e non cambia.
 In più, se si accende la sincronizzazione, una copia va in un deposito su
-Cloudflare R2 e torna indietro su qualunque altro telefono.
+Cloudflare KV e torna indietro su qualunque altro telefono.
 
 - **Nessun account.** Niente email, niente password: c'è un **codice** di sedici
   caratteri, generato dal browser con il generatore crittografico (~80 bit) e
@@ -117,15 +117,28 @@ Cloudflare R2 e torna indietro su qualunque altro telefono.
 
 Il pezzo di server sta in [`src/worker.js`](src/worker.js) — due rotte,
 `GET` e `PUT` su `/api/progressi/<codice>`, con limite di mezzo mega e un
-controllo che il contenuto somigli a un salvataggio di questa app. Se il bucket
+controllo che il contenuto somigli a un salvataggio di questa app. Se il deposito
 non è collegato le rotte rispondono 503 con il motivo e **il sito continua a
 funzionare**: un'app che si rompe perché manca una cosa che le serve solo per un
 extra è un'app scritta male.
 
-Prima di pubblicare, il bucket deve esistere:
+**Perché KV e non R2.** R2 è fatto per gli oggetti grossi; qui si salva un JSON
+da un centinaio di kilobyte, scritto una volta a fine sessione — una chiave, un
+valore, che è esattamente la forma di KV. E c'è una ragione pratica che pesa
+quanto quella tecnica: per abilitare R2 Cloudflare chiede un metodo di pagamento
+anche nel piano gratuito, mentre KV su questo account è già in uso. Il giorno in
+cui i dati diventassero grossi (PGN, analisi, audio) si cambia il binding e il
+resto del file resta identico. KV è *eventualmente* consistente — una lettura può
+arrivare qualche secondo indietro — e qui non fa danno, perché il client unisce
+invece di sovrascrivere.
+
+Per accendere il deposito servono un comando e una riga: il namespace non esiste
+ancora, e in `wrangler.jsonc` il binding sta **commentato apposta**, così il
+sito si pubblica lo stesso.
 
 ```bash
-npx wrangler r2 bucket create scacchi-progressi
+npx wrangler kv namespace create PROGRESSI
+# stampa un id: si scommentano le tre righe in wrangler.jsonc e ci si mette quello
 ```
 
 ### 📈 Statistiche e backup
@@ -237,7 +250,7 @@ assets/js/chess.js       motore: mosse legali, arrocco, presa al varco, notazion
 assets/js/percorso.js    gli otto livelli e la sessione di oggi (quello che la home mostra)
 assets/js/basics.js      L0 e L1: item generati dal motore, nessun corpus
 assets/js/sync.js        il deposito: codice, invio, e l'unione fra due dispositivi
-src/worker.js            il Worker su Cloudflare: /api/progressi su R2
+src/worker.js            il Worker su Cloudflare: /api/progressi su KV
 assets/js/endgames.js    L2: la tavola dei finali, e chi la interroga
 assets/js/endgames-data.js  la tavola (dati, generata — non si tocca a mano)
 assets/js/openings.js    il repertorio (dati)
