@@ -43,6 +43,25 @@ export function pulisci(testo) {
 
 export const valido = (codice) => CODICE_RE.test(pulisci(codice));
 
+/**
+ * Uno stato **vuoto** non si manda mai: sovrascriverebbe il deposito con il
+ * niente. Sembra un caso di scuola e non lo è — la sessione che sta facendo
+ * Frasi l'ha visto succedere davvero: su un telefono appena installato ogni
+ * gesto scrive qualcosa, quindi la copia locale è sempre la più recente, e una
+ * regola basata sulle date manda su il vuoto e cancella mesi di ripassi.
+ *
+ * Qui l'unione è simmetrica e il codice arriva solo con la ripresa (che scarica
+ * prima di scrivere), quindi quella strada è già chiusa. Questa guardia costa
+ * tre righe e chiude anche le strade che non ho previsto.
+ */
+export function haQualcosaDaSalvare(stato) {
+  if (!stato) return false;
+  const carte = Object.keys(stato.cards || {}).length;
+  const aperture = Object.keys(stato.progress || {}).length;
+  const ripassi = (stato.log || []).length;
+  return carte + aperture + ripassi > 0;
+}
+
 /* --------------------------------- rete ---------------------------------- */
 
 const rotta = (codice) => `api/progressi/${encodeURIComponent(codice)}`;
@@ -50,6 +69,10 @@ const rotta = (codice) => `api/progressi/${encodeURIComponent(codice)}`;
 /** Manda il salvataggio al deposito. Torna { ok, aggiornato } o { ok:false, motivo }. */
 export async function spingi(codice, testoJson) {
   try {
+    // Non si manda il vuoto: meglio non salvare che cancellare.
+    if (!haQualcosaDaSalvare(JSON.parse(testoJson))) {
+      return { ok: false, motivo: 'non c’è ancora niente da salvare' };
+    }
     const risposta = await fetch(rotta(codice), {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },

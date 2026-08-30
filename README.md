@@ -321,32 +321,23 @@ Poi `node tools/validate.mjs` per la verifica.
 
 ---
 
-## Anche in questo repository: 💬 Frasi
+## Frasi è andata a vivere per conto suo
 
-In `lingua/` c’è una seconda app, indipendente dalla prima: **impara una lingua
-memorizzando frasi corte** invece di parole singole, con un test di livello
-adattivo su modello IRT, quattro esercizi che si correggono da soli (niente
-autovalutazione) e uno scheduler FSRS che decide quando riproporre ogni frase. Tedesco (211 frasi), svizzero tedesco di Zurigo (115, ognuna con
-l’equivalente in tedesco standard), russo (185, con accento tonico segnato e
-risposte accettate anche in caratteri latini), inglese (232) e spagnolo (120),
-tutte scritte per italofoni. Si sceglie se allenarsi a **parlare** (dall’italiano
-alla lingua, con la produzione al secondo gradino) o a **capire**; i pesi dello
-scheduler si possono rifare sui propri ripassi, con la curva dell’oblio e la
-calibrazione disegnate a partire dai propri numeri. Le frasi nuove entrano
-seguendo un **percorso a unità** che parte dal livello uscito dal test e si
-riordina attorno al settore scelto; i ripassi restano governati dalle scadenze,
-non dal percorso.
+Fino al 29 agosto 2026 in `lingua/` c'era una seconda app — **Frasi**, impara una
+lingua memorizzando frasi corte — e usciva online da `/lingua/` di questo sito.
+Adesso ha un repo suo, [Protsky/Language](https://github.com/Protsky/Language), e
+un indirizzo suo: **https://language.donati.workers.dev/**
 
-Stessa filosofia: nessuna dipendenza, nessun build, offline dopo la prima visita.
-L’unica eccezione è facoltativa: la voce online (la sintesi pubblica di Google
-Translate), accesa di serie sul russo perché le voci di sistema lì non bastano.
+Qui è rimasta solo una pagina di trasloco, e non è una gentilezza: due copie della
+stessa app sono peggio di una. Chi apriva il vecchio indirizzo studiava su una
+versione ferma a prima del trasloco — le mancavano 240 frasi, le incisioni audio e
+quattro difetti chiusi da allora — e i suoi progressi restavano lì, perché il
+deposito del browser è legato all'indirizzo e non segue il trasloco. La pagina
+manda al nuovo indirizzo e permette di **scaricare quello che era rimasto qui**,
+per reimportarlo di là.
 
-- In locale: `python3 -m http.server 8080`, poi <http://localhost:8080/lingua/>
-- In linea: **https://protsky.github.io/Chess/lingua/**
-- Dettagli, motori e riferimenti: [`lingua/README.md`](lingua/README.md)
+Il motore della ripetizione dilazionata resta in comune (`assets/js/fsrs.js`,
+`optimizer.js`, `chart.js`), copiato di proposito in tutte e due le app: una
+dipendenza fra repo sarebbe un guaio al primo trasloco — e il trasloco è appena
+successo.
 
-```bash
-node tools/validate-lingua.mjs   # corpus, motori e percorso (409 controlli)
-node tools/corpus-review.mjs     # che cosa manca al corpus, lingua per lingua
-node tools/smoke-lingua.mjs      # prova end-to-end (127 controlli)
-```

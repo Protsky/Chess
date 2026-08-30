@@ -2,40 +2,95 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-  <title>Frasi — impara una lingua frase per frase</title>
-  <meta name="description" content="Studia una lingua memorizzando frasi corte, con test di livello adattivo e ripetizione dilazionata.">
-  <meta name="theme-color" content="#0d1117">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Frasi si è trasferita</title>
+  <meta name="theme-color" content="#0f1219">
   <meta name="color-scheme" content="dark">
-  <!-- niente referer verso l'esterno: privacy, e certi endpoint pubblici rifiutano le richieste che ne portano uno -->
-  <meta name="referrer" content="no-referrer">
-
-  <!-- iPhone: app a schermo intero dopo "Aggiungi a Home" -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Frasi">
-  <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
-  <link rel="icon" href="assets/icons/icon-192.png" sizes="192x192">
-  <link rel="manifest" href="manifest.webmanifest">
-
-  <link rel="stylesheet" href="assets/css/app.css">
+  <style>
+    /*
+     * Questa pagina ha preso il posto di un'app intera, e il motivo è che due
+     * copie della stessa app sono peggio di una sola: chi apriva questo
+     * indirizzo studiava su una versione ferma al 29/08 e i suoi progressi
+     * restavano qui, perché il deposito del browser è legato all'indirizzo.
+     * Frasi vive in un repo suo dal 29/08/2026.
+     */
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: radial-gradient(1200px 600px at 50% -10%, #1d2436 0%, transparent 60%), #0f1219;
+      color: #e9edf5;
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+    }
+    main { max-width: 26rem; }
+    h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; }
+    .occhiello { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #e5b567; font-weight: 700; }
+    p { color: #c3ccdc; }
+    .muted { color: #96a2b8; font-size: 14px; }
+    a.vai, button {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid #2b3446;
+      background: #1a2030;
+      color: #e9edf5;
+      font: inherit;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    a.vai { background: #e5b567; border-color: #e5b567; color: #1a1406; }
+    .esito { margin-top: 12px; font-size: 14px; color: #6fca86; }
+    .esito--vuoto { color: #96a2b8; }
+  </style>
 </head>
 <body>
-  <header class="bar" id="bar">
-    <button class="icon-btn" id="bar-back" hidden aria-label="Indietro">‹</button>
-    <h1 class="bar__title" id="bar-title">Frasi</h1>
-    <button class="icon-btn" id="bar-action" hidden></button>
-  </header>
+  <main>
+    <div class="occhiello">Cambio di indirizzo</div>
+    <h1>Frasi si è trasferita</h1>
+    <p>Dal 29 agosto 2026 vive per conto suo, con il suo repo e il suo indirizzo. Questa copia era rimasta indietro:
+      le mancano 240 frasi, le incisioni audio e quattro difetti chiusi da allora. Meglio spegnerla che lasciarti
+      studiare su un'app morta.</p>
 
-  <main id="view"></main>
+    <a class="vai" href="https://language.donati.workers.dev/">Vai a Frasi ›</a>
 
-  <nav class="tabs" id="tabs" hidden></nav>
+    <p class="muted">I progressi fatti <em>qui</em> sono rimasti qui: il browser li lega all'indirizzo, quindi non
+      seguono il trasloco da soli. Se ne hai, scaricali e importali di là da <strong>Impostazioni ▸ Importa un backup</strong>.</p>
 
-  <noscript>
-    <p style="padding:24px;color:#93a1b8">Per usare l’app serve JavaScript attivo.</p>
-  </noscript>
+    <button id="salva">⬇︎ Scarica i progressi rimasti qui</button>
+    <div class="esito" id="esito"></div>
+  </main>
 
-  <script type="module" src="assets/js/app.js"></script>
+  <script>
+    // I dati di Frasi stavano sotto questa chiave, su questo indirizzo.
+    const CHIAVE = 'frasi/v1';
+    const bottone = document.getElementById('salva');
+    const esito = document.getElementById('esito');
+    const dati = localStorage.getItem(CHIAVE);
+
+    if (!dati) {
+      bottone.disabled = true;
+      bottone.textContent = 'Qui non c’è niente da salvare';
+      esito.className = 'esito esito--vuoto';
+      esito.textContent = 'Non hai mai studiato su questa copia: puoi andare tranquillo.';
+    } else {
+      bottone.onclick = () => {
+        const blob = new Blob([dati], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `frasi-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        esito.textContent = `Scaricato: ${Math.round(dati.length / 1024)} kB. Ora importalo nell’app nuova.`;
+      };
+    }
+  </script>
 </body>
 </html>

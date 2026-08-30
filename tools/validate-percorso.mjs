@@ -598,6 +598,24 @@ ok(localeSim.cards['v:colore:a1'].last === 100 && Object.keys(remotoSim.cards).l
 ok(Sync.unisci(localeSim, null) === localeSim, 'senza remoto resta il locale');
 ok(Sync.unisci(null, remotoSim) === remotoSim, 'senza locale resta il remoto');
 
+/*
+ * La guardia sul vuoto. Non è un caso di scuola: la sessione che lavora su
+ * Frasi l'ha visto succedere davvero — su un telefono appena installato ogni
+ * gesto scrive, quindi la copia locale è sempre la più recente e finisce per
+ * cancellare mesi di ripassi. Qui la strada è chiusa due volte: dall'unione,
+ * che è simmetrica, e da questa guardia.
+ */
+ok(!Sync.haQualcosaDaSalvare({ cards: {}, progress: {}, log: [] }),
+  'uno stato senza niente dentro non deve essere considerato salvabile');
+ok(!Sync.haQualcosaDaSalvare(null), 'niente stato, niente da salvare');
+ok(Sync.haQualcosaDaSalvare({ cards: { 'v:x': {} } }), 'una carta sola basta per salvare');
+ok(Sync.haQualcosaDaSalvare({ progress: { italiana: {} } }), 'un’apertura iniziata basta per salvare');
+
+const vuoto = { cards: {}, progress: {}, log: [], counts: {}, rating: {}, settings: {} };
+const pieno = Sync.unisci(vuoto, localeSim);
+ok(Object.keys(pieno.cards).length === 2, 'un dispositivo vuoto che si unisce a uno pieno deve prendere tutto');
+ok(pieno.counts.vista.done === 2, 'e prendersi anche i conteggi, invece di azzerarli');
+
 /* I codici: sedici caratteri, senza le lettere che si confondono. */
 const codici = new Set();
 for (let i = 0; i < 200; i++) codici.add(Sync.nuovoCodice());

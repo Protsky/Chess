@@ -3,15 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Due app web senza dipendenze: aperture di scacchi e studio di una lingua per frasi",
+  "description": "App web senza dipendenze per imparare a giocare a scacchi: percorso a livelli, tattica, finali e aperture",
   "scripts": {
     "validate": "node tools/validate.mjs",
     "validate:puzzles": "node tools/validate-puzzles.mjs",
     "validate:percorso": "node tools/validate-percorso.mjs",
     "build:puzzles": "node tools/build-puzzles.mjs",
-    "validate:lingua": "node tools/validate-lingua.mjs",
     "smoke": "node tools/smoke.mjs",
-    "smoke:lingua": "node tools/smoke-lingua.mjs",
     "start": "python3 -m http.server 8080"
   }
 }

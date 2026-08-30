@@ -1995,6 +1995,10 @@ function renderSettings(message = '', syncMessage = '') {
       const unito = Sync.unisci(Store.statoIntero(), esito.dati);
       Store.applica({ ...unito, sync: { codice, ultimoInvio: Date.now(), ultimoErrore: null } });
       const dopo = Store.cardStats().total;
+      // Riprendere è scaricare, non sincronizzare: il deposito adesso è indietro
+      // di quello che c'era solo su questo dispositivo, e glielo si rimanda.
+      await Sync.spingi(codice, Store.exportJson());
+      Store.setSync({ codice, ultimoInvio: Date.now(), ultimoErrore: null });
       beep('win');
       renderSettings('', `Unito: da ${prima} carte a <strong>${dopo}</strong>. Ora questo dispositivo usa il codice ${esc(codice.slice(0, 4))}…`);
     };
