@@ -24,20 +24,18 @@
     "directory": ".",
     "binding": "ASSETS"
   },
-  // IL DEPOSITO DEI PROGRESSI — da accendere, e sta apposta commentato.
+  // IL DEPOSITO DEI PROGRESSI, acceso il 30/08/2026.
   //
-  // Il namespace non esiste ancora, e un binding che punta a un id inventato fa
-  // fallire il deploy: finché resta commentato il sito si pubblica lo stesso e
-  // le rotte /api rispondono 503 col motivo, che è il guasto giusto (l'app
-  // funziona, manca solo l'extra).
+  // Il namespace si chiama PROGRESSI ed è **condiviso con Frasi**, l'altra app
+  // dello stesso autore: lei scrive sotto il prefisso `frasi:`, qui si usa
+  // `scacchi:`. Un namespace solo, due app, nessuna sovrascrittura — deciso
+  // parlandosi, non per caso.
   //
-  // Per accenderlo, un comando e una riga:
-  //   npx wrangler kv namespace create PROGRESSI
-  // stampa un id: si scommentano le tre righe qui sotto e ci si mette quello.
-  //
-  // "kv_namespaces": [
-  //   { "binding": "PROGRESSI", "id": "<l-id-stampato-dal-comando>" }
-  // ],
+  // Se un giorno il binding sparisse, l'app non si romperebbe: le rotte /api
+  // rispondono 503 col motivo e il sito continua a funzionare.
+  "kv_namespaces": [
+    { "binding": "PROGRESSI", "id": "b55a34aaeee947598f8b9631d1e80023" }
+  ],
   "observability": {
     "enabled": true
   }
