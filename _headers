@@ -1,0 +1,46 @@
+# Intestazioni HTTP — le legge Cloudflare Pages (su GitHub Pages questo file è
+# solo un file di testo, e infatti là il problema qui sotto non si può risolvere).
+#
+# IL MOTIVO PER CUI QUESTO FILE ESISTE
+# GitHub Pages manda `Cache-Control: max-age=600` su tutto. Vuol dire che per
+# dieci minuti dopo una pubblicazione un telefono che ha già visitato l'app
+# continua a ricevere i file vecchi — e il service worker poi se li tiene in
+# cache, facendoli durare molto più di dieci minuti. È successo due volte, e le
+# due volte è sembrato un guasto dell'app.
+#
+# Qui il codice si rivalida sempre (`no-cache` NON vuol dire «non mettere in
+# cache»: vuol dire «chiedimi se è cambiato prima di usarlo»). Con l'ETag la
+# risposta normale è un 304 vuoto: costa un giro di rete e niente banda.
+# Le icone invece non cambiano mai, e restano in cache una settimana.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: SAMEORIGIN
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+/assets/js/*
+  Cache-Control: no-cache
+
+/assets/css/*
+  Cache-Control: no-cache
+
+/assets/icons/*
+  Cache-Control: public, max-age=604800
+
+/lingua/*
+  Cache-Control: no-cache
+
+/lingua/assets/icons/*
+  Cache-Control: public, max-age=604800

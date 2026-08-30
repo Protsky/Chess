@@ -149,6 +149,34 @@ dalle impostazioni, insieme a suoni ed elenco mosse.
 
 Pubblicata con GitHub Pages: **https://protsky.github.io/Chess/**
 
+### Anche su Cloudflare Pages
+
+Stessa cartella, nessun build: l'app è statica e usa solo percorsi relativi
+(`"start_url": "./"` nel manifest), quindi gira uguale alla radice di un dominio
+o dentro una sottocartella.
+
+Il motivo per cui vale la pena averla anche lì è [`_headers`](_headers): su
+GitHub Pages le intestazioni non si toccano e arriva `max-age=600` su tutto —
+per dieci minuti dopo ogni pubblicazione i telefoni che hanno già visitato l'app
+ricevono i file vecchi, e il service worker poi se li tiene. Su Cloudflare Pages
+il codice si rivalida sempre (ETag, risposta 304) e le icone restano in cache
+una settimana.
+
+Due modi, uno solo dei quali va fatto:
+
+1. **Collegando il repo** (consigliato): *Workers & Pages ▸ Create ▸ Pages ▸
+   Connect to Git ▸ Protsky/Chess*, ramo `main`, **nessun comando di build** e
+   cartella di uscita `/`. Da lì ogni push si pubblica da solo.
+2. **Da questa macchina**, senza collegare niente:
+
+```bash
+npx wrangler login                                   # apre il browser, una volta sola
+npx wrangler pages deploy . --project-name=scacchi   # ogni volta che si pubblica
+```
+
+Il primo modo pubblica anche i rami di prova su indirizzi separati; il secondo
+non chiede nessun accesso al repo.
+
 ## Provarlo
 
 Serve un piccolo server locale (i moduli JavaScript non funzionano aprendo il file da disco):
