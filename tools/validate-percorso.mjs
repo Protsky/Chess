@@ -390,6 +390,34 @@ for (const item of sicurezza) {
 ok(verificati === sicurezza.length,
   `${sicurezza.length - verificati} item del livello 1 non sono catture legali su case indifese`);
 
+/*
+ * La correzione del livello 1 fa vedere la ripresa: «prendi, e te lo riprendono».
+ * Deve dire il vero su tutti e cinque i casi, e soprattutto deve concordare con
+ * l'item — la casa giusta dev'essere libera anche secondo questa funzione.
+ */
+const posizione = Chess.fromFen('r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4');
+const difesa = Basics.catturaDi(posizione, Chess.idxOf('e5'));
+ok(difesa.tipo === 'difesa', 'un pedone difeso dev’essere riconosciuto come difeso');
+ok(Chess.nameOf(difesa.risposta.from) === 'c6', 'la ripresa deve venire dal cavallo in c6');
+ok(difesa.saldo === -2, `prendere un pedone col cavallo costa 2, non ${difesa.saldo}`);
+ok(Basics.catturaDi(posizione, Chess.idxOf('h6')).tipo === 'vuota', 'una casa vuota non è una cattura');
+ok(Basics.catturaDi(posizione, Chess.idxOf('c4')).tipo === 'tuo', 'un pezzo proprio non si cattura');
+ok(Basics.catturaDi(posizione, Chess.idxOf('a8')).tipo === 'irraggiungibile', 'un pezzo che non si può prendere va detto tale');
+
+// Concordanza: se l'item dice «questo è libero», la scena deve dire lo stesso.
+let concordi = 0;
+for (const item of Basics.sicurezzaPool(40)) {
+  const st0 = Chess.fromFen(item.fen);
+  const prima = Chess.legalMoves(st0).find((m) => Chess.nameOf(m.from) + Chess.nameOf(m.to) === item.firstMove.slice(0, 4));
+  if (!prima) continue;
+  if (Basics.catturaDi(Chess.applyMove(st0, prima), item.answer).tipo === 'libera') concordi += 1;
+}
+ok(concordi === 40, `${40 - concordi} item del livello 1 dicono «libero» dove la scena vede una ripresa`);
+
+// Le forme dell'italiano, che sono la metà del messaggio.
+ok(Basics.nomeDi('r') === 'La torre' && Basics.participioDi('r') === 'difesa', 'la torre è difesa, non difeso');
+ok(Basics.daDi('B') === 'dall’alfiere' && Basics.daDi('k') === 'dal re', 'le preposizioni articolate non tornano');
+
 /* Le code dei fondamentali: scadenze prima, tipi mescolati. */
 const codaVista = Basics.buildQueue({ axis: Basics.VISTA, due: [], known: new Set(), pool: vista });
 ok(codaVista.length === Math.min(Basics.SESSION_SIZE, Basics.MAX_NEW), 'la sessione di L0 non ha la lunghezza attesa');

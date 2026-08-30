@@ -1183,7 +1183,7 @@ function renderBasicsSession(axis) {
 
   function loadItem(index) {
     const { item, card } = queue[index];
-    current = { item, card, index, start: Date.now(), risposto: false };
+    current = { item, card, index, start: Date.now(), risposto: false, stato: null };
 
     headEl.innerHTML = `<h2>Domanda ${index + 1} di ${queue.length}</h2><p>${
       queue[index].fresh ? 'Nuova' : 'Ripasso'
@@ -1204,6 +1204,7 @@ function renderBasicsSession(axis) {
       board.setOrientation(item.side || 'w');
       board.setInteractive(false);
       board.setPosition(stato, ultima);
+      current.stato = stato;
       (item.marks || []).forEach((m) => board.flash(m.square, m.kind || 'hint', 60000));
     }
 
@@ -1241,9 +1242,19 @@ function renderBasicsSession(axis) {
         });
       }
     }
+    let attesa = giusta ? 1200 : 2400;
     if (current.item.kind === 'tocco') {
       if (square !== null) board.flash(square, giusta ? 'good' : 'wrong', 1500);
-      if (!giusta) board.flash(current.item.answer, 'good', 2500);
+      if (!giusta) {
+        // Se il pezzo scelto era difeso, la ragione si guarda: si gioca la
+        // cattura e poi la ripresa, e solo dopo la posizione torna com'era.
+        const scena = square === null ? null : Basics.catturaDi(current.stato, square);
+        if (scena && scena.tipo === 'difesa') {
+          attesa = mostraRipresa(scena);
+        } else {
+          board.flash(current.item.answer, 'good', 2500);
+        }
+      }
     }
     beep(giusta ? 'ok' : 'err');
 
@@ -1276,7 +1287,41 @@ function renderBasicsSession(axis) {
     later(() => {
       if (current.index + 1 < queue.length) loadItem(current.index + 1);
       else renderBasicsSummary();
-    }, giusta ? 1200 : 2400);
+    }, attesa);
+  }
+
+  /**
+   * La scena della ripresa: prendi, e te lo riprendono. Dura il tempo che serve
+   * a vederla — poi la scacchiera torna alla posizione della domanda, con la
+   * risposta giusta accesa, perché quello che deve restare in testa è la
+   * posizione di partenza, non il disastro.
+   */
+  function mostraRipresa(scena) {
+    const dopoCattura = applyMove(current.stato, scena.mossa);
+    const dopoRipresa = applyMove(dopoCattura, scena.risposta);
+    const preso = esc(san(toSan(current.stato, scena.mossa)));
+    const ripreso = esc(san(toSan(dopoCattura, scena.risposta)));
+
+    board.setPosition(dopoCattura, scena.mossa);
+    board.flash(scena.mossa.to, 'good', 700);
+    setPrompt(`Prendi: <strong>${preso}</strong>…`, '');
+
+    later(() => {
+      board.setPosition(dopoRipresa, scena.risposta);
+      board.flash(scena.risposta.to, 'wrong', 900);
+      beep('err');
+      setPrompt(`…e te lo riprende: <strong>${ripreso}</strong>. `
+        + `${esc(Basics.nomeDi(scena.preda))} era ${esc(Basics.participioDi(scena.preda))}${scena.difensore ? ` ${esc(Basics.daDi(scena.difensore))} in ${esc(nameOf(scena.risposta.from))}` : ''}`
+        + `${scena.saldo < 0 ? `, e resti sotto di ${Math.abs(scena.saldo)}` : ''}.`, 'bad');
+    }, 1100);
+
+    later(() => {
+      board.setPosition(current.stato, null);
+      board.flash(current.item.answer, 'good', 2200);
+      setPrompt(`<strong>Quello libero era in ${esc(nameOf(current.item.answer))}.</strong> ${esc(current.item.explain)}`, 'bad');
+    }, 3200);
+
+    return 5600;
   }
 
   function renderBasicsSummary() {

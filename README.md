@@ -41,7 +41,10 @@ gli item se li fabbrica il motore.
   niente?», su posizioni vere del corpus. Un pezzo è gratis solo se la cattura è
   **legale** e la casa non è difesa da nessuno: entrambe le cose si calcolano sul
   motore, non si stimano. Si esce a punteggio 800 con al massimo un errore sulle
-  ultime venti.
+  ultime venti. **Se sbagli, la ragione si guarda invece di leggerla**: la
+  scacchiera gioca la tua cattura e poi la ripresa dell’avversario — «prendi
+  Cxe5, e te lo riprende il cavallo in c6» — e solo dopo torna alla posizione
+  della domanda con la risposta giusta accesa.
 
 E per chi entra dalla tattica senza passare di lì, la **partenza è morbida**:
 finché il punteggio è provvisorio (le prime 25 risposte) arrivano solo posizioni

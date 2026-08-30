@@ -1,5 +1,5 @@
 /* Service worker: rende l'app utilizzabile offline dopo la prima visita. */
-const CACHE = 'aperture-scacchi-v6';
+const CACHE = 'aperture-scacchi-v7';
 
 const ASSETS = [
   './',

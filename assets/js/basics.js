@@ -225,6 +225,63 @@ export function presaItem(puzzle) {
   };
 }
 
+/**
+ * Che cosa succede davvero se prendo **quel** pezzo.
+ *
+ * Serve alla correzione del livello 1: dire «no, quello è difeso» è un'etichetta;
+ * far vedere il pedone che riprende è la ragione. Restituisce la cattura più
+ * naturale (col pezzo di minor valore, che è quella che chiunque farebbe) e, se
+ * c'è, la ripresa migliore dell'avversario — anche quella col pezzo che vale
+ * meno, perché è la ripresa che costa di più a chi ha catturato.
+ */
+export function catturaDi(state, square) {
+  const preda = state.board[square];
+  if (!preda) return { tipo: 'vuota' };
+  if (colorOf(preda) === state.turn) return { tipo: 'tuo', preda };
+
+  const valore = (p) => VALORE[p.toUpperCase()] || 0;
+  const catture = legalMoves(state)
+    .filter((m) => m.to === square)
+    .sort((a, b) => valore(a.piece) - valore(b.piece));
+  if (!catture.length) return { tipo: 'irraggiungibile', preda };
+
+  const mossa = catture[0];
+  const dopo = applyMove(state, mossa);
+  const riprese = legalMoves(dopo)
+    .filter((m) => m.to === square)
+    .sort((a, b) => valore(a.piece) - valore(b.piece));
+
+  if (!riprese.length) return { tipo: 'libera', mossa, preda };
+
+  const risposta = riprese[0];
+  return {
+    tipo: 'difesa',
+    mossa,
+    risposta,
+    preda,
+    difensore: dopo.board[risposta.from],
+    saldo: valore(preda) - valore(mossa.piece),      // negativo = ci rimetti
+  };
+}
+
+/*
+ * Le tre forme che servono alle spiegazioni, perché l'italiano non perdona:
+ * «La torre era difesa **dal** re», non «Il torre era difeso **da il** re».
+ */
+export function nomeDi(pezzo) {
+  return NOME_PEZZO[String(pezzo).toUpperCase()]?.[0] || 'Il pezzo';
+}
+
+export function participioDi(pezzo) {
+  return NOME_PEZZO[String(pezzo).toUpperCase()]?.[1] || 'difeso';
+}
+
+const DA_PEZZO = { P: 'dal pedone', N: 'dal cavallo', B: 'dall’alfiere', R: 'dalla torre', Q: 'dalla donna', K: 'dal re' };
+
+export function daDi(pezzo) {
+  return DA_PEZZO[String(pezzo).toUpperCase()] || 'da un pezzo';
+}
+
 /* ------------------------------- le sessioni ----------------------------- */
 
 /** Tutte le case, in un ordine sparso ma sempre lo stesso. */
