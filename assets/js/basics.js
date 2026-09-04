@@ -243,7 +243,22 @@ export function catturaDi(state, square) {
   const catture = legalMoves(state)
     .filter((m) => m.to === square)
     .sort((a, b) => valore(a.piece) - valore(b.piece));
-  if (!catture.length) return { tipo: 'irraggiungibile', preda };
+
+  /*
+   * I difensori si calcolano **sempre**, anche quando non ci arrivo: la domanda
+   * di chi sbaglia non è «che cosa succede se prendo» ma «chi me lo riprende»,
+   * e a quella bisogna saper rispondere anche per un pezzo che non posso
+   * catturare. Prima l'app la lasciava senza risposta, ed era il caso più
+   * frequente.
+   *
+   * Si guarda dopo aver tolto la preda dalla casa: un difensore che la difende
+   * *attraverso* un altro pezzo (una torre dietro una torre) conta, e un pezzo
+   * che sembra difendere ma è inchiodato non conta, perché la ripresa dev'essere
+   * una mossa legale.
+   */
+  const difensori = difensoriDi(state, square);
+
+  if (!catture.length) return { tipo: 'irraggiungibile', preda, difensori };
 
   const mossa = catture[0];
   const dopo = applyMove(state, mossa);
@@ -251,17 +266,137 @@ export function catturaDi(state, square) {
     .filter((m) => m.to === square)
     .sort((a, b) => valore(a.piece) - valore(b.piece));
 
-  if (!riprese.length) return { tipo: 'libera', mossa, preda };
+  if (!riprese.length) return { tipo: 'libera', mossa, preda, difensori: [] };
 
   const risposta = riprese[0];
+
+  /*
+   * Per il caso «è difeso» i difensori si contano **dopo la mia cattura**, non
+   * prima. La differenza non è teorica: il mio pezzo, andandosene dalla casa da
+   * cui parte, può aprire una linea e liberare un difensore che prima non
+   * c'era. Sono undici casi su un campione di sessanta item — e sono proprio
+   * quelli in cui chi studia non capirebbe da dove è arrivata la ripresa.
+   */
+  const visti = new Set();
+  const chiRiprende = riprese
+    .filter((m) => (visti.has(m.from) ? false : visti.add(m.from)))
+    .map((m) => ({ from: m.from, pezzo: m.piece, valore: valore(m.piece) }));
+
   return {
     tipo: 'difesa',
     mossa,
     risposta,
     preda,
     difensore: dopo.board[risposta.from],
+    difensori: chiRiprende,
+    /* Chi difendeva già prima che io muovessi: serve a spiegare gli scoperti. */
+    difensoriPrima: difensori,
+    scoperti: chiRiprende.filter((d) => !difensori.some((x) => x.from === d.from)),
     saldo: valore(preda) - valore(mossa.piece),      // negativo = ci rimetti
   };
+}
+
+/**
+ * Chi riprenderebbe su quella casa, tutti quanti, con la casa da cui arrivano.
+ *
+ * Non è `attackersOf`: quella è geometria, e conta anche un pezzo inchiodato
+ * che non potrebbe mai muoversi. Qui si tolgono la preda dalla casa e si
+ * guardano le **mosse legali** dell'avversario che ci finiscono sopra: è la
+ * definizione operativa di «difeso», la stessa che usa il resto dell'app.
+ */
+export function difensoriDi(state, square) {
+  const preda = state.board[square];
+  if (!preda) return [];
+  const sue = colorOf(preda);
+  const mie = other(sue);
+
+  /*
+   * Al posto della preda si mette un **pezzo mio**, e si chiede all'avversario
+   * quali catture legali finiscono lì. Non si svuota la casa, ed è la
+   * differenza fra una risposta giusta e una sbagliata: un pedone difende in
+   * diagonale, e su una casa vuota quella diagonale non è una mossa legale —
+   * svuotando, i pedoni difensori sparivano e al loro posto comparivano le
+   * spinte di pedone, che non riprendono niente. (Trovato dal test: 39 falsi
+   * difensori su un campione di sessanta item.)
+   *
+   * L'esca è una donna perché è legale su qualunque casa: quello che conta è
+   * che ci sia un bersaglio del mio colore, non quanto vale.
+   */
+  const conEsca = { ...state, board: state.board.slice(), turn: sue, ep: null };
+  conEsca.board[square] = mie === 'w' ? 'Q' : 'q';
+
+  const valore = (p) => VALORE[p.toUpperCase()] || 0;
+  const visti = new Set();
+  return legalMoves(conEsca)
+    .filter((m) => m.to === square && m.capture)
+    .filter((m) => (visti.has(m.from) ? false : visti.add(m.from)))
+    .map((m) => ({ from: m.from, pezzo: m.piece, valore: valore(m.piece) }))
+    .sort((a, b) => a.valore - b.valore);
+}
+
+/**
+ * Perché quella casa non era la risposta: una frase sola, vera per costruzione.
+ *
+ * `answer` è la casa giusta, e serve a distinguere il caso più insidioso — un
+ * pezzo che *è* gratis ma vale meno di quello che si doveva prendere. Prima
+ * finiva nel silenzio insieme a tutti gli altri sbagli.
+ */
+export function perche(state, square, answer) {
+  const scena = catturaDi(state, square);
+  const nome = (p) => nomeDi(p).toLowerCase();
+
+  if (scena.tipo === 'vuota') {
+    return { ...scena, testo: `In ${nameOf(square)} non c’è nessun pezzo.` };
+  }
+  if (scena.tipo === 'tuo') {
+    return {
+      ...scena,
+      testo: `${nomeDi(scena.preda)} in ${nameOf(square)} è ${tuoDi(scena.preda)}: si cerca un pezzo dell’avversario.`,
+    };
+  }
+  if (scena.tipo === 'irraggiungibile') {
+    const lo = participioDi(scena.preda).endsWith('a') ? 'la' : 'lo';
+    const chi = scena.difensori.length
+      ? ` E comunque è ${participioDi(scena.preda)} ${elenco(scena.difensori)}.`
+      : '';
+    return {
+      ...scena,
+      testo: `Nessuno dei tuoi pezzi arriva su ${nameOf(square)}: non ${lo} puoi proprio prendere.${chi}`,
+    };
+  }
+  if (scena.tipo === 'libera') {
+    const valorePreda = VALORE[scena.preda.toUpperCase()] || 0;
+    const valoreGiusta = VALORE[String(state.board[answer]).toUpperCase()] || 0;
+    if (valoreGiusta > valorePreda) {
+      return {
+        ...scena,
+        testo: `${nomeDi(scena.preda)} in ${nameOf(square)} è davvero gratis, ma in `
+          + `${nameOf(answer)} c’è ${nome(state.board[answer])}, che vale di più.`,
+      };
+    }
+    return { ...scena, testo: `${nomeDi(scena.preda)} in ${nameOf(square)} è gratis, ma la risposta era ${nameOf(answer)}.` };
+  }
+
+  /*
+   * Si dice chi riprende, e basta.
+   *
+   * Una prima versione distingueva anche i difensori «scoperti» — quelli che si
+   * liberano solo dopo che il mio pezzo si è tolto di mezzo. È vero, ma per chi
+   * sta imparando a non regalare pezzi è una complicazione che non serve: la
+   * domanda è «chi me lo riprende», e la risposta è l'elenco di chi lo fa.
+   */
+  return {
+    ...scena,
+    testo: `${nomeDi(scena.preda)} in ${nameOf(square)} è ${participioDi(scena.preda)} ${elenco(scena.difensori)}.`,
+  };
+}
+
+/** «dal pedone in c6» oppure «dal pedone in c6 e dalla torre in d1». */
+export function elenco(difensori) {
+  if (!difensori || !difensori.length) return 'da nessuno';
+  const pezzi = difensori.map((d) => `${daDi(d.pezzo)} in ${nameOf(d.from)}`);
+  if (pezzi.length === 1) return pezzi[0];
+  return `${pezzi.slice(0, -1).join(', ')} e ${pezzi[pezzi.length - 1]}`;
 }
 
 /*
@@ -280,6 +415,16 @@ const DA_PEZZO = { P: 'dal pedone', N: 'dal cavallo', B: 'dall’alfiere', R: 'd
 
 export function daDi(pezzo) {
   return DA_PEZZO[String(pezzo).toUpperCase()] || 'da un pezzo';
+}
+
+/** «tua» per torre e donna, «tuo» per gli altri: la concordanza si sente. */
+export function tuoDi(pezzo) {
+  return participioDi(pezzo).endsWith('a') ? 'tua' : 'tuo';
+}
+
+/** Il pezzo al nominativo con la sua casa: «l'alfiere in f8». */
+export function alPezzo(pezzo, casa) {
+  return `${nomeDi(pezzo).toLowerCase()} in ${nameOf(casa)}`;
 }
 
 /* ------------------------------- le sessioni ----------------------------- */

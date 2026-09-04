@@ -37,6 +37,7 @@ const Ricostruzione = await import('../assets/js/ricostruzione.js');
 const Piani = await import('../assets/js/piani.js');
 const Regime = await import('../assets/js/regime.js');
 const Tactics = await import('../assets/js/tactics.js');
+const Basics = await import('../assets/js/basics.js');
 const Sync = await import('../assets/js/sync.js');
 const Store = await import('../assets/js/store.js');
 const { PUZZLES } = await import('../assets/js/puzzles.js');
@@ -478,6 +479,118 @@ const oggi = Percorso.oggi({ due: 0, introduced: 0, settings: { newPerDay: 8 }, 
 ok(oggi.allenabili === allenamento.length, 'la home deve contare le posizioni allenabili, non tutte');
 ok(oggi.allenabili < PUZZLES.length, 'e devono essere meno di tutte, altrimenti l\'esame non è tenuto fuori');
 
+/* --------- 12. il livello 1 sa dire perche', per ogni casa toccata --------- */
+
+/*
+ * Il difetto che questi controlli esistono per non far tornare: la scena della
+ * ripresa partiva solo se il pezzo scelto era difeso. Chi toccava un pezzo che
+ * non poteva nemmeno catturare non riceveva nessuna spiegazione, e restava con
+ * la domanda vera in mano — «chi me lo riprende».
+ *
+ * Quindi qui si tocca **ogni casa possibile** di un campione di item veri e si
+ * pretende che l'app abbia sempre qualcosa di vero da dire.
+ */
+
+const itemL1 = Basics.sicurezzaPool(120).filter((it) => it.kind === 'tocco');
+ok(itemL1.length >= 60, `troppi pochi item del livello 1 per provare: ${itemL1.length}`);
+
+let senzaSpiegazione = 0;
+let difensoriSbagliati = 0;
+let casiVisti = { vuota: 0, tuo: 0, irraggiungibile: 0, libera: 0, difesa: 0 };
+
+for (const item of itemL1.slice(0, 60)) {
+  const partenza = fromFen(item.fen);
+  const prima = legalMoves(partenza).find(
+    (m) => nameOf(m.from) + nameOf(m.to) === item.firstMove.slice(0, 4),
+  );
+  if (!prima) continue;
+  const stato = applyMove(partenza, prima);
+
+  for (let casa = 0; casa < 64; casa++) {
+    if (casa === item.answer) continue;
+    const sp = Basics.perche(stato, casa, item.answer);
+    checks += 1;
+    if (!sp.testo || sp.testo.length < 10) { senzaSpiegazione += 1; continue; }
+    casiVisti[sp.tipo] = (casiVisti[sp.tipo] || 0) + 1;
+
+    /*
+     * Ogni difensore dichiarato deve poter davvero **riprendere**.
+     *
+     * Dove la cattura si può fare, la prova è quella vera: si gioca la cattura
+     * e si guarda chi ha una risposta legale su quella casa. Dove non si può
+     * (il pezzo è irraggiungibile) si mette un pezzo mio come esca, che è la
+     * definizione operativa di «difeso».
+     */
+    if (sp.tipo === 'difesa') {
+      const dopoCattura = applyMove(stato, sp.mossa);
+      for (const d of sp.difensori) {
+        const puo = legalMoves(dopoCattura).some((m) => m.from === d.from && m.to === casa);
+        if (!puo) difensoriSbagliati += 1;
+      }
+      /* E la ripresa scelta dev'essere una di quelle elencate. */
+      if (!sp.difensori.some((d) => d.from === sp.risposta.from)) difensoriSbagliati += 1;
+    } else {
+      for (const d of sp.difensori || []) {
+        const conEsca = { ...stato, board: stato.board.slice(), turn: other(stato.turn), ep: null };
+        conEsca.board[casa] = stato.turn === 'w' ? 'Q' : 'q';
+        const puo = legalMoves(conEsca).some((m) => m.from === d.from && m.to === casa && m.capture);
+        if (!puo) difensoriSbagliati += 1;
+      }
+    }
+  }
+}
+
+ok(senzaSpiegazione === 0, `${senzaSpiegazione} case toccate non ricevono nessuna spiegazione`);
+ok(difensoriSbagliati === 0, `${difensoriSbagliati} difensori dichiarati non possono davvero riprendere`);
+ok(casiVisti.irraggiungibile > 0, 'il caso "non ci arrivo" deve comparire, ed e\' quello che prima taceva');
+ok(casiVisti.difesa > 0, 'il caso "e\' difeso" deve comparire');
+ok(casiVisti.tuo > 0, 'anche toccare un proprio pezzo deve avere una risposta');
+ok(casiVisti.vuota > 0, 'anche toccare una casa vuota deve avere una risposta');
+
+/*
+ * Un difensore inchiodato non e' un difensore: e' la differenza fra la
+ * geometria e le mosse legali, ed e' quella che rende la spiegazione vera.
+ */
+const inchiodato = fromFen('4k3/8/8/8/8/4b3/4N3/4K3 w - - 0 1');
+ok(Basics.difensoriDi(inchiodato, idxOf('e3')).length === 0,
+  'il cavallo in e2 e\' inchiodato dall\'alfiere: non difende niente');
+
+/*
+ * Il pedone che difende in diagonale: il caso che la prima versione perdeva.
+ * b6 e' difeso dal pedone c7, e su una casa svuotata non lo si sarebbe visto.
+ */
+const conPedone = fromFen('4k3/2p5/1p6/8/8/8/8/4K3 w - - 0 1');
+const difB6 = Basics.difensoriDi(conPedone, idxOf('b6'));
+ok(difB6.length === 1, `b6 e' difeso dal pedone c7: ${difB6.length} difensori trovati`);
+ok(difB6[0].from === idxOf('c7'), 'e il difensore deve essere proprio quello in c7');
+ok(Basics.elenco(difB6).includes('c7'), `l'elenco deve nominare la casa: "${Basics.elenco(difB6)}"`);
+ok(Basics.elenco([]) === 'da nessuno', 'senza difensori si dice "da nessuno"');
+
+/* E una spinta di pedone non e' una difesa: b7 non difende b6. */
+const soloSpinta = fromFen('4k3/1p6/8/8/8/8/8/4K3 w - - 0 1');
+ok(Basics.difensoriDi({ ...soloSpinta, board: (() => {
+  const b = soloSpinta.board.slice(); b[idxOf('b6')] = 'n'; return b;
+})() }, idxOf('b6')).length === 0, 'il pedone in b7 puo\' spingere su b6, ma non lo difende');
+
+/* Il caso insidioso: un pezzo gratis, ma non quello che valeva di piu'. */
+let trovatoMinore = 0;
+for (const item of itemL1.slice(0, 60)) {
+  const partenza = fromFen(item.fen);
+  const prima = legalMoves(partenza).find(
+    (m) => nameOf(m.from) + nameOf(m.to) === item.firstMove.slice(0, 4),
+  );
+  if (!prima) continue;
+  const stato = applyMove(partenza, prima);
+  for (const libero of Basics.presaIn(stato)) {
+    if (libero.square === item.answer) continue;
+    const sp = Basics.perche(stato, libero.square, item.answer);
+    checks += 1;
+    if (sp.tipo === 'libera' && /vale di piu|davvero gratis/.test(sp.testo)) trovatoMinore += 1;
+    else if (sp.tipo === 'libera') difensoriSbagliati += 1;
+  }
+}
+ok(trovatoMinore > 0, 'il caso "e\' gratis, ma ce n\'e\' uno che vale di piu\'" deve essere riconosciuto');
+
 /* -------------------------------- verdetto ------------------------------- */
 
 console.log(`Controlli: ${checks}`);
@@ -486,6 +599,7 @@ console.log(`Copertura dell'intervallo al 95%: ${(copertura * 100).toFixed(1)}% 
 console.log(`Posizioni d'esame tenute fuori: ${esame.length} su ${PUZZLES.length}`);
 console.log(`Posizioni quiete ricontrollate: ${QUIETE.length}`);
 console.log(`Confutazioni trovate: ${confutate}/${occasioni}`);
+console.log(`Case del livello 1 con una spiegazione vera: ${Object.values(casiVisti).reduce((a, b) => a + b, 0)}`);
 
 if (errors.length) {
   console.error(`\n${errors.length} problemi:`);

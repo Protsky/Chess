@@ -1540,6 +1540,7 @@ function renderBasicsSession(axis) {
     <div class="board-wrap" id="board-host"></div>
     <div class="prompt" id="prompt"><span class="prompt__text"></span></div>
     <div class="stack" id="options"></div>
+    <button class="btn" id="rivedi" hidden>↻ Rivedi perché</button>
     <button class="btn btn--ghost btn--danger" id="quit">Esci dalla sessione</button>
   </div>`);
 
@@ -1549,6 +1550,7 @@ function renderBasicsSession(axis) {
   const promptText = promptEl.querySelector('.prompt__text');
   const optionsEl = view.querySelector('#options');
   const boardHost = view.querySelector('#board-host');
+  const rivediBtn = view.querySelector('#rivedi');
 
   function setPrompt(html, kind = '') {
     promptEl.className = `prompt${kind ? ` prompt--${kind}` : ''}`;
@@ -1568,7 +1570,11 @@ function renderBasicsSession(axis) {
 
   function loadItem(index) {
     const { item, card } = queue[index];
-    current = { item, card, index, start: Date.now(), risposto: false, stato: null };
+    current = {
+      item, card, index, start: Date.now(), risposto: false, stato: null,
+      ultimaScelta: null, trattenuto: false, spiegazione: null,
+    };
+    rivediBtn.hidden = true;
 
     headEl.innerHTML = `<h2>Domanda ${index + 1} di ${queue.length}</h2><p>${
       queue[index].fresh ? 'Nuova' : 'Ripasso'
@@ -1611,6 +1617,7 @@ function renderBasicsSession(axis) {
   function rispondi(giusta, btn, square = null) {
     if (current.risposto) return;
     current.risposto = true;
+    current.ultimaScelta = square;
     board.setSelectMode(null);
     board.clearFlash('hint');
 
@@ -1630,15 +1637,20 @@ function renderBasicsSession(axis) {
     let attesa = giusta ? 1200 : 2400;
     if (current.item.kind === 'tocco') {
       if (square !== null) board.flash(square, giusta ? 'good' : 'wrong', 1500);
-      if (!giusta) {
-        // Se il pezzo scelto era difeso, la ragione si guarda: si gioca la
-        // cattura e poi la ripresa, e solo dopo la posizione torna com'era.
-        const scena = square === null ? null : Basics.catturaDi(current.stato, square);
-        if (scena && scena.tipo === 'difesa') {
-          attesa = mostraRipresa(scena);
-        } else {
-          board.flash(current.item.answer, 'good', 2500);
-        }
+      if (!giusta && square !== null && current.stato) {
+        /*
+         * La ragione si guarda, sempre — non solo quando il pezzo era difeso.
+         *
+         * Prima la scena partiva unicamente nel caso «difesa»: chi toccava un
+         * pezzo che non poteva nemmeno catturare non riceveva nessuna
+         * spiegazione, e restava con la domanda vera in mano, cioè *chi me lo
+         * riprende*. Adesso ogni caso ha la sua risposta, i difensori si
+         * accendono sulla scacchiera invece di essere solo nominati, e la scena
+         * si può rivedere quante volte si vuole invece di scappare via.
+         */
+        attesa = spiegaSbaglio(square);
+      } else if (!giusta) {
+        board.flash(current.item.answer, 'good', 2500);
       }
     }
     beep(giusta ? 'ok' : 'err');
@@ -1667,20 +1679,67 @@ function renderBasicsSession(axis) {
 
     results[current.index] = { correct: giusta, item: current.item, delta: next.delta };
     drawProgress();
-    setPrompt(`${giusta ? '<strong>Giusto.</strong>' : '<strong>No.</strong>'} ${esc(current.item.explain)}`, giusta ? 'good' : 'bad');
+    /*
+     * Sulle risposte sbagliate «a tocco» il messaggio lo scrive la scena, che sa
+     * molto di più: quale pezzo, chi lo difende, e da dove. Sovrascriverlo qui
+     * con la frase generica cancellerebbe proprio la spiegazione.
+     */
+    if (!(current.item.kind === 'tocco' && !giusta && current.spiegazione)) {
+      setPrompt(`${giusta ? '<strong>Giusto.</strong>' : '<strong>No.</strong>'} ${esc(current.item.explain)}`, giusta ? 'good' : 'bad');
+    }
 
-    later(() => {
-      if (current.index + 1 < queue.length) loadItem(current.index + 1);
-      else renderBasicsSummary();
-    }, attesa);
+    later(() => avanti(), attesa);
   }
 
   /**
-   * La scena della ripresa: prendi, e te lo riprendono. Dura il tempo che serve
-   * a vederla — poi la scacchiera torna alla posizione della domanda, con la
-   * risposta giusta accesa, perché quello che deve restare in testa è la
-   * posizione di partenza, non il disastro.
+   * Il passo avanti. Sta in una funzione sua perché «rivedi» rimette in piedi
+   * la scena e poi deve poter riprogrammare l'avanzamento senza duplicarlo.
    */
+  function avanti() {
+    rivediBtn.hidden = true;
+    if (current.index + 1 < queue.length) loadItem(current.index + 1);
+    else renderBasicsSummary();
+  }
+
+  /**
+   * Perché quella casa non andava bene — e chi te lo riprende.
+   *
+   * Tre momenti, e il primo è quello che mancava: **i difensori accesi sulla
+   * posizione della domanda**, prima ancora di muovere niente. La domanda di
+   * chi sbaglia è «quale altro mi può mangiare», e la risposta è una casa, non
+   * una frase: quindi si illumina quella casa.
+   *
+   * Poi, se la cattura si può fare, si gioca la scena (prendi, e te lo
+   * riprendono). Infine si torna alla posizione di partenza con la risposta
+   * giusta accesa — perché quello che deve restare in testa è la posizione,
+   * non il disastro. Il bottone «rivedi» rifà tutto da capo, quante volte serve.
+   */
+  function spiegaSbaglio(square) {
+    const spiegazione = Basics.perche(current.stato, square, current.item.answer);
+    current.spiegazione = spiegazione;
+    const difensori = spiegazione.difensori || [];
+
+    /* Primo momento: chi difende quella casa, illuminato. */
+    board.setPosition(current.stato, null);
+    board.flash(square, 'wrong', 2600);
+    difensori.forEach((d) => board.flash(d.from, 'difensore', 2600));
+    setPrompt(`<strong>No.</strong> ${esc(spiegazione.testo)}`, 'bad');
+    if (difensori.length) mostraRivedi();
+
+    if (spiegazione.tipo !== 'difesa') {
+      later(() => {
+        board.flash(current.item.answer, 'good', 2600);
+        setPrompt(`<strong>Quello libero era in ${esc(nameOf(current.item.answer))}.</strong> `
+          + `${esc(current.item.explain)}`, 'bad');
+      }, 2700);
+      return difensori.length ? 5600 : 4200;
+    }
+
+    later(() => mostraRipresa(spiegazione), 2700);
+    return 8000;
+  }
+
+  /** Prendi, e te lo riprendono: la scena, con il difensore che parte acceso. */
   function mostraRipresa(scena) {
     const dopoCattura = applyMove(current.stato, scena.mossa);
     const dopoRipresa = applyMove(dopoCattura, scena.risposta);
@@ -1688,25 +1747,44 @@ function renderBasicsSession(axis) {
     const ripreso = esc(san(toSan(dopoCattura, scena.risposta)));
 
     board.setPosition(dopoCattura, scena.mossa);
-    board.flash(scena.mossa.to, 'good', 700);
-    setPrompt(`Prendi: <strong>${preso}</strong>…`, '');
+    board.flash(scena.mossa.to, 'good', 900);
+    /* Il difensore che sta per riprendere resta acceso mentre la scena scorre. */
+    board.flash(scena.risposta.from, 'difensore', 1900);
+    setPrompt(`Prendi <strong>${preso}</strong>… e guarda ${esc(nameOf(scena.risposta.from))}.`, '');
 
     later(() => {
       board.setPosition(dopoRipresa, scena.risposta);
-      board.flash(scena.risposta.to, 'wrong', 900);
+      board.flash(scena.risposta.to, 'wrong', 1100);
       beep('err');
-      setPrompt(`…e te lo riprende: <strong>${ripreso}</strong>. `
-        + `${esc(Basics.nomeDi(scena.preda))} era ${esc(Basics.participioDi(scena.preda))}${scena.difensore ? ` ${esc(Basics.daDi(scena.difensore))} in ${esc(nameOf(scena.risposta.from))}` : ''}`
-        + `${scena.saldo < 0 ? `, e resti sotto di ${Math.abs(scena.saldo)}` : ''}.`, 'bad');
-    }, 1100);
+      setPrompt(`…e te lo riprende <strong>${ripreso}</strong>: era ${esc(Basics.daDi(scena.difensore))} `
+        + `in ${esc(nameOf(scena.risposta.from))}.`
+        + `${scena.saldo < 0 ? ` Resti sotto di ${Math.abs(scena.saldo)}.` : ''}`, 'bad');
+    }, 1500);
 
     later(() => {
       board.setPosition(current.stato, null);
-      board.flash(current.item.answer, 'good', 2200);
+      board.flash(current.item.answer, 'good', 2400);
       setPrompt(`<strong>Quello libero era in ${esc(nameOf(current.item.answer))}.</strong> ${esc(current.item.explain)}`, 'bad');
-    }, 3200);
+    }, 3600);
+  }
 
-    return 5600;
+  /**
+   * Il bottone per rivedere. Esiste perché la scena dura cinque secondi e chi
+   * sta imparando ne ha bisogno di più: una spiegazione che scappa non è una
+   * spiegazione. Ferma anche l'avanzamento automatico, così non si passa alla
+   * domanda dopo mentre si sta ancora guardando.
+   */
+  function mostraRivedi() {
+    if (!rivediBtn) return;
+    rivediBtn.hidden = false;
+    rivediBtn.onclick = () => {
+      clearTimers();
+      current.trattenuto = true;
+      const square = current.ultimaScelta;
+      if (square === null || square === undefined) return;
+      spiegaSbaglio(square);
+      later(() => { avanti(); }, 9000);
+    };
   }
 
   function renderBasicsSummary() {

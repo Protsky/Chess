@@ -904,3 +904,26 @@ p { margin: 0; }
  */
 .board--blind .piece { visibility: hidden; }
 .board--blind .sq--sel { box-shadow: inset 0 0 0 3px var(--gold); }
+
+/*
+ * Il difensore: la casa da cui te lo riprendono.
+ *
+ * Un colore suo, diverso sia dal rosso dell'errore sia dal verde della risposta
+ * giusta, perché non è nessuna delle due cose — è l'informazione che mancava.
+ * L'anello pulsa due volte e poi resta: deve attirare l'occhio e poi lasciarsi
+ * guardare.
+ */
+.sq--difensore::before {
+  content: '';
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  border: 3px solid var(--blue);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--blue) 70%, transparent);
+  animation: pulsa 0.9s ease 2;
+}
+
+@keyframes pulsa {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.12); }
+}
