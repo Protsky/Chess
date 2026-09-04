@@ -3719,6 +3719,13 @@ function renderTrappole() {
         in media ${divarioMedio} punti percentuali di differenza. Non sono posizioni difficili in assoluto —
         sono difficili <em>per la tua fascia</em>, ed è una cosa diversa.
       </div>
+      ${sessione.finite ? `<div class="note">
+        <div class="note__label">Il serbatoio della tua fascia è quasi vuoto</div>
+        Per la fascia ${sessione.fascia} ne esistono <strong>${sessione.totale}</strong> in tutto, e ne hai viste
+        ${fatte.length}. Non è un difetto del corpus: salendo di livello le trappole si esauriscono, perché il
+        modello distingue sempre meno fra una fascia e quella sopra — e senza divario non c’è niente da chiamare
+        «del tuo livello». Meglio dirlo che riempire la sessione di posizioni qualsiasi.
+      </div>` : ''}
       <div class="note">
         <div class="note__label">Da dove viene il numero</div>
         Quali mosse perdono lo stabilisce il motore, con una ricerca esaustiva sulle mosse forzanti: è un fatto,
