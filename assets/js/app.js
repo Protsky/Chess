@@ -19,6 +19,8 @@ import * as Calcolo from './calcolo.js';
 import * as Ricostruzione from './ricostruzione.js';
 import * as Piani from './piani.js';
 import * as Regime from './regime.js';
+import * as Trappola from './trappola.js';
+import * as Forzante from './forzante.js';
 import { PUZZLES } from './puzzles.js';
 import { createScheduler, newCard, DEFAULT_W, AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 import * as Stats from './stats.js';
@@ -348,6 +350,18 @@ function renderHome() {
           <div class="path-exam__line">Gioca tre finali senza perdere l’esito: si conta da sé, dalla sessione dei finali.</div>
         </div>
       </div>`));
+    }
+    if (attivo && livello.code === 'L1') {
+      const t = Trappola.disponibili().find((x) => x.fascia === Trappola.fasciaDi(rating.rating));
+      path.appendChild(h(`<button class="card path-exam" data-go="#/trappole">
+        <div class="path-exam__body">
+          <div class="path-exam__name">🪤 Trappole del tuo livello</div>
+          <div class="path-exam__line">${t && t.quante
+            ? `${t.quante} posizioni dove chi gioca intorno ai ${t.fascia} punti perde materiale, e chi sta in alto no.`
+            : 'Per la tua fascia il modello non trova più divario: l’app te lo dice invece di inventarle.'}</div>
+        </div>
+        <div class="level-card__chevron">›</div>
+      </button>`));
     }
     if (attivo && livello.code === 'L0') {
       path.appendChild(h(`<button class="card path-exam" data-go="#/ricostruzione">
@@ -3509,6 +3523,251 @@ function renderPiani({ esame = null } = {}) {
   load(0);
 }
 
+/* --------------------------- trappole del tuo livello --------------------- */
+
+/*
+ * L'unico esercizio dell'app in cui non c'è niente da trovare: c'è qualcosa da
+ * non fare. Le posizioni sono quelle in cui i giocatori della tua fascia
+ * giocano spesso una mossa che perde materiale, mentre più in alto no.
+ *
+ * Il giudizio non è un'opinione e non viene da Maia: la mossa che giochi la
+ * valuta il motore di casa con la stessa ricerca che ha stabilito, in
+ * preparazione del corpus, quali mosse perdono. Maia serve solo a **scegliere**
+ * le posizioni e a dire quanto spesso ci si cade — ed è una previsione di
+ * comportamento, non una misura, quindi l'app lo scrive ogni volta che mostra
+ * quel numero.
+ */
+function renderTrappole() {
+  const now = Date.now();
+  const stato = tacticState();
+  const cards = Store.allCards(Trappola.PREFIX);
+  const scheduler = makeScheduler();
+
+  const sessione = Trappola.costruisci({
+    rating: stato.rating,
+    due: Store.dueCards(Trappola.PREFIX, now),
+    viste: new Set(cards.map((c) => c.id)),
+  });
+
+  if (!sessione.items.length) return renderTrappoleFinite(sessione);
+
+  setBar({ title: 'Trappole', back: '#/', action: { label: '⇅', aria: 'Gira la scacchiera', onClick: () => board.flip() } });
+
+  const results = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci dalla sessione</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptDot = promptEl.querySelector('.prompt__dot');
+  const promptText = promptEl.querySelector('.prompt__text');
+
+  const setPrompt = (t, k = '') => {
+    promptEl.className = `prompt${k ? ` prompt--${k}` : ''}`;
+    promptText.innerHTML = t;
+  };
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    sessione.items.forEach((_, i) => {
+      const span = document.createElement('span');
+      if (results[i]) span.className = results[i].correct ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function load(index) {
+    const item = sessione.items[index];
+    const pos = Trappola.posizioneDi(item.riga);
+    if (!pos) {
+      /* Una riga senza posizione non si finge: si salta e si va avanti. */
+      results[index] = null;
+      if (index + 1 < sessione.items.length) return load(index + 1);
+      return fine();
+    }
+
+    const partenza = pos.stato || fromFen(pos.fen);
+    current = {
+      ...item, index, pos, stato: partenza, side: partenza.turn,
+      risposto: false, start: Date.now(),
+    };
+
+    headEl.innerHTML = `<h2>Posizione ${index + 1} di ${sessione.items.length}</h2><p>${
+      item.fresh ? 'Nuova' : 'Ripasso'
+    } · giochi con il ${COLOR_IT[partenza.turn]}</p>`;
+    promptDot.className = `prompt__dot prompt__dot--${partenza.turn}`;
+
+    board.setOrientation(partenza.turn);
+    board.setBlind(false);
+    board.setPosition(partenza, pos.ultima || null);
+    board.setInteractive(true);
+    drawProgress();
+    setPrompt(`Muove il <strong>${COLOR_IT[partenza.turn]}</strong>: gioca una mossa che <strong>non perde materiale</strong>.`);
+  }
+
+  function onMove(mossa) {
+    if (!current || current.risposto || !board.interactive) return;
+    current.risposto = true;
+    board.setInteractive(false);
+
+    /*
+     * Il giudizio: lo stesso conto che in preparazione ha deciso quali mosse
+     * perdono. Non «Maia dice che è sbagliata» — Maia non giudica niente qui.
+     */
+    const perde = Forzante.perdente(current.stato, mossa);
+    const secondi = Math.round((Date.now() - current.start) / 1000);
+    const n = Trappola.numeri(current.riga, current.fascia);
+
+    beep(perde ? 'err' : 'ok');
+    board.flash(mossa.to, perde ? 'wrong' : 'good', 900);
+
+    const grade = perde ? AGAIN : (secondi <= 12 ? EASY : GOOD);
+    const before = current.card || newCard(Trappola.cardIdOf(current.riga.id), { r: current.riga.r });
+    const card = scheduler.review(before, grade, Date.now());
+    Store.saveCard(card);
+    Store.addCount(Trappola.AXIS, !perde);
+    Store.logReview({
+      id: card.id,
+      t: Date.now(),
+      g: grade,
+      isNew: !before.reps,
+      wasReview: before.state === 'review',
+      correct: !perde,
+      ivl: card.ivl,
+      axis: Trappola.AXIS,
+      ms: secondi * 1000,
+      theme: current.pos.tema,
+      fascia: current.fascia,
+    });
+
+    results[current.index] = { correct: !perde, riga: current.riga, numeri: n, tema: current.pos.tema };
+    drawProgress();
+
+    if (!perde) {
+      setPrompt(`<strong>Regge.</strong> ${quantiCadono(n)}`, 'good');
+      later(avanti, 2600);
+      return;
+    }
+
+    /* Se perde, la punizione si guarda: è la stessa scena della tattica. */
+    const dopo = applyMove(current.stato, mossa);
+    const conf = See.confutazione(dopo);
+    board.setPosition(dopo, mossa);
+    /* La classifica e' scritta per seguire i due punti: qui apre una frase. */
+    const perche = See.classifica(current.stato, mossa).testo;
+    setPrompt(`<strong>Questa perde.</strong> ${esc(perche.charAt(0).toUpperCase() + perche.slice(1))}`, 'bad');
+
+    if (!conf) {
+      later(() => {
+        setPrompt(`<strong>Questa perde.</strong> ${quantiCadono(n)}`, 'bad');
+        later(avanti, 2600);
+      }, 1600);
+      return;
+    }
+
+    later(() => {
+      board.setPosition(applyMove(dopo, conf.move), conf.move);
+      board.flash(conf.move.to, 'wrong', 1400);
+      setPrompt(esc(See.testoConfutazione(dopo, conf)), 'bad');
+      later(() => {
+        board.setPosition(current.stato, null);
+        setPrompt(quantiCadono(n), 'bad');
+        later(avanti, 3000);
+      }, 2000);
+    }, 1600);
+  }
+
+  /*
+   * Il numero, con la sua provenienza attaccata. Mai nudo: chi legge deve
+   * sapere che è una previsione di un modello e non un conteggio di partite.
+   */
+  function quantiCadono(n) {
+    return `Qui una mossa che perde la gioca circa il <strong>${n.tuo}%</strong> dei giocatori da ${n.fascia}, `
+      + `contro il <strong>${n.alto}%</strong> di quelli da ${n.fasciaAlta}. `
+      + '<span class="prompt__aside">Stima di Maia-2 su partite umane, non un conteggio.</span>';
+  }
+
+  function avanti() {
+    if (current.index + 1 < sessione.items.length) load(current.index + 1);
+    else fine();
+  }
+
+  function fine() {
+    const fatte = results.filter(Boolean);
+    const rette = fatte.filter((r) => r.correct).length;
+    const divarioMedio = fatte.length
+      ? Math.round(fatte.reduce((s, r) => s + r.numeri.divario, 0) / fatte.length)
+      : 0;
+
+    mount(h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">Trappole</div>
+        <div class="result__sub">${rette} posizioni su ${fatte.length} senza perdere materiale</div>
+      </div>
+      <div class="note">
+        <div class="note__label">Che cosa erano</div>
+        Posizioni dove chi gioca intorno ai ${sessione.fascia} punti sbaglia molto più spesso di chi sta in alto:
+        in media ${divarioMedio} punti percentuali di differenza. Non sono posizioni difficili in assoluto —
+        sono difficili <em>per la tua fascia</em>, ed è una cosa diversa.
+      </div>
+      <div class="note">
+        <div class="note__label">Da dove viene il numero</div>
+        Quali mosse perdono lo stabilisce il motore, con una ricerca esaustiva sulle mosse forzanti: è un fatto,
+        ed è lo stesso conto che ha giudicato le tue mosse. Quanto spesso vengono giocate lo stima
+        <strong>Maia-2</strong>, una rete addestrata su partite umane vere: è una previsione di comportamento,
+        con il suo errore, e non un conteggio di partite.
+      </div>
+      <button class="btn btn--primary" id="more">Un’altra sessione</button>
+      <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+    </div>`));
+    document.getElementById('more').onclick = () => renderTrappole();
+    sincronizzaPresto();
+  }
+
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+  session = { onMove };
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  load(0);
+}
+
+/*
+ * Quando finiscono, si dice. Sopra i 1500 le trappole si esauriscono davvero:
+ * non perché i forti non sbaglino, ma perché a quel punto Maia distingue sempre
+ * meno fra una fascia e quella sopra, e senza divario non c'è niente da
+ * chiamare «del tuo livello». Servire posizioni qualsiasi col nome di trappole
+ * sarebbe il tipo di numero che questa app non stampa.
+ */
+function renderTrappoleFinite(sessione) {
+  setBar({ title: 'Trappole', back: '#/' });
+  const conteggi = Trappola.disponibili();
+  mount(h(`<div class="stack">
+    <div class="note">
+      <div class="note__label">Per la tua fascia non ne restano</div>
+      Le trappole della fascia ${sessione.fascia} le hai viste tutte (erano ${sessione.totale}).
+      Torneranno come ripasso quando scadono.
+    </div>
+    <div class="note">
+      <div class="note__label">Quante ce ne sono, per fascia</div>
+      ${conteggi.map((c) => `${c.fascia}: <strong>${c.quante}</strong>`).join(' · ')}.
+      Salendo diminuiscono, e sopra i 1500 quasi spariscono: non perché i forti non sbaglino,
+      ma perché il modello distingue sempre meno fra una fascia e quella sopra — e senza divario
+      non c’è niente da chiamare «del tuo livello».
+    </div>
+    <button class="btn btn--primary" data-go="#/tattica">Vai alla tattica</button>
+    <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+  </div>`));
+}
+
 /* -------------------------------- routing ------------------------------- */
 
 function mount(node) {
@@ -3548,6 +3807,7 @@ function route() {
   if (screen === 'finali') return renderFinaliSession();
   if (screen === 'esame' && Percorso.byCode(param)) return renderEsameIntro(param);
   if (screen === 'calcolo') return renderCalcolo({});
+  if (screen === 'trappole') return renderTrappole();
   if (screen === 'ricostruzione') return renderRicostruzione();
   if (screen === 'piani') return renderPiani({});
   if (screen === 'vista') return renderBasicsSession(Basics.VISTA);

@@ -46,7 +46,12 @@ gli item se li fabbrica il motore.
   niente?», su posizioni vere del corpus. Un pezzo è gratis solo se la cattura è
   **legale** e la casa non è difesa da nessuno: entrambe le cose si calcolano sul
   motore, non si stimano. Si esce con 19 controlli su 20 mai visti.
-  **Se sbagli, la ragione si guarda invece di leggerla**: la
+  **Se sbagli, i difensori si accendono**: la domanda vera di chi sbaglia non è
+  «che cosa succede se prendo» ma *chi me lo riprende*, e la risposta è una casa,
+  non una frase — quindi si illumina quella casa. Ogni caso ha la sua
+  spiegazione: casa vuota, pezzo tuo, pezzo che non puoi raggiungere, pezzo
+  gratis ma che vale meno di quello giusto, pezzo difeso. E si può rivedere.
+  Quando la cattura si può fare, la ragione si guarda invece di leggerla: la
   scacchiera gioca la tua cattura e poi la ripresa dell’avversario — «prendi
   Cxe5, e te lo riprende il cavallo in c6» — e solo dopo torna alla posizione
   della domanda con la risposta giusta accesa.
@@ -126,6 +131,39 @@ nessuno dei due colori*. Ricerca esaustiva sulle mosse forzanti, non una stima.
 
 Quello che questa verifica non copre, e l'app lo dice: un piano lento che vince
 un pedone in sei mosse non è una tattica, e qui non conta.
+
+### 🪤 Trappole del tuo livello
+
+L'unico esercizio dell'app in cui non c'è niente da trovare: c'è qualcosa da
+**non fare**. La domanda è «gioca una mossa che non perde materiale», e le
+posizioni sono quelle in cui i giocatori della tua fascia una mossa che perde la
+giocano spesso — mentre più in alto no.
+
+Due numeri, da due posti diversi, e l'app non li confonde mai:
+
+- **quali mosse perdono** lo stabilisce il motore di casa, con una ricerca
+  esaustiva sulle mosse forzanti. È un fatto, si può ricontrollare, ed è lo
+  stesso conto che giudica la mossa che giochi tu;
+- **quanto spesso vengono giocate** lo stima [Maia-2](https://github.com/CSSLab/maia2),
+  una rete addestrata su partite umane vere di Lichess e condizionata sul rating
+  di chi muove: non prevede la mossa migliore, prevede la mossa che verrà
+  giocata. È una previsione di comportamento, con il suo errore, e ogni volta
+  che compare l'app scrive da dove viene.
+
+Nel repo finiscono **solo numeri**: il modello (280 MB) e l'ambiente Python
+restano fuori, come Stockfish per il corpus tattico. Per rigenerarli:
+
+```bash
+python -m venv venv-maia && venv-maia/Scripts/pip install maia2
+node tools/trappole-mosse.mjs
+venv-maia/Scripts/python tools/trappole-maia.py
+```
+
+**Quante ne esistono, e fin dove arrivano:** 231 a 1100, 168 a 1300, 94 a 1500,
+sei a 1700. Salendo si esauriscono — non perché i forti non sbaglino, ma perché
+il modello distingue sempre meno fra una fascia e quella sopra, e senza divario
+non c'è niente da chiamare «del tuo livello». Quando finiscono l'app lo dice,
+invece di servire posizioni qualsiasi col nome di trappole.
 
 ### 🧠 L4 · Calcolo e visualizzazione
 
@@ -375,6 +413,9 @@ assets/js/calcolo.js     L4: la scacchiera che si spegne
 assets/js/ricostruzione.js  L0: cinque secondi, poi rimettila
 assets/js/piani.js       L6: il piano nominato
 assets/js/regime.js      fatica, freno, e dove rende il tempo
+assets/js/forzante.js    quali mosse perdono materiale: lo stesso conto in preparazione e a runtime
+assets/js/trappole.js    i numeri di Maia-2, fascia per fascia (generato)
+assets/js/trappola.js    quali trappole tocca a te, e i numeri da mostrare
 assets/js/endgames-data.js  la tavola (dati, generata — non si tocca a mano)
 assets/js/openings.js    il repertorio (dati)
 assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)
@@ -399,6 +440,8 @@ node tools/validate-puzzles.mjs   # ogni soluzione tattica rigiocata sul motore
 node tools/validate-percorso.mjs  # memoria, punteggio, coda, livelli, finali
 node tools/validate-nuovo.mjs     # esame, stima, specchiatura, cambio statico, quiete, regime
 node tools/build-quiete.mjs       # rigenera le posizioni quiete dal corpus
+node tools/trappole-mosse.mjs     # quali mosse perdono, posizione per posizione
+venv-maia/Scripts/python tools/trappole-maia.py   # e quanto spesso vengono giocate
 node tools/build-endgames.mjs     # rigenera la tavola dei finali (qualche secondo)
 node tools/smoke.mjs              # prova end-to-end su viewport iPhone (richiede playwright)
 node tools/build-single.mjs       # genera la versione in un file solo, in dist/

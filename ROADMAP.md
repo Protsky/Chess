@@ -27,13 +27,16 @@ documentata e pubblicata**.
 5. La difficoltà la insegue la macchina, non la sceglie un menù.
 6. Le fonti restano utilizzabili anche se un giorno l'app si vende: CC0 e tavole
    dei finali sì, corpus «non commerciale» no — da escludere adesso, non dopo.
-7. **Non si misura sul materiale di allenamento.** Una parte del corpus non entra
+7. **Un fatto e una previsione non si scrivono allo stesso modo.** Che una
+   mossa perda materiale lo dimostra il motore; che tu la giochi lo stima un
+   modello. Dove compare la seconda, l'app dice da dove viene.
+8. **Non si misura sul materiale di allenamento.** Una parte del corpus non entra
    mai in sessione: serve solo agli esami, e ogni item d'esame si spende una
    volta sola.
-8. **Una soglia si supera col limite inferiore dell'intervallo**, non con la
+9. **Una soglia si supera col limite inferiore dell'intervallo**, non con la
    stima migliore. Ventiquattro risposte lasciano un'incertezza di un centinaio
    di punti, e passare per fortuna in una giornata buona non è passare.
-9. **Superato non è per sempre.** Sette e trenta giorni dopo, la stessa prova su
+10. **Superato non è per sempre.** Sette e trenta giorni dopo, la stessa prova su
    materiale nuovo. Se non regge, il livello si riapre.
 7. Nessuna dipendenza, nessun build, offline dopo la prima visita. Stockfish gira
    in fase di preparazione del corpus: nel repo finiscono numeri.
@@ -235,6 +238,62 @@ lo richiede su materiale nuovo, e se non regge il livello si riapre.
       di dati non stampa un numero: dice quanti ne mancano. Nessuna media di
       popolazione usata come tappabuchi — il tilt, nei dati per giocatore, è una
       cosa di alcuni e non una legge.
+
+- [x] **1b. Le trappole del tuo livello** — la sola cosa dell'app che non si
+      poteva fare col motore di casa, e per cui e' valsa la pena uscirne.
+      Il problema: «questa posizione e' difficile» e «in questa posizione *tu*
+      cadi» sono due affermazioni diverse, e la seconda ha bisogno di sapere che
+      cosa gioca un essere umano di una certa forza — cosa che nessun motore sa,
+      perche' i motori giocano bene.
+      Fatto in due passi, tenuti separati di proposito. `tools/trappole-mosse.mjs`
+      stabilisce un **fatto di scacchi**: in ogni posizione, quali mosse perdono
+      materiale (ricerca esaustiva sulle mosse forzanti, `assets/js/forzante.js`,
+      lo stesso conto che dichiara quiete le posizioni). `tools/trappole-maia.py`
+      chiede a **Maia-2** — una rete addestrata su partite umane vere di Lichess,
+      condizionata sul rating di chi muove — quanto spesso un giocatore di una
+      certa fascia gioca proprio quelle mosse. La prima cosa e' verificabile, la
+      seconda e' una previsione di comportamento, e l'app non le confonde mai:
+      il numero e' sempre accompagnato da «stima di Maia-2, non un conteggio».
+      L'esercizio che ne esce e' l'unico dell'app in cui non c'e' niente da
+      trovare: c'e' qualcosa da **non fare**. La mossa che giochi la giudica il
+      motore, con lo stesso conto della preparazione — Maia sceglie le posizioni
+      e non giudica niente.
+      Nel repo finiscono solo numeri: il modello (280 MB) e l'ambiente Python
+      restano fuori, come Stockfish per il corpus tattico.
+      Provato: 18.577 controlli in `validate-nuovo.mjs`, fra cui la copertura
+      della distribuzione di Maia sulle mosse legali (1.000: se le chiavi non
+      corrispondessero i numeri sarebbero zeri travestiti da misure, e lo
+      strumento si ferma invece di scrivere) e la prova che in ogni trappola
+      esiste almeno una mossa che perde **e** almeno una che regge.
+      **Il limite, e sta scritto nell'app**: 231 trappole a 1100, 168 a 1300,
+      94 a 1500, sei a 1700. Salendo si esauriscono, non perche' i forti non
+      sbaglino ma perche' Maia distingue sempre meno fra fasce vicine. Le soglie
+      sono rimaste strette (errore >= 30%, divario >= 10 punti): allargarle
+      finche' il numero diventa grosso e' il modo classico di fabbricare una
+      funzione che non c'e'.
+      Corretto strada facendo: il primo criterio confrontava fasce **adiacenti**,
+      e a duecento punti di distanza Maia distingue troppo poco - restavano
+      trentadue posizioni in tutto. Il confronto giusto e' con la fascia piu'
+      alta, ed e' una cosa che si e' vista misurando, non ragionando.
+
+- [x] **1c. Il livello 1 dice chi te lo riprende** — la scena della ripresa
+      partiva solo se il pezzo scelto era difeso: chi toccava un pezzo che non
+      poteva nemmeno catturare non riceveva **nessuna** spiegazione, e restava
+      con la domanda vera in mano. Anche nel caso «difeso», il difensore veniva
+      solo nominato mentre sulla scacchiera si accendeva la casa dove ti
+      riprendono — cioe' non quella che serviva vedere.
+      Fatto: ogni casa toccata ha la sua risposta (vuota, tua, irraggiungibile,
+      gratis ma di meno, difesa), i difensori si **accendono** tutti sulla
+      posizione della domanda, e un bottone rifa' la scena invece di lasciarla
+      scappare in cinque secondi.
+      Trovati dal test, e sono due bug veri: i difensori li calcolavo sulla casa
+      svuotata, e cosi' un pedone che difende in diagonale spariva mentre una
+      spinta di pedone veniva contata come difesa (39 falsi difensori su sessanta
+      item); e nel caso «difeso» vanno contati **dopo** la mia cattura, perche' il
+      mio pezzo andandosene apre linee e libera difensori che prima non c'erano
+      (altri 11).
+      Provato: 3780 case toccate su item veri, ognuna con una spiegazione
+      verificata rigiocando la ripresa sulla posizione vera.
 
 - [ ] **5. Test d'ingresso e profilo a quattro assi** — sicurezza, tattica,
       finali, posizione, misurati separatamente sullo stampo dell'Amsterdam

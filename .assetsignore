@@ -29,3 +29,9 @@ dist
 
 # documentazione: sta su GitHub, non serve servirla dall'app
 *.md
+
+# l'ambiente Python di Maia-2 e i pesi del modello: girano in preparazione del
+# corpus, su questa macchina. Nel repo non ci sono (sono in .gitignore), ma se
+# un giorno ci finissero, 1,6 GB fermerebbero la pubblicazione come node_modules
+venv-maia
+maia2_models

@@ -34,15 +34,17 @@ import { dirname, join } from 'node:path';
 const qui = dirname(fileURLToPath(import.meta.url));
 const { PUZZLES } = await import('../assets/js/puzzles.js');
 const { fromFen, fen, legalMoves, applyMove, inCheck, playUci, other, colorOf } = await import('../assets/js/chess.js');
-const { valoreDi, seeCattura } = await import('../assets/js/see.js');
+const { valoreDi } = await import('../assets/js/see.js');
+const { guadagnoForzante, SOGLIA, PROFONDITA } = await import('../assets/js/forzante.js');
 
-/** Guadagno minimo che fa dire «qui c'è una tattica». */
-const SOGLIA = 2;
+/*
+ * Il conto delle sequenze forzanti sta in `forzante.js`: lo usa anche
+ * `trappole-mosse.mjs` per dire quali mosse perdono, ed e' la stessa domanda
+ * vista dalle due parti. Due copie che divergessero darebbero due verita'
+ * diverse nella stessa app.
+ */
 
-/** Semimosse forzanti esaminate. Tre bastano per forchette e infilate semplici. */
-const PROFONDITA = 3;
-
-/** Squilibrio massimo tollerato: una posizione già decisa non è una decisione. */
+/** Squilibrio massimo tollerato: una posizione gia' decisa non e' una decisione. */
 const SQUILIBRIO = 3;
 
 function materiale(board, colore) {
@@ -52,35 +54,6 @@ function materiale(board, colore) {
     somma += valoreDi(pezzo);
   }
   return somma;
-}
-
-/**
- * Il massimo che chi è di turno può guadagnare con mosse forzanti.
- *
- * Solo catture e scacchi: sono le mosse che l'avversario non può ignorare, ed
- * è esattamente ciò che rende una tattica una tattica. Il valore torna in
- * pedoni, dal punto di vista di chi muove adesso.
- */
-function guadagnoForzante(stato, profondita) {
-  if (profondita <= 0) return 0;
-  const mosse = legalMoves(stato);
-  if (!mosse.length) return inCheck(stato, stato.turn) ? -1000 : 0;
-
-  let migliore = 0;   // sempre possibile non forzare niente
-  for (const m of mosse) {
-    const dopo = applyMove(stato, m);
-    const scacco = inCheck(dopo, dopo.turn);
-    if (!m.capture && !scacco) continue;
-
-    /* Matto: non serve continuare a contare pedoni. */
-    if (scacco && legalMoves(dopo).length === 0) return 1000;
-
-    const preso = m.capture ? seeCattura(stato.board, m.from, m.to) : 0;
-    const risposta = guadagnoForzante(dopo, profondita - 1);
-    const netto = m.capture ? preso - Math.max(0, risposta) : -risposta;
-    if (netto > migliore) migliore = netto;
-  }
-  return migliore;
 }
 
 function quieta(stato) {

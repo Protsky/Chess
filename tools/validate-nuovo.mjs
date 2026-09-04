@@ -38,6 +38,9 @@ const Piani = await import('../assets/js/piani.js');
 const Regime = await import('../assets/js/regime.js');
 const Tactics = await import('../assets/js/tactics.js');
 const Basics = await import('../assets/js/basics.js');
+const Trappola = await import('../assets/js/trappola.js');
+const Forzante = await import('../assets/js/forzante.js');
+const { TRAPPOLE, FASCE, SOGLIA_ALTA, SALTO } = await import('../assets/js/trappole.js');
 const Sync = await import('../assets/js/sync.js');
 const Store = await import('../assets/js/store.js');
 const { PUZZLES } = await import('../assets/js/puzzles.js');
@@ -591,6 +594,115 @@ for (const item of itemL1.slice(0, 60)) {
 }
 ok(trovatoMinore > 0, 'il caso "e\' gratis, ma ce n\'e\' uno che vale di piu\'" deve essere riconosciuto');
 
+/* ------------- 13. le trappole: numeri veri, e un giudizio solo ------------ */
+
+/*
+ * Due cose vanno provate, e sono diverse fra loro.
+ *
+ * La prima: che i numeri di Maia siano numeri, cioe' probabilita' fra 0 e 100,
+ * una per fascia, per ogni riga. Se il file generato fosse rotto, l'app
+ * stamperebbe percentuali inventate - ed e' esattamente il tipo di numero che
+ * questa app si e' impegnata a non mostrare.
+ *
+ * La seconda, che conta di piu': che il **giudizio** dell'app a runtime sia lo
+ * stesso che ha costruito il corpus. Maia sceglie le posizioni, ma non giudica
+ * niente: la mossa che giochi la valuta `forzante.js`. Se i due conti
+ * divergessero, l'app direbbe "questa perde" su una posizione scelta perche'
+ * quella mossa non perde, o viceversa.
+ */
+
+ok(TRAPPOLE.length > 3000, `troppe poche righe di trappole: ${TRAPPOLE.length}`);
+ok(FASCE.length >= 4, `servono almeno quattro fasce: ${FASCE.length}`);
+
+let numeriRotti = 0;
+for (const t of TRAPPOLE) {
+  if (!Array.isArray(t.e) || t.e.length !== FASCE.length) { numeriRotti += 1; continue; }
+  if (t.e.some((x) => !Number.isInteger(x) || x < 0 || x > 100)) numeriRotti += 1;
+}
+checks += TRAPPOLE.length;
+ok(numeriRotti === 0, `${numeriRotti} righe di trappole con numeri fuori da 0-100`);
+
+/* La fascia si sceglie per vicinanza, e non si esce mai dall'elenco. */
+ok(Trappola.fasciaDi(500) === FASCE[0], 'sotto la prima fascia si usa la prima');
+ok(Trappola.fasciaDi(9999) === FASCE[FASCE.length - 1], 'sopra l\'ultima si usa l\'ultima');
+ok(Trappola.fasciaDi(1190) === 1100 && Trappola.fasciaDi(1210) === 1300, 'la fascia e\' quella piu\' vicina');
+
+/* Nessuna trappola per l'ultima fascia: e' il metro, non un livello. */
+ok(Trappola.perFascia(FASCE[FASCE.length - 1]).length === 0,
+  'la fascia piu\' alta e\' il termine di paragone: non puo\' avere trappole sue');
+
+/* La definizione morde davvero: alta alla fascia, e piu' bassa in cima. */
+for (const f of FASCE.slice(0, -1)) {
+  const i = FASCE.indexOf(f);
+  const sue = Trappola.perFascia(f);
+  checks += 1;
+  const male = sue.filter((t) => t.e[i] < SOGLIA_ALTA || t.e[i] - t.e[t.e.length - 1] < SALTO);
+  if (male.length) errors.push(`fascia ${f}: ${male.length} trappole non rispettano la propria definizione`);
+  /* E sono ordinate dalla piu' insidiosa. */
+  for (let k = 1; k < sue.length; k++) {
+    const a = sue[k - 1].e[i] - sue[k - 1].e[sue[k - 1].e.length - 1];
+    const b = sue[k].e[i] - sue[k].e[sue[k].e.length - 1];
+    if (b > a) { errors.push(`fascia ${f}: le trappole non sono in ordine di divario`); break; }
+  }
+  checks += 1;
+}
+
+/* Una posizione, per ogni trappola: se manca, l'app avrebbe una carta vuota. */
+let senzaPosizione = 0;
+let nonPerdente = 0;
+let controllate = 0;
+for (const f of FASCE.slice(0, -1)) {
+  for (const t of Trappola.perFascia(f).slice(0, 60)) {
+    const pos = Trappola.posizioneDi(t);
+    checks += 1;
+    if (!pos) { senzaPosizione += 1; continue; }
+    const stato = pos.stato || fromFen(pos.fen);
+    if (!stato) { senzaPosizione += 1; continue; }
+
+    /*
+     * La prova che conta: in una posizione scelta come trappola deve esistere
+     * almeno una mossa che il motore chiama perdente **e** almeno una che non lo
+     * e'. Se tutte perdessero non ci sarebbe niente da imparare; se nessuna
+     * perdesse, la posizione non sarebbe una trappola e il numero di Maia
+     * sarebbe appeso al nulla.
+     */
+    const mosse = legalMoves(stato);
+    const perdenti = mosse.filter((m) => Forzante.perdente(stato, m)).length;
+    controllate += 1;
+    if (perdenti === 0 || perdenti === mosse.length) nonPerdente += 1;
+  }
+}
+ok(senzaPosizione === 0, `${senzaPosizione} trappole senza una posizione giocabile`);
+ok(controllate > 150, `troppe poche trappole controllate: ${controllate}`);
+ok(nonPerdente === 0,
+  `${nonPerdente} trappole dove tutte le mosse perdono (o nessuna): non c'e' niente da scegliere`);
+
+/* La sessione: solo trappole della propria fascia, senza doppioni. */
+for (const r of [900, 1200, 1400, 1600]) {
+  const sess = Trappola.costruisci({ rating: r });
+  const f = Trappola.fasciaDi(r);
+  ok(sess.fascia === f, `punteggio ${r}: fascia sbagliata`);
+  ok(sess.items.every((it) => Trappola.eTrappola(it.riga, f)),
+    `punteggio ${r}: in sessione e' finita una posizione che non e' una trappola di quella fascia`);
+  ok(new Set(sess.items.map((it) => it.riga.id)).size === sess.items.length,
+    `punteggio ${r}: doppioni in sessione`);
+}
+
+/* Le viste non tornano finche' non scadono. */
+const primaSess = Trappola.costruisci({ rating: 1100 });
+const viste = new Set(primaSess.items.map((it) => Trappola.cardIdOf(it.riga.id)));
+const secondaSess = Trappola.costruisci({ rating: 1100, viste });
+ok(secondaSess.items.every((it) => !viste.has(Trappola.cardIdOf(it.riga.id))),
+  'una trappola gia\' vista non deve tornare come nuova');
+
+/* I numeri mostrati sono quelli del file, non ricalcolati per strada. */
+const rigaProva = Trappola.perFascia(1100)[0];
+const n = Trappola.numeri(rigaProva, 1100);
+ok(n.tuo === rigaProva.e[0] && n.alto === rigaProva.e[rigaProva.e.length - 1],
+  'i numeri mostrati devono essere quelli del file');
+ok(n.divario === n.tuo - n.alto, 'il divario e\' la differenza fra i due, e nient\'altro');
+ok(n.tuo >= SOGLIA_ALTA && n.divario >= SALTO, 'la trappola piu\' insidiosa deve rispettare le soglie');
+
 /* -------------------------------- verdetto ------------------------------- */
 
 console.log(`Controlli: ${checks}`);
@@ -600,6 +712,7 @@ console.log(`Posizioni d'esame tenute fuori: ${esame.length} su ${PUZZLES.length
 console.log(`Posizioni quiete ricontrollate: ${QUIETE.length}`);
 console.log(`Confutazioni trovate: ${confutate}/${occasioni}`);
 console.log(`Case del livello 1 con una spiegazione vera: ${Object.values(casiVisti).reduce((a, b) => a + b, 0)}`);
+console.log(`Trappole per fascia: ${Trappola.disponibili().map((d) => `${d.fascia}:${d.quante}`).join(' ')}`);
 
 if (errors.length) {
   console.error(`\n${errors.length} problemi:`);

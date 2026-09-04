@@ -1,3 +1,6 @@
 node_modules/
 .DS_Store
 tools/screenshots/
+venv-maia/
+maia2_models/
+tools/trappole-mosse.json
