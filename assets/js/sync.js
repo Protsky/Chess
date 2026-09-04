@@ -149,12 +149,58 @@ export function unisci(locale, remoto) {
     const mio = out.progress[id];
     out.progress[id] = mio
       ? {
+        ...mio,
+        ...p,
         stars: Math.max(mio.stars || 0, p.stars || 0),
         best: Math.max(mio.best || 0, p.best || 0),
         attempts: Math.max(mio.attempts || 0, p.attempts || 0),
         lastAt: Math.max(mio.lastAt || 0, p.lastAt || 0),
+        // Il piano nominato è la metà del criterio del livello 6: se l'hai
+        // nominato da una parte, lo sai anche dall'altra.
+        pianoOk: !!(mio.pianoOk || p.pianoOk),
+        pianoAt: Math.max(mio.pianoAt || 0, p.pianoAt || 0),
+        pianoTentativi: Math.max(mio.pianoTentativi || 0, p.pianoTentativi || 0),
       }
       : p;
+  }
+
+  /*
+   * Esami: unione senza doppioni. Un esame è una prova sostenuta a una certa
+   * ora, e non si ripete; buttarne uno perché è arrivato dall'altro dispositivo
+   * vorrebbe dire dimenticare che quel livello era stato dimostrato.
+   */
+  const visitEsami = new Set();
+  out.esami = [...(locale.esami || []), ...(remoto.esami || [])]
+    .filter((e) => {
+      const chiave = `${e.livello}|${e.tipo}|${e.t}`;
+      if (visitEsami.has(chiave)) return false;
+      visitEsami.add(chiave);
+      return true;
+    })
+    .sort((a, b) => (a.t || 0) - (b.t || 0))
+    .slice(-200);
+
+  /* Item d'esame spesi: l'unione, sempre. Uno speso da qualsiasi parte è speso. */
+  out.spesi = [...new Set([...(locale.spesi || []), ...(remoto.spesi || [])])];
+
+  /*
+   * Stato dei livelli: si tiene il superamento più antico (è quello che fa
+   * partire l'orologio delle prove di tenuta) e l'unione delle tenute fatte.
+   * Un livello riaperto resta riaperto: è la notizia più recente, ed è quella
+   * che conta.
+   */
+  out.livelli = { ...(locale.livelli || {}) };
+  for (const [codice, r] of Object.entries(remoto.livelli || {})) {
+    const mio = out.livelli[codice];
+    out.livelli[codice] = mio
+      ? {
+        ...mio,
+        ...r,
+        superatoIl: Math.min(mio.superatoIl || Infinity, r.superatoIl || Infinity) || null,
+        tenute: { ...(mio.tenute || {}), ...(r.tenute || {}) },
+        riaperto: !!(mio.riaperto || r.riaperto),
+      }
+      : r;
   }
 
   // Pesi tarati: quelli fatti su più ripassi.

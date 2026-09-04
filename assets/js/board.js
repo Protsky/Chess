@@ -83,6 +83,20 @@ export class Board {
     this.render();
   }
 
+  /**
+   * Spegne i pezzi **senza svuotare la posizione**.
+   *
+   * Serve al livello 4, e la differenza non è cosmetica: mettere una FEN vuota
+   * spegneva anche le mosse legali, e a quel punto la risposta non si poteva
+   * proprio dare — si toccava una casa e non succedeva niente. Qui la partita
+   * resta quella, sparisce solo il disegno, che è esattamente ciò che vuol dire
+   * giocare alla cieca.
+   */
+  setBlind(on) {
+    this.blind = !!on;
+    this.el.classList.toggle('board--blind', this.blind);
+  }
+
   setInteractive(on) {
     // Chi torna a chiedere mosse esce dalla modalità scelta, sempre.
     if (on) this.onSelect = null;

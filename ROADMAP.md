@@ -23,25 +23,36 @@ documentata e pubblicata**.
 3. I motivi tattici si mescolano; le sessioni a tema singolo esistono solo come
    ripasso mirato, dichiarato tale.
 4. Un item su quattro non ha nessuna tattica. «C'è sempre qualcosa» è l'indizio
-   più forte del gioco, e al tavolo non esiste. *(Tappa 4.)*
+   più forte del gioco, e al tavolo non esiste. *(Fatto: tappa 4.)*
 5. La difficoltà la insegue la macchina, non la sceglie un menù.
 6. Le fonti restano utilizzabili anche se un giorno l'app si vende: CC0 e tavole
    dei finali sì, corpus «non commerciale» no — da escludere adesso, non dopo.
+7. **Non si misura sul materiale di allenamento.** Una parte del corpus non entra
+   mai in sessione: serve solo agli esami, e ogni item d'esame si spende una
+   volta sola.
+8. **Una soglia si supera col limite inferiore dell'intervallo**, non con la
+   stima migliore. Ventiquattro risposte lasciano un'incertezza di un centinaio
+   di punti, e passare per fortuna in una giornata buona non è passare.
+9. **Superato non è per sempre.** Sette e trenta giorni dopo, la stessa prova su
+   materiale nuovo. Se non regge, il livello si riapre.
 7. Nessuna dipendenza, nessun build, offline dopo la prima visita. Stockfish gira
    in fase di preparazione del corpus: nel repo finiscono numeri.
 
 ## I livelli
 
-| | Livello | Uscita misurata |
+| | Livello | Uscita misurata (su posizioni **mai viste**) |
 | --- | --- | --- |
-| L0 | Vista della scacchiera | 18/20 corrette, mediana sotto i 3 secondi |
-| L1 | Non regalare pezzi | punteggio tattico ≥ 800, ≤ 1 errore su 20 item di sicurezza |
+| L0 | Vista della scacchiera | 18/20 all'esame, mediana sotto i 3 secondi |
+| L1 | Non regalare pezzi | 19/20 controlli di sicurezza all'esame |
 | L2 | I finali che si vincono a memoria | sei tecniche portate a casa senza perdere l'esito |
-| L3 | I motivi tattici, mescolati | punteggio ≥ 1400 stabile, nessun motivo sotto il 60% |
+| L3 | I motivi tattici, mescolati | esame a 1400: **il limite inferiore** dell'intervallo lo supera, e nessun motivo sotto il 60% |
 | L4 | Calcolo e visualizzazione | sequenze di 4 semimosse alla cieca, 8 su 10 |
 | L5 | Posizione e piani | 70% su item posizionali del proprio livello |
 | L6 | Le aperture, come conseguenza | la linea a memoria **e** il piano nominato |
 | L7 | Le proprie partite | nessuna: è il regime di crociera |
+
+E nessun livello resta superato per decreto: a **sette e a trenta giorni** l'app
+lo richiede su materiale nuovo, e se non regge il livello si riapre.
 
 ## Tappe
 
@@ -133,10 +144,97 @@ documentata e pubblicata**.
       Da dire, e sta scritto nell'app: il codice è la chiave, e chi ce l'ha vede
       quei progressi.
 
-- [ ] **4. C'è o non c'è** — un quarto delle posizioni è quieto e la risposta
-      giusta è «nessuna combinazione». Serve un criterio verificabile di
-      «quieta»: una ricerca di quiescenza sul motore di casa, o una valutazione
-      precalcolata. È la tappa che separa questa app da un allenatore di puzzle.
+- [x] **4. C'è o non c'è** — un quarto delle posizioni è quieto e la risposta
+      giusta è «nessuna combinazione».
+      Fatto: `tools/build-quiete.mjs` prende le posizioni finali delle soluzioni
+      del corpus (partite vere, CC0) e ne tiene **656** con un criterio che si
+      può controllare invece di credere: *nessuna sequenza di catture e scacchi
+      entro tre semimosse guadagna due pedoni, per nessuno dei due colori*, e
+      materiale pari entro tre pedoni. È una ricerca esaustiva sulle mosse
+      forzanti, non una stima. In sessione sono una su quattro, distribuite a
+      passo regolare (la loro posizione non deve diventare a sua volta un
+      indizio), e la risposta è un bottone: «nessuna combinazione».
+      Provato: tutte e 656 ricontrollate in `validate-nuovo.mjs` con una ricerca
+      indipendente, e nel browser la sessione mista.
+      Da dire, e sta scritto nell'app: un piano lento che vince un pedone in sei
+      mosse non è una tattica, e questo criterio non lo vede.
+
+- [x] **3e. L'esame, e la differenza fra sapere e aver appena ripassato** — il
+      difetto più grosso che l'app avesse, e stava in bella vista: l'uscita da un
+      livello si misurava sulle ultime venti risposte del registro, cioè su carte
+      che FSRS aveva programmato **proprio perché** stavano per essere ricordate.
+      E il criterio scritto di L3 («nessun motivo sotto il 60%») non lo faceva
+      rispettare nessuno: `avanzamenti()` guardava solo il punteggio.
+      Fatto: `esame.js` tiene fuori dall'allenamento l'8% del corpus (247
+      posizioni, divisione deterministica sull'identificativo, così due
+      dispositivi che si sincronizzano tengono fuori le stesse); `stima.js`
+      stima la forza per massima verosimiglianza sugli item di difficoltà nota e
+      ne dà l'**intervallo di confidenza**, con le due code dichiarate sature
+      invece che stampate come un punto; il verdetto guarda il **limite
+      inferiore** e il pavimento per motivo, e servono tutte e due. Un item
+      d'esame si spende una volta sola. E ogni livello superato torna
+      «da riverificare» a 7 e a 30 giorni: se la tenuta non regge, si riapre.
+      Provato: 11.100 controlli in `tools/validate-nuovo.mjs`, fra cui la
+      **copertura misurata** dell'intervallo (95,6% su 3000 simulazioni: se
+      dichiara 95 deve coprire 95) e la prova che la coda di allenamento non
+      contiene mai una posizione d'esame. Nel browser: esame di L0 giocato per
+      intero, verdetto con i motivi sotto il pavimento nominati, prova di tenuta
+      che compare a otto giorni.
+      Trovato correggendo: il segno del bordo saturato era rovesciato, e un
+      esame perfetto non superava la propria soglia.
+
+- [x] **3f. La stessa tattica, ma non la stessa fotografia** — i puzzle si
+      imparano come immagini, ed è il motivo per cui Lichess esclude dal
+      punteggio quelli già giocati.
+      Fatto: `mirror.js` specchia le colonne e ribalta traverse e colori; dal
+      primo ripasso in poi la posizione si vede trasformata, in modo
+      deterministico. Chi ha ancora l'arrocco resta fuori dalla specchiatura
+      invece che falsificato.
+      Provato: 6115 posizioni trasformate e **rigiocate sul motore**, più
+      l'involuzione (trasformare due volte torna all'originale).
+
+- [x] **3g. La confutazione giocata, e quanto eri sicuro** — davanti a una mossa
+      sbagliata l'app diceva «non è la mossa». Adesso la scacchiera **gioca** la
+      punizione: `see.js` conta il cambio statico sulla casa e trova il matto in
+      una, quindi la punizione è un fatto, non un'opinione — e se non c'è, lo
+      dice invece di inventarla. Prima di sapere com'è andata si dichiara quanto
+      si era sicuri: un errore fatto da sicuri torna prima (ipercorrezione), e a
+      fine sessione l'app dice quante volte «sicuro» aveva ragione.
+      Provato: il cambio statico contro conti fatti a mano, e su 749 posizioni
+      del corpus in cui un pezzo restava davvero in presa la confutazione è stata
+      trovata tutte le volte.
+      Trovato correggendo: contavo gli attaccanti con la geometria pura, quindi
+      un pezzo «in presa» da un attaccante inchiodato risultava in presa. Ora si
+      guardano solo le catture legali.
+
+- [x] **4b. Il livello 4 esiste** — `calcolo.js`: la posizione si guarda per
+      qualche secondo, poi i pezzi spariscono e le mosse si giocano a memoria; la
+      risposta dell'avversario arriva scritta. La scala sale a 2, 4 e 6
+      semimosse da sola, sui propri risultati.
+      Trovato provando nel browser: spegnevo la scacchiera mettendoci una FEN
+      vuota, e così sparivano anche le mosse legali — la risposta non si poteva
+      proprio dare. Ora la posizione resta e sparisce solo il disegno.
+
+- [x] **4c. La ricostruzione a cinque secondi (L0)** — l'esperimento di Chase e
+      Simon come esercizio: la posizione per cinque secondi, poi la rimetti.
+      Accanto alle posizioni vere ce ne sono di **casuali con gli stessi pezzi**,
+      perché il numero da solo non direbbe niente: su quelle non migliora
+      nessuno, e il divario fra le due colonne è la parte che l'esperienza
+      costruisce.
+
+- [x] **6b. Il piano nominato (L6)** — il criterio era «la linea a memoria **e**
+      il piano»: la seconda metà era testo che si legge nella schermata di
+      studio, e nessuno tornava mai a chiederlo. Ora è una domanda, con le
+      alternative prese dalle aperture della **stessa famiglia** — strutture
+      simili, dove i piani si confondono davvero.
+
+- [x] **8b. Il regime: dove va il tempo, e quando fermarsi** — `regime.js`
+      calcola sui **propri** dati la curva di fatica (prima metà contro seconda,
+      a parità di difficoltà del materiale), l'effetto delle sconfitte di fila e
+      i minuti spesi per livello con i punti guadagnati per ora. Sotto il minimo
+      di dati non stampa un numero: dice quanti ne mancano. Nessuna media di
+      popolazione usata come tappabuchi — il tilt, nei dati per giocatore, è una
+      cosa di alcuni e non una legge.
 
 - [ ] **5. Test d'ingresso e profilo a quattro assi** — sicurezza, tattica,
       finali, posizione, misurati separatamente sullo stampo dell'Amsterdam

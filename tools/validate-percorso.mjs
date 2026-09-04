@@ -310,18 +310,19 @@ ok(Percorso.LIVELLI.length === 8, 'i livelli del percorso devono essere otto');
 ok(Percorso.LIVELLI.every((l) => l.code && l.name && l.exit), 'ogni livello deve dire come ci si esce');
 
 const attivi = Percorso.LIVELLI.filter((l) => l.state === 'attivo');
-const costruiti = ['L0', 'L1', 'L2', 'L3', 'L6'];
+const costruiti = ['L0', 'L1', 'L2', 'L3', 'L4', 'L6'];
 ok(attivi.length === costruiti.length && attivi.every((l) => l.hash && costruiti.includes(l.code)),
   'attivi devono essere solo i livelli davvero costruiti, e devono portare da qualche parte');
 ok(Percorso.LIVELLI.filter((l) => l.state === 'in-arrivo').length === 8 - costruiti.length,
   'i livelli non ancora costruiti devono restare marcati "in arrivo"');
 
-const av = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99 } });
+const senzaStorico = { log: [], livelli: {} };
+const av = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico });
 ok(Object.keys(av).length === attivi.length, 'nessun avanzamento va calcolato per i livelli che non esistono');
 ok(av.L3.percent === 0, 'a punteggio di partenza il livello 3 deve stare a zero');
-ok(Percorso.avanzamenti({ rating: 1400, aperture: { percent: 0, stars: 0, max: 99 } }).L3.percent === 100,
-  'alla soglia d’uscita il livello 3 deve stare a 100');
-ok(Percorso.avanzamenti({ rating: 3000, aperture: { percent: 0, stars: 0, max: 99 } }).L3.percent === 100,
+ok(Percorso.avanzamenti({ rating: 1400, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico }).L3.percent === 100,
+  'alla soglia d’esame il livello 3 deve stare a 100');
+ok(Percorso.avanzamenti({ rating: 3000, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico }).L3.percent === 100,
   'l’avanzamento non può superare il 100%');
 
 /* La sessione di oggi: i numeri della home devono essere quelli veri. */
@@ -424,23 +425,37 @@ ok(codaVista.length === Math.min(Basics.SESSION_SIZE, Basics.MAX_NEW), 'la sessi
 const attaccati = codaVista.filter((x, i) => i > 0 && Basics.tipoDi(x.item) === Basics.tipoDi(codaVista[i - 1].item)).length;
 ok(attaccati === 0, `${attaccati} domande dello stesso tipo attaccate: vanno mescolate`);
 
-/* I criteri d'uscita si leggono dal registro, non da un contatore a parte. */
+/*
+ * I criteri d'uscita si leggono dal registro, non da un contatore a parte.
+ *
+ * Da settembre 2026 questi numeri non chiudono più un livello da soli: dicono
+ * soltanto che si può **provare** l'esame, che è la cosa che poi decide. È il
+ * cambiamento che ha tolto di mezzo il difetto vecchio — l'uscita misurata
+ * sulle stesse carte che lo scheduler stava facendo ripassare.
+ */
 const finto = [];
 for (let i = 0; i < 20; i++) finto.push({ id: 'v:x', t: Date.now(), g: 3, axis: Basics.VISTA, correct: i < 19, ms: 2000, rating: 600 });
-const uscitaVista = Percorso.uscitaDi(Basics.VISTA, finto);
-ok(uscitaVista.percent === 100, `19 giuste su 20 e mediana 2 s devono bastare (dà ${uscitaVista.percent}%)`);
+ok(Percorso.pronto('L0', { log: finto }), '19 giuste su 20 e mediana 2 s devono aprire l\'esame di L0');
 const lente = finto.map((e) => ({ ...e, ms: 9000 }));
-ok(Percorso.uscitaDi(Basics.VISTA, lente).percent === 99, 'giuste ma lente non devono chiudere il livello');
-ok(Percorso.uscitaDi(Basics.VISTA, []).percent === 0, 'senza risposte il livello sta a zero');
+ok(!Percorso.pronto('L0', { log: lente }), 'giuste ma lente non devono aprire l\'esame');
+ok(!Percorso.pronto('L0', { log: [] }), 'senza risposte non si va all\'esame');
 
 const sicuro = finto.map((e) => ({ ...e, axis: Basics.SICUREZZA, rating: 800 }));
-ok(Percorso.uscitaDi(Basics.SICUREZZA, sicuro).percent === 100, 'a punteggio 800 il livello 1 è chiuso');
+ok(Percorso.pronto('L1', { log: sicuro }), '19 controlli di sicurezza su 20 devono aprire l\'esame di L1');
 
-/* Il percorso ora comincia da L0, e la home ci manda lì. */
-const nessunDato = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99 }, log: [] });
+/* E l'esame, da solo, è l'unica cosa che fa dire «superato». */
+const aperture = { percent: 0, stars: 0, max: 99, progress: {} };
+const senzaEsame = Percorso.avanzamenti({ rating: 800, aperture, log: finto, livelli: {} });
+ok(senzaEsame.L0.stato === 'esame-pronto', 'senza esame sostenuto il livello non è superato, è pronto');
+const conEsame = Percorso.avanzamenti({
+  rating: 800, aperture, log: finto, livelli: { L0: { superatoIl: Date.now(), tenute: {} } },
+});
+ok(conEsame.L0.stato === 'superato', 'con l\'esame passato il livello risulta superato');
+
+/* Il percorso comincia da L0, e la home ci manda lì. */
+const nessunDato = Percorso.avanzamenti({ rating: 800, aperture, log: [], livelli: {} });
 ok(Percorso.livelloCorrente(nessunDato).code === 'L0', 'chi comincia deve trovarsi sul livello 0, non sul 3');
-const vistaFatta = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99 }, log: finto });
-ok(Percorso.livelloCorrente(vistaFatta).code === 'L1', 'chiuso L0 si passa a L1');
+ok(Percorso.livelloCorrente(conEsame).code === 'L1', 'superato L0 si passa a L1');
 
 /* Partenza morbida della tattica: le prime risposte sono a una mossa sola. */
 const primi = Tactics.buildQueue({ due: [], known: new Set(), rating: 800, attempts: 0 });
@@ -524,9 +539,12 @@ const preda = Chess.fromFen('8/8/8/3k4/3Q4/8/8/4K3 b - - 0 1');
 const mossaNera = Endgames.difesa(preda);
 ok(mossaNera && Chess.nameOf(mossaNera.to) === 'd4', 'la difesa deve catturare la Donna indifesa');
 
-const uscitaFinali = Percorso.uscitaDi(Endgames.AXIS,
-  Array.from({ length: 6 }, () => ({ axis: Endgames.AXIS, correct: true, t: Date.now() })));
-ok(uscitaFinali.percent === 100, 'sei finali puliti devono chiudere il livello 2');
+const logFinali = Array.from({ length: 6 }, () => ({ axis: Endgames.AXIS, correct: true, t: Date.now() }));
+const avFinali = Percorso.avanzamenti({
+  rating: 800, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, log: logFinali, livelli: {},
+});
+ok(avFinali.L2.percent === 100, 'sei finali puliti devono portare il livello 2 al 100%');
+ok(Percorso.pronto('L2', { log: logFinali }), 'e devono aprire la prova del livello 2');
 
 /* ------------------- 12. l'unione fra due dispositivi --------------------- */
 

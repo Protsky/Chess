@@ -22,11 +22,31 @@
  */
 
 import { PUZZLES, puzzleById, THEMES } from './puzzles.js';
+import { QUIETE, byId as quietaById } from './quiete.js';
 import * as Rating from './rating.js';
+import * as Esame from './esame.js';
 import { AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 
 export const AXIS = 'tattica';
 export const PREFIX = 't:';
+
+/*
+ * Le posizioni in cui non c'è niente da trovare hanno un prefisso loro: sono
+ * carte come le altre, con la loro scadenza, ma la risposta giusta è una mossa
+ * qualsiasi che non perda — cioè «nessuna combinazione».
+ */
+export const PREFIX_QUIETA = 'q:';
+
+/**
+ * Un item su quattro non ha nessuna tattica (regola 4 del percorso). Non è una
+ * concessione alla varietà: «c'è sempre qualcosa» è l'indizio più forte del
+ * gioco, e al tavolo non esiste. Chi si allena solo dove la soluzione c'è
+ * impara anche a vederla dove non c'è.
+ */
+export const QUOTA_QUIETE = 0.25;
+
+export const quietaCardIdOf = (q) => PREFIX_QUIETA + q.id;
+export const quietaOfCard = (card) => quietaById(String(card.id).slice(PREFIX_QUIETA.length));
 
 export const cardIdOf = (puzzle) => PREFIX + puzzle.id;
 export const puzzleOfCard = (card) => puzzleById(String(card.id).slice(PREFIX.length));
@@ -77,9 +97,56 @@ export const RISPOSTE_TARATURA = 25;
 const ELEMENTARI = new Set(['hangingPiece', 'mateIn1', 'fork', 'pin', 'skewer', 'backRankMate']);
 
 export function poolFor(pool, attempts) {
-  if (attempts >= RISPOSTE_TARATURA) return pool;
-  const semplici = pool.filter((p) => userPlyCount(p) === 1 && ELEMENTARI.has(p.t));
-  return semplici.length >= 40 ? semplici : pool;
+  /*
+   * Prima di tutto: fuori le posizioni d'esame. Sono l'unica misura d'uscita
+   * che l'app ha, e valgono solo finché nessuno le ha mai viste. Bastava
+   * lasciarle in coda una volta per renderle inutili per sempre.
+   */
+  const allenabile = Esame.poolAllenamento(pool);
+  if (attempts >= RISPOSTE_TARATURA) return allenabile;
+  const semplici = allenabile.filter((p) => userPlyCount(p) === 1 && ELEMENTARI.has(p.t));
+  return semplici.length >= 40 ? semplici : allenabile;
+}
+
+/**
+ * Le posizioni quiete della sessione: le scadute prima, poi materiale nuovo di
+ * fascia vicina. Sono un quarto del totale, arrotondato per difetto.
+ */
+export function quiete({ due = [], known = new Set(), rating = Rating.START_RATING,
+  size = SESSION_SIZE, pool = QUIETE } = {}) {
+  const quante = Math.floor(size * QUOTA_QUIETE);
+  if (quante <= 0) return [];
+
+  const items = [];
+  for (const card of due) {
+    const q = quietaOfCard(card);
+    if (q) items.push({ quieta: q, card, fresh: false });
+    if (items.length >= quante) break;
+  }
+  const nuove = pool
+    .filter((q) => !known.has(quietaCardIdOf(q)))
+    .map((q) => ({ q, d: Math.abs(q.r - rating) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, Math.max(0, quante - items.length))
+    .map((x) => ({ quieta: x.q, card: null, fresh: true }));
+
+  return [...items, ...nuove];
+}
+
+/**
+ * Mescola le quiete fra le tattiche, senza metterle né tutte in testa né tutte
+ * in coda: distribuite a passo regolare, perché la loro posizione nella
+ * sessione non deve diventare a sua volta un indizio.
+ */
+export function intreccia(tattiche, quiete) {
+  if (!quiete.length) return tattiche;
+  const out = tattiche.slice();
+  const passo = Math.max(1, Math.floor(out.length / (quiete.length + 1)));
+  quiete.forEach((q, i) => {
+    const dove = Math.min(out.length, passo * (i + 1) + i);
+    out.splice(dove, 0, q);
+  });
+  return out;
 }
 
 /**

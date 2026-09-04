@@ -35,13 +35,18 @@ gli item se li fabbrica il motore.
 
 - **L0 · Vista della scacchiera** — di che colore è d5, come si chiama la casa
   illuminata, in quante mosse il cavallo va da b1 a e5 (visita in ampiezza, non
-  una tabella). Si esce con 18 risposte giuste sulle ultime 20 **e** mediana
-  sotto i 3 secondi: qui conta che sia automatico, non che sia giusto.
+  una tabella). Le ultime venti risposte dicono quando si può **provare**
+  l'esame; per uscire servono 18 su 20 su domande mai viste, con mediana sotto i
+  3 secondi: qui conta che sia automatico, non che sia giusto.
+  In più, la **ricostruzione a cinque secondi**: la posizione appare, sparisce, e
+  la rimetti. Metà delle posizioni sono vere e metà hanno gli stessi pezzi messi
+  a caso — sulle casuali non migliora nessuno, e il divario fra le due colonne è
+  la parte che l'esperienza costruisce. Un punteggio solo non direbbe niente.
 - **L1 · Non regalare pezzi** — «quale pezzo puoi prendere senza perdere
   niente?», su posizioni vere del corpus. Un pezzo è gratis solo se la cattura è
   **legale** e la casa non è difesa da nessuno: entrambe le cose si calcolano sul
-  motore, non si stimano. Si esce a punteggio 800 con al massimo un errore sulle
-  ultime venti. **Se sbagli, la ragione si guarda invece di leggerla**: la
+  motore, non si stimano. Si esce con 19 controlli su 20 mai visti.
+  **Se sbagli, la ragione si guarda invece di leggerla**: la
   scacchiera gioca la tua cattura e poi la ripresa dell’avversario — «prendi
   Cxe5, e te lo riprende il cavallo in c6» — e solo dopo torna alla posizione
   della domanda con la risposta giusta accesa.
@@ -49,6 +54,109 @@ gli item se li fabbrica il motore.
 E per chi entra dalla tattica senza passare di lì, la **partenza è morbida**:
 finché il punteggio è provvisorio (le prime 25 risposte) arrivano solo posizioni
 a una mossa sola e sui motivi elementari.
+
+### 🎓 Come si supera un livello
+
+Questa è la parte che è cambiata di più, e vale la pena dire da che cosa.
+
+Fino a settembre 2026 l'uscita da un livello si misurava **sulle ultime venti
+risposte del registro**. Ma quelle risposte sono ripassi che lo scheduler ha
+programmato *proprio perché* stavano per essere ricordati: misurare lì dentro
+misura il ripasso, non la forza. E il criterio scritto del livello 3 — «nessun
+motivo sotto il 60%» — non lo faceva rispettare nessuno: l'avanzamento guardava
+solo il punteggio, e si usciva con l'inchiodatura al trenta per cento purché il
+numero grosso fosse salito.
+
+Adesso funziona così.
+
+- **Una parte del corpus non entra mai in allenamento.** L'8% delle posizioni
+  (247 su 3235) è tenuto fuori: mai in sessione, mai trasformato in carta. Serve
+  solo agli esami, e ogni item d'esame **si spende una volta sola**. La divisione
+  è una funzione dell'identificativo, non un sorteggio: due dispositivi che si
+  sincronizzano tengono fuori le stesse posizioni.
+- **La soglia si supera col limite inferiore.** Dove gli item hanno una
+  difficoltà misurata (il corpus di Lichess porta il Glicko-2 calcolato su
+  milioni di tentativi), la forza si stima per massima verosimiglianza e se ne
+  dà l'intervallo di confidenza. Per passare deve superare la soglia **il limite
+  inferiore**, non la stima migliore: con ventiquattro risposte l'incertezza è di
+  un centinaio di punti, e passare per fortuna in una giornata buona non è
+  passare. Chi le prende tutte non riceve un punto ma un «almeno», perché è
+  quello che i dati dicono.
+- **Il pavimento per motivo esiste davvero.** Nessun motivo visto almeno otto
+  volte può stare sotto il 60%. Una media alta che nasconde un buco non è un
+  livello superato.
+- **Superato non è per sempre.** A sette e a trenta giorni l'app richiede la
+  stessa prova su materiale nuovo. Se non regge, il livello **si riapre**. Non è
+  una punizione: quello che si sa fare oggi dopo dieci ripetizioni non è quello
+  che si saprà fare fra un mese, e un livello che nessuno riverifica è
+  un'affermazione che nessuno ha mai controllato.
+
+Dove gli item li genera l'app e una difficoltà in punti non esiste, non se ne
+inventa una: si contano le risposte giuste, e basta.
+
+### 🔍 Quando sbagli
+
+La scacchiera **gioca la punizione**. Non «non è la mossa»: la tua mossa resta
+sul tavolo, l'avversario risponde con la confutazione, e si vede che cosa costa.
+La punizione non è un parere — `see.js` conta la sequenza di catture sulla casa
+(il cambio statico) e cerca il matto in una; se non c'è niente da mostrare lo
+dice, invece di inventare una punizione che non esiste.
+
+E prima di sapere com'è andata, l'app chiede **quanto eri sicuro**. Un errore
+fatto da sicuri torna prima degli altri, e a fine sessione sai quante volte
+«sicuro» aveva ragione: è la misura più diretta di quanto ti puoi fidare del tuo
+giudizio al tavolo.
+
+### 🔄 La stessa tattica, non la stessa fotografia
+
+Dal primo ripasso in poi le posizioni si vedono **specchiate** (le colonne si
+invertono) o **ribaltate** (traverse e colori scambiati). I puzzle si imparano a
+memoria come immagini — è il motivo per cui Lichess esclude dal punteggio quelli
+già giocati — e la forma cambiata costringe a riconoscere il motivo invece del
+quadro. Le trasformazioni sono verificate rigiocando ogni soluzione sul motore.
+
+### ∅ Un item su quattro non ha niente
+
+«C'è sempre qualcosa» è l'indizio più forte del gioco, e al tavolo non esiste.
+Una posizione su quattro è **quieta**, e la risposta giusta è il bottone
+«nessuna combinazione». Le 656 posizioni quiete vengono dalla fine delle
+soluzioni del corpus (partite vere) e sono verificate una per una: *nessuna
+sequenza di catture e scacchi entro tre semimosse guadagna due pedoni, per
+nessuno dei due colori*. Ricerca esaustiva sulle mosse forzanti, non una stima.
+
+Quello che questa verifica non copre, e l'app lo dice: un piano lento che vince
+un pedone in sei mosse non è una tattica, e qui non conta.
+
+### 🧠 L4 · Calcolo e visualizzazione
+
+La posizione si guarda per qualche secondo, poi i pezzi spariscono — la
+scacchiera resta, le mosse si giocano a memoria, e la risposta dell'avversario
+arriva scritta invece che disegnata. La scala sale da 2 a 4 a 6 semimosse da
+sola, sui propri risultati, e si esce con otto sequenze su dieci a quattro
+semimosse.
+
+Non è un numero da circo: fra grandi maestri, giocare senza vedere la scacchiera
+non aumenta gli errori rispetto al gioco rapido — è la fretta che li aumenta.
+
+### 🧭 L6 · Il piano, non solo la linea
+
+Il criterio è sempre stato «la linea a memoria **e** il piano nominato». La
+seconda metà era testo che si legge nella schermata di studio, e nessuno tornava
+mai a chiederlo. Ora è una domanda, e le alternative sbagliate vengono dalle
+aperture della **stessa famiglia**: strutture simili, dove i piani si confondono
+davvero. Un distrattore preso da un'apertura lontana si scarta senza sapere
+niente, e misurerebbe la capacità di escludere.
+
+### ⏱ Dove va il tempo, e quando fermarsi
+
+Nel quaderno, tre misure calcolate **solo sui tuoi dati**: i minuti spesi per
+livello (i tempi di risposta veri, sommati), i punti guadagnati per ora su
+ciascun livello, e la tua curva di fatica — la resa nella prima metà di una
+sessione contro quella nella seconda, a parità di difficoltà del materiale.
+
+Sotto il minimo di dati non compare nessun numero: compare quanti ne mancano.
+Riempire i buchi con le medie di qualcun altro sarebbe dire una cosa non
+misurata, ed è la regola che regge tutta l'app.
 
 ### ♔ L2 · I finali che si vincono a memoria
 
@@ -258,6 +366,15 @@ assets/js/basics.js      L0 e L1: item generati dal motore, nessun corpus
 assets/js/sync.js        il deposito: codice, invio, e l'unione fra due dispositivi
 src/worker.js            il Worker su Cloudflare: /api/progressi su KV
 assets/js/endgames.js    L2: la tavola dei finali, e chi la interroga
+assets/js/esame.js       le posizioni tenute fuori dall'allenamento, e lo stato dei livelli
+assets/js/stima.js       la forza con il suo intervallo di confidenza
+assets/js/see.js         il cambio statico: che cosa costa una mossa, contato
+assets/js/mirror.js      la stessa tattica, specchiata o ribaltata
+assets/js/quiete.js      le 656 posizioni senza niente da trovare (generato)
+assets/js/calcolo.js     L4: la scacchiera che si spegne
+assets/js/ricostruzione.js  L0: cinque secondi, poi rimettila
+assets/js/piani.js       L6: il piano nominato
+assets/js/regime.js      fatica, freno, e dove rende il tempo
 assets/js/endgames-data.js  la tavola (dati, generata — non si tocca a mano)
 assets/js/openings.js    il repertorio (dati)
 assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)
@@ -280,6 +397,8 @@ tools/                   validazione, prove end-to-end, generatore del corpus e 
 node tools/validate.mjs           # ogni linea di apertura è legale? la notazione coincide?
 node tools/validate-puzzles.mjs   # ogni soluzione tattica rigiocata sul motore
 node tools/validate-percorso.mjs  # memoria, punteggio, coda, livelli, finali
+node tools/validate-nuovo.mjs     # esame, stima, specchiatura, cambio statico, quiete, regime
+node tools/build-quiete.mjs       # rigenera le posizioni quiete dal corpus
 node tools/build-endgames.mjs     # rigenera la tavola dei finali (qualche secondo)
 node tools/smoke.mjs              # prova end-to-end su viewport iPhone (richiede playwright)
 node tools/build-single.mjs       # genera la versione in un file solo, in dist/

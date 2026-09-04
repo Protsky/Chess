@@ -837,3 +837,70 @@ p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* --------------------- esami, confidenza, opzioni lunghe ------------------ */
+
+/*
+ * La barra della confidenza: tre bottoni che compaiono dopo che la mossa è
+ * stata scelta e prima di sapere com'è andata. Sta sotto la scacchiera perché
+ * è il gesto che chiude la decisione, non uno che la apre.
+ */
+.conf {
+  gap: 6px;
+}
+
+.conf__btn {
+  flex: 1;
+  font-size: 13px;
+  padding: 10px 6px;
+}
+
+/* La riga d'esame sotto il livello: si distingue, ma non urla. */
+.path-exam {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  margin-left: 18px;
+  border-color: var(--gold-dim);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
+}
+
+.path-exam__name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--gold);
+}
+
+.path-exam__line {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.path-exam__body { flex: 1; min-width: 0; }
+
+.tag--ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.tag--warn { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
+
+/* Le alternative dei piani sono paragrafi, non parole: vanno a capo e respirano. */
+.opt--long {
+  text-align: left;
+  white-space: normal;
+  line-height: 1.45;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  height: auto;
+}
+
+.opt--ok { border-color: var(--green); color: var(--green); }
+.opt--err { border-color: var(--red); color: var(--red); }
+
+/*
+ * Livello 4: i pezzi spariscono, la scacchiera resta. Non `display:none` —
+ * le case devono restare toccabili, perché la mossa si gioca lo stesso.
+ */
+.board--blind .piece { visibility: hidden; }
+.board--blind .sq--sel { box-shadow: inset 0 0 0 3px var(--gold); }

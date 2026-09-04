@@ -23,6 +23,9 @@ const DEFAULTS = {
   streak: { count: 0, last: null },
   fsrs: { w: null, fittedAt: null, reviews: 0 },   // pesi tarati sui propri ripassi
   sync: { codice: null, ultimoInvio: null, ultimoErrore: null },   // deposito su Cloudflare
+  esami: [],          // prove sostenute su item mai visti: l'unica misura d'uscita
+  livelli: {},        // codice livello -> { superatoIl, tenute, riaperto }
+  spesi: [],          // item d'esame già usati: uno d'esame si spende una volta sola
   settings: {
     notation: 'it',
     sounds: true,
@@ -86,6 +89,9 @@ function read() {
       streak: { ...DEFAULTS.streak, ...(state.streak || {}) },
       fsrs: { ...DEFAULTS.fsrs, ...(state.fsrs || {}) },
       sync: { ...DEFAULTS.sync, ...(state.sync || {}) },
+      esami: state.esami || [],
+      livelli: state.livelli || {},
+      spesi: state.spesi || [],
     };
   } catch {
     return structuredClone(DEFAULTS);
@@ -280,6 +286,63 @@ export function getStreak() {
   if (!streak.last) return 0;
   const today = dayKey();
   return streak.last === today || streak.last === dayKey(Date.now() - DAY) ? streak.count : 0;
+}
+
+/* ------------------------------- gli esami ------------------------------- */
+
+/*
+ * Un esame non è una sessione: è la sola misura che l'app usa per dire che un
+ * livello è superato, e si fa su posizioni che l'allenamento non ha mai
+ * toccato. Perciò va tenuto a parte dal registro dei ripassi — mescolarli
+ * vorrebbe dire tornare a misurare la forza sul materiale di allenamento, che
+ * è il difetto da cui è nato tutto questo.
+ */
+export function addEsame(record) {
+  return edit((state) => {
+    state.esami.push(record);
+    if (state.esami.length > 200) state.esami.splice(0, state.esami.length - 200);
+    for (const id of record.items || []) if (!state.spesi.includes(id)) state.spesi.push(id);
+    return record;
+  });
+}
+
+export function getEsami(livello = null) {
+  const esami = read().esami;
+  return livello ? esami.filter((e) => e.livello === livello) : esami;
+}
+
+/** Gli item d'esame già usati: uno d'esame si spende una volta sola. */
+export function itemSpesi() {
+  return new Set(read().spesi);
+}
+
+export function getLivello(codice) {
+  return read().livelli[codice] || null;
+}
+
+export function setLivello(codice, patch) {
+  return edit((state) => {
+    state.livelli[codice] = { ...(state.livelli[codice] || {}), ...patch };
+    return state.livelli[codice];
+  });
+}
+
+export function getLivelli() {
+  return read().livelli;
+}
+
+/** Il piano di un'apertura è stato nominato: metà del criterio del livello 6. */
+export function savePiano(id, ok) {
+  return edit((state) => {
+    const prev = state.progress[id] || { ...EMPTY_PROGRESS };
+    state.progress[id] = {
+      ...prev,
+      pianoOk: ok || prev.pianoOk || false,
+      pianoAt: Date.now(),
+      pianoTentativi: (prev.pianoTentativi || 0) + 1,
+    };
+    return state.progress[id];
+  });
 }
 
 /* ---------------------------- pesi tarati in casa ------------------------- */

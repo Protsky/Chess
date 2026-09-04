@@ -2,7 +2,7 @@
  * app.js — navigazione, modalità "Impara" e modalità "Allena".
  */
 import { LEVELS, OPENINGS, byLevel, byId, plies } from './openings.js';
-import { playLine, sameMove, nameOf, moveNumber, fromFen, playUci, legalMoves, inCheck, applyMove, other, toSan } from './chess.js';
+import { playLine, sameMove, nameOf, moveNumber, fromFen, fen as fenDi, playUci, legalMoves, inCheck, applyMove, other, toSan, colorOf } from './chess.js';
 import { Board } from './board.js';
 import * as Store from './store.js';
 import * as Tactics from './tactics.js';
@@ -11,6 +11,15 @@ import * as Percorso from './percorso.js';
 import * as Basics from './basics.js';
 import * as Endgames from './endgames.js';
 import * as Sync from './sync.js';
+import * as Mirror from './mirror.js';
+import * as See from './see.js';
+import * as Esame from './esame.js';
+import * as Stima from './stima.js';
+import * as Calcolo from './calcolo.js';
+import * as Ricostruzione from './ricostruzione.js';
+import * as Piani from './piani.js';
+import * as Regime from './regime.js';
+import { PUZZLES } from './puzzles.js';
 import { createScheduler, newCard, DEFAULT_W, AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 import * as Stats from './stats.js';
 import * as Chart from './chart.js';
@@ -176,7 +185,13 @@ function renderHome() {
     viste,
   });
 
-  const avanzamenti = Percorso.avanzamenti({ rating: rating.rating, aperture, log: Store.getLog() });
+  verificaFinaliAutomatica();
+  const avanzamenti = Percorso.avanzamenti({
+    rating: rating.rating,
+    aperture,
+    log: Store.getLog(),
+    livelli: Store.getLivelli(),
+  });
   const corrente = Percorso.livelloCorrente(avanzamenti);
   const primaVolta = carte.total === 0;
 
@@ -235,7 +250,8 @@ function renderHome() {
     <div class="section-title">Il percorso</div>
     <div class="stack" id="path"></div>
     <p class="hint-text">La forza si misura su tattica, finali e posizione: le aperture sono il livello 6, non il primo.
-      Oggi l’app copre <strong>L0</strong>, <strong>L1</strong>, <strong>L2</strong>, <strong>L3</strong> e <strong>L6</strong>; gli altri tre sono da costruire, e finché non ci sono restano vuoti invece di fingere.</p>
+      Oggi l’app copre <strong>L0</strong>, <strong>L1</strong>, <strong>L2</strong>, <strong>L3</strong>, <strong>L4</strong> e <strong>L6</strong>; gli altri due sono da costruire, e finché non ci sono restano vuoti invece di fingere.<br>
+      Un livello si supera <strong>solo con un esame</strong> su posizioni mai viste, e resta superato solo se regge a sette e a trenta giorni.</p>
 
     <div class="section-title">Studio</div>
     <button class="card tactic-card" data-go="#/tattica">
@@ -290,7 +306,9 @@ function renderHome() {
     }>
       <div class="path-row__code">${livello.code}</div>
       <div class="path-row__body">
-        <div class="path-row__name">${esc(livello.name)}${qui ? ' <span class="tag tag--gold">sei qui</span>' : ''}</div>
+        <div class="path-row__name">${esc(livello.name)}${qui ? ' <span class="tag tag--gold">sei qui</span>' : ''}${
+          avanzamento?.stato === 'superato' ? ' <span class="tag tag--ok">superato</span>' : ''
+        }${avanzamento?.stato === 'riaperto' ? ' <span class="tag tag--warn">riaperto</span>' : ''}</div>
         <div class="path-row__line">${esc(livello.line)}</div>
         ${attivo && avanzamento
           ? `<div class="bar"><div class="bar__fill" style="width:${avanzamento.percent}%"></div></div>
@@ -300,9 +318,85 @@ function renderHome() {
       ${attivo ? '<div class="level-card__chevron">›</div>' : '<div class="path-row__soon">in arrivo</div>'}
     </${attivo ? 'button' : 'div'}>`);
     path.appendChild(row);
+
+    /*
+     * Quando i dati di allenamento dicono che si può provare, l'esame non si
+     * nasconde in un menù: sta sotto il livello a cui serve. E quando è ora di
+     * una prova di tenuta, lo stesso — un livello superato che nessuno
+     * riverifica è un'affermazione che nessuno ha mai controllato.
+     */
+    const stato = avanzamento?.stato;
+    if (attivo && (stato === 'esame-pronto' || stato === 'da-riverificare') && livello.code !== 'L2') {
+      path.appendChild(h(`<button class="card path-exam" data-go="#/esame/${livello.code}">
+        <div class="path-exam__body">
+          <div class="path-exam__name">${stato === 'da-riverificare' ? '⏳ Prova di tenuta' : '✓ Sei pronto per l’esame'} · ${livello.code}</div>
+          <div class="path-exam__line">${stato === 'da-riverificare'
+            ? (() => {
+              const g = Math.max(0, Math.round(avanzamento.scadutaDa / 86400000));
+              if (g === 0) return 'La verifica scade oggi.';
+              return `${g === 1 ? 'È passato un giorno' : `Sono passati ${g} giorni`} dalla scadenza della verifica.`;
+            })()
+            : 'Posizioni mai viste, nessun aiuto, un tentativo solo.'}</div>
+        </div>
+        <div class="level-card__chevron">›</div>
+      </button>`));
+    }
+    if (attivo && livello.code === 'L2' && stato === 'da-riverificare') {
+      path.appendChild(h(`<div class="card path-exam">
+        <div class="path-exam__body">
+          <div class="path-exam__name">⏳ Prova di tenuta · L2</div>
+          <div class="path-exam__line">Gioca tre finali senza perdere l’esito: si conta da sé, dalla sessione dei finali.</div>
+        </div>
+      </div>`));
+    }
+    if (attivo && livello.code === 'L0') {
+      path.appendChild(h(`<button class="card path-exam" data-go="#/ricostruzione">
+        <div class="path-exam__body">
+          <div class="path-exam__name">👁 Ricostruzione a cinque secondi</div>
+          <div class="path-exam__line">La posizione, poi rimettila. Con le posizioni a caso come termine di paragone.</div>
+        </div>
+        <div class="level-card__chevron">›</div>
+      </button>`));
+    }
+    if (attivo && livello.code === 'L6') {
+      path.appendChild(h(`<button class="card path-exam" data-go="#/piani">
+        <div class="path-exam__body">
+          <div class="path-exam__name">🧭 Il piano, non solo la linea</div>
+          <div class="path-exam__line">Metà del criterio del livello 6, e finora non l’aveva mai chiesta nessuno.</div>
+        </div>
+        <div class="level-card__chevron">›</div>
+      </button>`));
+    }
   }
 
   mount(view);
+}
+
+/*
+ * La prova di tenuta del livello 2 non ha bisogno di una schermata sua: il
+ * criterio è già «finali portati a casa senza perdere l'esito», e la sessione
+ * dei finali lo registra. Quindi si guarda il registro dopo la data della
+ * verifica e si conta. Niente di dichiarato che nessuno calcola.
+ */
+function verificaFinaliAutomatica() {
+  const record = Store.getLivello('L2');
+  const stato = Esame.statoLivello(record, { now: Date.now() });
+  if (stato.stato !== 'da-riverificare') return;
+
+  const scadenza = record.superatoIl + stato.prossima.giorni * 86400000;
+  const puliti = Store.getLog().filter((e) => e.axis === Endgames.AXIS && e.correct && e.t >= scadenza);
+  if (puliti.length < 3) return;
+
+  Store.addEsame({
+    livello: 'L2',
+    tipo: stato.prossima.tipo,
+    t: Date.now(),
+    passa: true,
+    giuste: puliti.length,
+    su: puliti.length,
+    items: [],
+  });
+  Store.setLivello('L2', { tenute: { ...(record.tenute || {}), [stato.prossima.tipo]: Date.now() } });
 }
 
 /* ------------------------------- aperture ------------------------------- */
@@ -785,6 +879,7 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
   const now = Date.now();
   const state = tacticState();
   const cards = Store.allCards(Tactics.PREFIX);
+  const cardsQ = Store.allCards(Tactics.PREFIX_QUIETA);
   const scheduler = makeScheduler();
 
   /*
@@ -795,13 +890,28 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
   const daily = Store.getDaily();
   const roomToday = Math.max(0, Store.getSettings().newPerDay - daily.introduced) + extraNew;
   const due = Store.dueCards(Tactics.PREFIX, now);
-  const queue = Tactics.buildQueue({
+  const known = new Set([...cards, ...cardsQ].map((c) => c.id));
+  const tattiche = Tactics.buildQueue({
     due,
-    known: new Set(cards.map((c) => c.id)),
+    known,
     rating: state.rating,
     attempts: state.attempts,
     maxNew: Math.min(Tactics.MAX_NEW, roomToday),
   });
+
+  /*
+   * Un item su quattro non ha nessuna combinazione. È la regola 4 del percorso,
+   * e non è una concessione alla varietà: «c'è sempre qualcosa» è l'indizio più
+   * forte del gioco, e al tavolo non esiste. Le posizioni quiete sono verificate
+   * una per una in `tools/build-quiete.mjs`.
+   */
+  const quiete = Tactics.quiete({
+    due: Store.dueCards(Tactics.PREFIX_QUIETA, now),
+    known,
+    rating: state.rating,
+    size: tattiche.length,
+  });
+  const queue = Tactics.intreccia(tattiche, quiete);
 
   if (!queue.length) return renderTacticsEmpty({ cards, daily, now });
 
@@ -815,7 +925,13 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     <div class="progress-line" id="progress"></div>
     <div class="board-wrap" id="board-host"></div>
     <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <div class="btn-row conf" id="conf" hidden>
+      <button class="btn conf__btn" data-conf="3">Sicuro</button>
+      <button class="btn conf__btn" data-conf="2">Forse</button>
+      <button class="btn conf__btn" data-conf="1">Tiro a indovinare</button>
+    </div>
     <div class="btn-row">
+      <button class="btn" id="niente">∅ Nessuna combinazione</button>
       <button class="btn" id="reveal">👁 Mostra la mossa</button>
     </div>
     <button class="btn btn--ghost btn--danger" id="quit">Esci dalla sessione</button>
@@ -826,6 +942,9 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
   const promptEl = view.querySelector('#prompt');
   const promptDot = promptEl.querySelector('.prompt__dot');
   const promptText = promptEl.querySelector('.prompt__text');
+  const confEl = view.querySelector('#conf');
+  const nienteBtn = view.querySelector('#niente');
+  const revealBtn = view.querySelector('#reveal');
 
   function setPrompt(text, kind = '') {
     promptEl.className = `prompt${kind ? ` prompt--${kind}` : ''}`;
@@ -843,14 +962,57 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     });
   }
 
+  /* --------------------------- la confidenza ---------------------------- */
+
+  /*
+   * Prima di sapere com'è andata, si dichiara quanto si era sicuri.
+   *
+   * Serve a due cose, e nessuna delle due è decorativa. La prima: un errore
+   * commesso da sicuri si corregge meglio di uno commesso nel dubbio (è
+   * l'ipercorrezione), quindi quegli errori tornano prima. La seconda: sapere
+   * quanto spesso «sicuro» è sbagliato è la misura più diretta che esista di
+   * quanto ci si può fidare del proprio giudizio al tavolo — e non la dà
+   * nessun'altra app.
+   *
+   * Si chiede una volta per posizione, alla prima mossa: chiederla a ogni
+   * semimossa la renderebbe un gesto automatico, che è l'opposto del punto.
+   */
+  function chiediConfidenza(poi) {
+    confEl.hidden = false;
+    board.setInteractive(false);
+    setPrompt('Quanto sei sicuro?');
+    confEl.querySelectorAll('[data-conf]').forEach((b) => {
+      b.onclick = () => {
+        current.conf = Number(b.dataset.conf);
+        confEl.hidden = true;
+        poi();
+      };
+    });
+  }
+
   function loadItem(index) {
     const item = queue[index];
-    const start = fromFen(item.puzzle.f);
-    const line = playUci(item.puzzle.m.split(' '), start);
+    if (item.quieta) return loadQuieta(index, item);
+
+    /*
+     * La stessa tattica, ma non la stessa fotografia: dal primo ripasso in poi
+     * la posizione si vede specchiata o ribaltata di colore. I puzzle si
+     * imparano a memoria come immagini — è il motivo per cui Lichess esclude
+     * dal punteggio quelli già giocati — e la forma cambiata costringe a
+     * riconoscere il motivo invece del quadro. La carta resta la stessa.
+     */
+    const ripetizione = item.card?.reps || 0;
+    const forma = Mirror.formaPer(item.puzzle, item.fresh ? 0 : ripetizione);
+    const vista = Mirror.variante(item.puzzle, forma);
+
+    const start = fromFen(vista.f);
+    const line = playUci(vista.m.split(' '), start);
     const side = other(start.turn);
 
     current = {
       ...item,
+      vista,
+      forma,
       index,
       states: line.states,
       moves: line.moves,
@@ -859,12 +1021,18 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
       ply: 0,
       errors: 0,
       revealed: false,
+      conf: null,
       start: Date.now(),
     };
 
+    nienteBtn.hidden = false;
+    revealBtn.hidden = false;
+    confEl.hidden = true;
     headEl.innerHTML = `<h2>Posizione ${index + 1} di ${queue.length}</h2><p>${
       item.fresh ? 'Nuova' : 'Ripasso'
-    } · giochi con il ${COLOR_IT[side]}${item.puzzle.p === 'endgame' ? ' · finale' : ''}</p>`;
+    } · giochi con il ${COLOR_IT[side]}${vista.p === 'endgame' ? ' · finale' : ''}${
+      forma !== 'dritta' ? ` · <span class="tag">${forma}</span>` : ''
+    }</p>`;
     promptDot.className = `prompt__dot prompt__dot--${side}`;
 
     board.setOrientation(side);
@@ -918,8 +1086,17 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
   }
 
   function onMove(move) {
-    if (!current || current.ply >= current.moves.length) return;
+    if (!current || current.quieta) return onMoveQuieta(move);
+    if (current.ply >= current.moves.length) return;
 
+    if (current.conf === null && current.ply === (current.moves.length % 2 === 0 ? 1 : 0)) {
+      board.setInteractive(false);
+      return chiediConfidenza(() => giudica(move));
+    }
+    giudica(move);
+  }
+
+  function giudica(move) {
     if (accepts(move)) {
       board.setInteractive(false);
       board.flash(move.to, 'good', 600);
@@ -934,23 +1111,157 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     board.flash(move.to, 'wrong', 500);
     beep('err');
 
-    if (current.errors === 1) {
-      setPrompt('Non è la mossa. Guarda ancora: che cosa lascia scoperto?', 'bad');
+    if (current.errors === 1) return mostraConfutazione(move);
+    reveal();
+  }
+
+  /**
+   * La confutazione giocata.
+   *
+   * Fino a ieri, davanti a una mossa sbagliata, l'app diceva «non è la mossa» e
+   * al secondo errore mostrava la soluzione. È il feedback più debole che
+   * esista: dice *che* hai sbagliato, non *che cosa succede* se giochi così. Il
+   * livello 1 aveva già la cosa giusta — la ripresa che si guarda invece di
+   * leggerla — e qui vale per tutte le posizioni.
+   *
+   * La punizione non è un'opinione: `see.js` conta la sequenza di catture sulla
+   * casa e trova il matto in una. Se non c'è niente da mostrare lo dice, invece
+   * di inventare una punizione che non esiste.
+   */
+  function mostraConfutazione(move) {
+    const prima = current.states[current.ply];
+    const dopo = applyMove(prima, move);
+    const perche = See.classifica(prima, move, {
+      soluzione: current.vista.m.split(' '),
+      indice: current.ply,
+    });
+    const conf = See.confutazione(dopo);
+
+    board.setInteractive(false);
+    board.setPosition(dopo, move);
+    setPrompt(`Non è la mossa: ${esc(perche.testo)}`, 'bad');
+
+    if (!conf) {
+      later(() => {
+        board.setPosition(prima, null);
+        setPrompt('Guarda ancora: la soluzione è un’altra.', 'bad');
+        board.setInteractive(true);
+      }, 1700);
       return;
     }
-    reveal();
+
+    later(() => {
+      const testo = See.testoConfutazione(dopo, conf);
+      board.setPosition(applyMove(dopo, conf.move), conf.move);
+      board.flash(conf.move.to, 'wrong', 1400);
+      setPrompt(esc(testo), 'bad');
+      beep('err');
+      later(() => {
+        board.setPosition(prima, null);
+        setPrompt('Torna indietro e guarda ancora.', 'bad');
+        board.setInteractive(true);
+      }, 1900);
+    }, 1100);
   }
 
   function reveal() {
     const expected = current.moves[current.ply];
     current.revealed = true;
     board.setInteractive(false);
+    board.setPosition(current.states[current.ply], null);
     board.flash(expected.from, 'hint', 1800);
     setPrompt(`Era <strong>${esc(san(current.sans[current.ply]))}</strong>.`, 'bad');
     later(() => {
       playMove();
       later(opponentReplies, 520);
     }, 900);
+  }
+
+  /* ------------------------ le posizioni quiete -------------------------- */
+
+  function loadQuieta(index, item) {
+    const stato = fromFen(item.quieta.f);
+    current = {
+      ...item,
+      index,
+      quieta: item.quieta,
+      stato,
+      side: stato.turn,
+      errors: 0,
+      conf: null,
+      start: Date.now(),
+    };
+
+    nienteBtn.hidden = false;
+    revealBtn.hidden = true;
+    confEl.hidden = true;
+    headEl.innerHTML = `<h2>Posizione ${index + 1} di ${queue.length}</h2><p>${
+      item.fresh ? 'Nuova' : 'Ripasso'
+    } · giochi con il ${COLOR_IT[stato.turn]}</p>`;
+    promptDot.className = `prompt__dot prompt__dot--${stato.turn}`;
+
+    board.setOrientation(stato.turn);
+    board.setPosition(stato, null);
+    board.setInteractive(true);
+    drawProgress();
+    setPrompt(`Muove il <strong>${COLOR_IT[stato.turn]}</strong>: c’è una combinazione che guadagna?`);
+  }
+
+  function onMoveQuieta(move) {
+    if (current.conf === null) {
+      board.setInteractive(false);
+      return chiediConfidenza(() => concludiQuieta(false, move));
+    }
+    concludiQuieta(false, move);
+  }
+
+  /**
+   * Su una posizione quieta la risposta giusta è il bottone. Giocare una mossa
+   * — anche una buona — vuol dire aver risposto «sì, c'è», e non c'era: è
+   * l'errore che questo livello esiste per misurare.
+   */
+  function concludiQuieta(hadettoNiente, move) {
+    board.setInteractive(false);
+    const corretta = hadettoNiente;
+    if (!corretta && move) board.flash(move.to, 'wrong', 700);
+    beep(corretta ? 'ok' : 'err');
+
+    const secondi = Math.round((Date.now() - current.start) / 1000);
+    const grade = corretta ? (secondi <= 12 ? EASY : GOOD) : AGAIN;
+    const before = current.card || newCard(Tactics.quietaCardIdOf(current.quieta), { r: current.quieta.r });
+    const card = scheduler.review(before, grade, Date.now());
+    Store.saveCard(card);
+    Store.addCount(Tactics.AXIS, corretta);
+
+    Store.logReview({
+      id: card.id,
+      t: Date.now(),
+      g: grade,
+      isNew: !before.reps,
+      wasReview: before.state === 'review',
+      correct: corretta,
+      ivl: card.ivl,
+      axis: Tactics.AXIS,
+      ms: Math.round(secondi * 1000),
+      theme: 'quieta',
+      conf: current.conf,
+    });
+
+    results[current.index] = {
+      correct: corretta, seconds: secondi, first: true, delta: 0,
+      card, quieta: current.quieta, conf: current.conf,
+    };
+    drawProgress();
+
+    setPrompt(corretta
+      ? '<strong>Giusto: non c’era niente.</strong> Nessuna sequenza di catture o scacchi entro tre semimosse guadagna due pedoni.'
+      : '<strong>Qui non c’era niente da trovare.</strong> La risposta era «nessuna combinazione»: in partita la maggior parte delle posizioni è così.',
+    corretta ? 'good' : 'bad');
+
+    later(() => {
+      if (current.index + 1 < queue.length) loadItem(current.index + 1);
+      else renderSummary();
+    }, corretta ? 1500 : 2400);
   }
 
   function finish() {
@@ -962,9 +1273,16 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
       seconds,
     });
 
+    /*
+     * Un errore commesso da sicuri torna prima di uno commesso nel dubbio: è
+     * l'ipercorrezione, ed è la sola cosa che la confidenza dichiarata cambia
+     * nello scheduler. Non tocca il punteggio — quello lo decide la scacchiera.
+     */
+    const gradeVero = !correct && current.conf === 3 ? AGAIN : grade;
+
     // Memoria: la carta esce con una scadenza vera, calcolata su come è andata.
     const before = current.card || newCard(Tactics.cardIdOf(current.puzzle), { r: current.puzzle.r });
-    const card = scheduler.review(before, grade, Date.now());
+    const card = scheduler.review(before, gradeVero, Date.now());
 
     /*
      * Forza: si muove solo sulla risposta pulita, e muove anche l'item. Ma solo
@@ -985,19 +1303,32 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
       Store.addCount(Tactics.AXIS, correct);
     }
 
+    /*
+     * `axis` e `ms` mancavano, e non erano un dettaglio: senza `axis` il
+     * pavimento per motivo e le statistiche per asse non vedevano nemmeno una
+     * riga di tattica, e senza `ms` non si poteva dire quanto tempo è andato
+     * dove. Un criterio scritto che nessuno può calcolare è un criterio che non
+     * c'è.
+     */
     Store.logReview({
       id: card.id,
       t: Date.now(),
-      g: grade,
+      g: gradeVero,
       isNew: !before.reps,
       wasReview: before.state === 'review',
       correct,
       ivl: card.ivl,
+      axis: Tactics.AXIS,
+      ms: Math.round(seconds * 1000),
       theme: current.puzzle.t,
+      forma: current.forma,
+      conf: current.conf,
       ...(first ? { rating: next.rating } : {}),
     });
 
-    results[current.index] = { correct, seconds, first, delta: next.delta, card, puzzle: current.puzzle };
+    results[current.index] = {
+      correct, seconds, first, delta: next.delta, card, puzzle: current.puzzle, conf: current.conf,
+    };
 
     // Una carta sbagliata non finisce la giornata qui: torna in fondo alla coda.
     if (Tactics.shouldRepeat(card, { repeats: current.repeat || 0, queued: queue.length })) {
@@ -1007,11 +1338,12 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     drawProgress();
 
     const days = card.ivl || 0;
+    const sicuroSbagliato = !correct && current.conf === 3;
     setPrompt(`${correct ? '<strong>Risolta.</strong>' : 'Risolta con aiuto.'} Motivo: <strong>${
       esc(Tactics.themeName(current.puzzle))
     }</strong> · ${first ? `${next.delta >= 0 ? '+' : ''}${next.delta} punti` : 'ripasso, niente punti'} · si rivede ${
       days ? `fra ${days} ${days === 1 ? 'giorno' : 'giorni'}` : 'oggi stesso'
-    }.`, correct ? 'good' : '');
+    }.${sicuroSbagliato ? ' <span class="prompt__aside">Eri sicuro: torna presto.</span>' : ''}`, correct ? 'good' : '');
 
     later(() => {
       if (current.index + 1 < queue.length) loadItem(current.index + 1);
@@ -1028,6 +1360,8 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     const state2 = tacticState();
     const counts = Store.getCounts(Tactics.AXIS);
     const stats = Store.cardStats(Tactics.PREFIX);
+    const sicuri = done.filter((r) => r.conf === 3);
+    const sicuriSbagliati = sicuri.filter((r) => !r.correct).length;
 
     const panel = h(`<div class="stack">
       <div class="result">
@@ -1039,6 +1373,10 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
           <div class="stat"><div class="stat__value">${stats.total}</div><div class="stat__label">Carte</div></div>
         </div>
       </div>
+      ${sicuri.length >= 3 ? `<div class="note"><div class="note__label">Quando eri sicuro</div>
+        ${sicuri.length - sicuriSbagliati} su ${sicuri.length} delle volte che hai detto «sicuro» avevi ragione.${
+          sicuriSbagliati ? ' Le altre tornano prima del solito: un errore fatto da sicuri è quello che si corregge meglio.' : ''
+        }</div>` : ''}
       <div class="note"><div class="note__label">Dove sei</div>
         ${counts.done} risposte in tutto, ${counts.correct} pulite (${
           counts.done ? Math.round((counts.correct / counts.done) * 100) : 0
@@ -1051,6 +1389,14 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
 
     const recap = panel.querySelector('#recap');
     done.forEach((r) => {
+      if (r.quieta) {
+        recap.appendChild(h(`<div class="card recap">
+          <span class="recap__mark recap__mark--${r.correct ? 'ok' : 'err'}">${r.correct ? '✓' : '✗'}</span>
+          <span class="recap__name">Nessuna combinazione</span>
+          <span class="tag">quieta</span>
+        </div>`));
+        return;
+      }
       recap.appendChild(h(`<div class="card recap">
         <span class="recap__mark recap__mark--${r.correct ? 'ok' : 'err'}">${r.correct ? '✓' : '✗'}</span>
         <span class="recap__name">${esc(Tactics.themeName(r.puzzle))}</span>
@@ -1064,8 +1410,22 @@ function renderTacticsSession({ extraNew = 0 } = {}) {
     panel.querySelector('#more').onclick = () => renderTacticsSession();
   }
 
-  view.querySelector('#reveal').onclick = () => {
+  nienteBtn.onclick = () => {
+    if (!current) return;
+    if (current.quieta) {
+      if (current.conf === null) return chiediConfidenza(() => concludiQuieta(true, null));
+      return concludiQuieta(true, null);
+    }
+    /* Su una posizione che una combinazione ce l'ha, dire «niente» è un errore. */
     if (!board.interactive) return;
+    current.errors = Math.max(current.errors, 1);
+    board.setInteractive(false);
+    setPrompt('Una c’era. Guarda ancora.', 'bad');
+    later(() => { board.setInteractive(true); }, 1200);
+  };
+
+  revealBtn.onclick = () => {
+    if (!board.interactive || current.quieta) return;
     current.errors = Math.max(current.errors, 1);
     reveal();
   };
@@ -1627,6 +1987,18 @@ function renderFinaliSession() {
 
 /* ------------------------------ statistiche ----------------------------- */
 
+/** I nomi degli assi come si leggono: le chiavi interne restano interne. */
+const NOME_ASSE = {
+  tattica: 'Tattica (L3)',
+  vista: 'Vista (L0)',
+  sicurezza: 'Sicurezza (L1)',
+  finali: 'Finali (L2)',
+  calcolo: 'Calcolo (L4)',
+  piani: 'Piani (L6)',
+  ricostruzione: 'Ricostruzione',
+};
+
+
 /** Toccare un segno di un grafico ne scrive il valore sotto. */
 function wireCharts(root) {
   root.querySelectorAll('.chart-card').forEach((card) => {
@@ -1736,6 +2108,57 @@ function renderStats() {
     ${themes.length ? `<div class="section-title">I motivi che scappano</div>
     <div class="stack" id="themes"></div>
     <p class="hint-text">Solo i motivi visti almeno tre volte. In sessione restano comunque mescolati: qui si guardano, non si allenano a blocchi.</p>` : ''}
+
+    <div class="section-title">Dove va il tempo</div>
+    <div class="note">
+      <div class="note__label">Minuti per livello</div>
+      ${(() => {
+        const minuti = Regime.minutiPerAsse(log);
+        const righe = Object.entries(minuti).filter(([, m]) => m >= 1)
+          .sort((a, b) => b[1] - a[1])
+          .map(([a, m]) => `${esc(NOME_ASSE[a] || a)}: ${Math.round(m)} min`);
+        return righe.length
+          ? `${righe.join(' · ')}.<br>Sono i tempi di risposta veri sommati dal registro, non una stima.`
+          : 'Ancora niente: i minuti si contano dai tempi di risposta, e servono un po’ di sessioni.';
+      })()}
+    </div>
+    <div class="note">
+      <div class="note__label">Che cosa rende di più</div>
+      ${(() => {
+        const cl = Regime.classifica(log, [Tactics.AXIS, Basics.VISTA, Basics.SICUREZZA, Calcolo.AXIS]);
+        const pronti = cl.filter((c) => c.pronto);
+        if (!pronti.length) {
+          const quasi = cl.sort((a, b) => (b.minuti || 0) - (a.minuti || 0))[0];
+          return `Non ancora: per dire quanti punti rende un’ora su un livello servono almeno
+            ${Regime.MIN_MINUTI} minuti e 30 risposte su quel livello${
+            quasi && quasi.minuti ? ` (sul più allenato ne hai ${quasi.minuti})` : ''}.
+            Finché non ci sono, qui non c’è nessun numero: metterci una media di altri sarebbe dire una cosa non misurata.`;
+        }
+        return pronti.map((c) => `${esc(NOME_ASSE[c.axis] || c.axis)}: ${
+          c.perOra >= 0 ? '+' : ''}${Math.round(c.perOra)} punti/ora su ${c.ore.toFixed(1)} ore`).join(' · ')
+          + '.<br>Calcolato solo sui tuoi dati: la differenza fra il punteggio più recente e quello di partenza, diviso le ore vere.';
+      })()}
+    </div>
+    <div class="note">
+      <div class="note__label">La tua curva di fatica</div>
+      ${(() => {
+        const f = Regime.fatica(log);
+        if (!f.pronto) {
+          return `Servono ${f.servono} sessioni da almeno otto risposte per confrontare la prima metà con la seconda:
+            finora ne hai ${f.sessioni}.`;
+        }
+        const calo = Math.round(f.calo * 100);
+        if (calo <= 2) {
+          return `Nelle tue ${f.sessioni} sessioni la resa non cala: ${Math.round(f.testa * 100)}% nella prima metà
+            contro ${Math.round(f.coda * 100)}% nella seconda. Non c’è un punto in cui ti conviene fermarti.`;
+        }
+        return `Nelle tue ${f.sessioni} sessioni passi da ${Math.round(f.testa * 100)}% nella prima metà a
+          ${Math.round(f.coda * 100)}% nella seconda: ${calo} punti di calo, attorno alla
+          ${f.posizioneMedia}ª posizione.${f.difficoltaSimile
+            ? ' La difficoltà media dei due blocchi è simile, quindi non è la coda a essere più dura.'
+            : ' Attenzione: nella seconda metà il materiale era anche più difficile, quindi il calo non è tutto fatica.'}`;
+      })()}
+    </div>
 
     <div class="section-title">La taratura</div>
     <div class="note" id="fit">
@@ -2086,6 +2509,928 @@ function renderSettings(message = '', syncMessage = '') {
   mount(view);
 }
 
+/* ---------------------------------- esami -------------------------------- */
+
+/*
+ * L'esame è l'unica cosa che fa dire «superato».
+ *
+ * Regole uguali per tutti i livelli, e sono quelle che lo rendono una misura
+ * invece che un altro allenamento: posizioni mai viste (tenute fuori da
+ * `esame.js`), nessun aiuto, nessun secondo tentativo, nessuna carta scritta,
+ * nessun punteggio mosso. Un item d'esame si spende una volta sola.
+ *
+ * Il verdetto lo dà `percorso.js`: dove la difficoltà degli item è misurata si
+ * guarda il limite inferiore dell'intervallo di confidenza, dove non lo è si
+ * contano le risposte. In tutti e due i casi vale anche il pavimento: nessun
+ * motivo sotto il 60%.
+ */
+
+function registraEsame(code, tipo, risposte) {
+  const livello = Percorso.byCode(code);
+  const log = Store.getLog();
+  const out = Percorso.verdetto(code, risposte, { log });
+  const record = Store.getLivello(code) || {};
+
+  Store.addEsame({
+    livello: code,
+    tipo,
+    t: Date.now(),
+    passa: out.passa,
+    giuste: out.giuste,
+    su: out.su,
+    rating: out.stima?.rating ?? null,
+    lo: out.stima?.lo ?? null,
+    hi: out.stima?.hi ?? null,
+    items: risposte.map((r) => r.id).filter(Boolean),
+  });
+
+  if (tipo === 'uscita') {
+    if (out.passa) Store.setLivello(code, { superatoIl: Date.now(), tenute: {}, riaperto: false });
+  } else if (out.passa) {
+    Store.setLivello(code, { tenute: { ...(record.tenute || {}), [tipo]: Date.now() } });
+  } else {
+    /*
+     * La tenuta non regge: il livello si riapre. Non è una punizione, è la
+     * conseguenza di che cosa vuol dire «saperlo»: se fra una settimana non
+     * c'è più, non c'era.
+     */
+    Store.setLivello(code, { riaperto: true, tenute: { ...(record.tenute || {}), [tipo]: null } });
+  }
+  return { ...out, livello, tipo };
+}
+
+/** Che esame tocca adesso a questo livello: l'uscita, o una prova di tenuta. */
+function tipoEsame(code) {
+  const stato = Esame.statoLivello(Store.getLivello(code), { now: Date.now() });
+  if (stato.stato === 'da-riverificare') return stato.prossima.tipo;
+  return 'uscita';
+}
+
+const NOME_ESAME = {
+  uscita: 'Esame di uscita',
+  tenuta7: 'Prova di tenuta · una settimana dopo',
+  tenuta30: 'Prova di tenuta · un mese dopo',
+};
+
+function renderEsameIntro(code) {
+  const livello = Percorso.byCode(code);
+  if (!livello?.esame) return renderHome();
+  const tipo = tipoEsame(code);
+  const spesi = Store.itemSpesi();
+  const disponibili = livello.esame.tipo === 'stima'
+    ? Esame.componi({ pool: PUZZLES, soglia: livello.esame.soglia, spesi }).length
+    : livello.esame.su;
+
+  setBar({ title: 'Esame', back: '#/' });
+
+  const view = h(`<div class="stack">
+    <div class="opening-head">
+      <h2>${esc(livello.code)} · ${esc(livello.name)}</h2>
+      <p>${esc(NOME_ESAME[tipo])}</p>
+    </div>
+    <div class="note">
+      <div class="note__label">Come funziona</div>
+      Posizioni che <strong>non hai mai visto</strong>: l’allenamento non le tocca mai, e ognuna si
+      spende una volta sola. Nessun aiuto, nessun secondo tentativo, il motivo non si vede.
+      Niente di quello che fai qui muove il punteggio o le scadenze: questo non è allenamento, è la misura.
+    </div>
+    <div class="note">
+      <div class="note__label">Per passare</div>
+      ${livello.esame.tipo === 'stima'
+        ? `Il <strong>limite inferiore</strong> dell’intervallo di confidenza deve superare ${livello.esame.soglia}.
+           Non la stima migliore: il limite inferiore, così non si passa per fortuna in una giornata buona.`
+        : `Servono <strong>${livello.esame.giuste} risposte giuste su ${livello.esame.su}</strong>.`}
+      In più, nessun motivo può stare sotto il 60%: una media alta che nasconde un buco non è un livello superato.
+    </div>
+    ${tipo !== 'uscita' ? `<div class="note">
+      <div class="note__label">Perché di nuovo</div>
+      Quello che si sa fare dopo dieci ripetizioni non è quello che si sa fare dopo un mese.
+      Se questa prova non regge, il livello si riapre.
+    </div>` : ''}
+    <button class="btn btn--primary" id="via">Comincia · ${disponibili} posizioni</button>
+    <button class="btn btn--ghost" data-go="#/">Non adesso</button>
+  </div>`);
+
+  mount(view);
+  view.querySelector('#via').onclick = () => {
+    if (code === 'L3') return renderEsameTattica(code, tipo);
+    if (code === 'L0' || code === 'L1') return renderEsameBase(code, tipo);
+    if (code === 'L4') return renderCalcolo({ esame: tipo });
+    if (code === 'L6') return renderPiani({ esame: tipo });
+    return renderHome();
+  };
+}
+
+function renderEsameEsito(risultato) {
+  const { passa, testo, deboli, livello, tipo } = risultato;
+  setBar({ title: 'Esame', back: '#/' });
+
+  const view = h(`<div class="stack">
+    <div class="result">
+      <div class="result__title">${passa ? 'Superato' : 'Non ancora'}</div>
+      <div class="result__sub">${esc(livello.code)} · ${esc(livello.name)}</div>
+    </div>
+    <div class="note">
+      <div class="note__label">Il risultato</div>
+      ${esc(testo)}
+    </div>
+    ${deboli && deboli.length ? `<div class="note">
+      <div class="note__label">Sotto il pavimento</div>
+      ${deboli.map((d) => `${esc(Tactics.themeName({ t: d.theme }))}: ${Math.round(d.quota * 100)}% su ${d.n} risposte`).join(' · ')}.
+      Finché uno di questi resta sotto il 60% il livello non si chiude, e le sessioni pescheranno di lì.
+    </div>` : ''}
+    ${passa && tipo === 'uscita' ? `<div class="note">
+      <div class="note__label">Da qui</div>
+      Il livello è superato. Fra una settimana e fra un mese l’app te lo richiede su posizioni nuove:
+      è così che «superato» resta un’affermazione controllata invece di un ricordo.
+    </div>` : ''}
+    ${!passa && tipo !== 'uscita' ? `<div class="note">
+      <div class="note__label">Il livello si riapre</div>
+      Non regge più. Non è un passo indietro: è la cosa che avresti voluto sapere.
+    </div>` : ''}
+    <button class="btn btn--primary" data-go="#/">Torna alla home</button>
+  </div>`);
+  mount(view);
+  sincronizzaPresto();
+}
+
+/** L'esame del livello 3: le stesse posizioni della tattica, ma mai viste. */
+function renderEsameTattica(code, tipo) {
+  const livello = Percorso.byCode(code);
+  const items = Esame.componi({
+    pool: PUZZLES,
+    soglia: livello.esame.soglia,
+    spesi: Store.itemSpesi(),
+  });
+  if (items.length < Stima.MIN_RISPOSTE) return renderEsameFinito(code);
+
+  setBar({ title: NOME_ESAME[tipo], back: '#/' });
+
+  const risposte = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Interrompi</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptDot = promptEl.querySelector('.prompt__dot');
+  const promptText = promptEl.querySelector('.prompt__text');
+
+  const setPrompt = (t, k = '') => {
+    promptEl.className = `prompt${k ? ` prompt--${k}` : ''}`;
+    promptText.innerHTML = t;
+  };
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    items.forEach((_, i) => {
+      const span = document.createElement('span');
+      if (risposte[i]) span.className = risposte[i].ok ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function load(index) {
+    const puzzle = items[index];
+    const start = fromFen(puzzle.f);
+    const line = playUci(puzzle.m.split(' '), start);
+    const side = other(start.turn);
+    current = { puzzle, index, states: line.states, moves: line.moves, side, ply: 0, start: Date.now() };
+
+    headEl.innerHTML = `<h2>Posizione ${index + 1} di ${items.length}</h2><p>giochi con il ${COLOR_IT[side]}</p>`;
+    promptDot.className = `prompt__dot prompt__dot--${side}`;
+    board.setOrientation(side);
+    board.setPosition(current.states[0], null);
+    board.setInteractive(false);
+    drawProgress();
+    setPrompt('Guarda la mossa dell’avversario…');
+    later(() => {
+      board.setPosition(current.states[1], current.moves[0]);
+      current.ply = 1;
+      current.start = Date.now();
+      board.setInteractive(true);
+      setPrompt(`Muove il <strong>${COLOR_IT[side]}</strong>. Una sola risposta.`);
+    }, 800);
+  }
+
+  /* Un errore chiude la posizione: all'esame non esiste il secondo tentativo. */
+  function onMove(move) {
+    if (!current || !board.interactive) return;
+    board.setInteractive(false);
+    const atteso = current.moves[current.ply];
+    const qui = current.states[current.ply];
+    const giusta = sameMove(move, atteso)
+      || (current.ply === current.moves.length - 1
+        && isMate(applyMove(qui, atteso)) && isMate(applyMove(qui, move)));
+
+    if (giusta && current.ply + 1 < current.moves.length) {
+      board.flash(move.to, 'good', 500);
+      board.setPosition(current.states[current.ply + 1], move);
+      later(() => {
+        board.setPosition(current.states[current.ply + 2], current.moves[current.ply + 1]);
+        current.ply += 2;
+        board.setInteractive(true);
+        setPrompt('Continua.');
+      }, 700);
+      return;
+    }
+
+    board.flash(move.to, giusta ? 'good' : 'wrong', 600);
+    beep(giusta ? 'ok' : 'err');
+    risposte[current.index] = {
+      id: current.puzzle.id,
+      d: current.puzzle.r,
+      ok: giusta,
+      theme: current.puzzle.t,
+      ms: Date.now() - current.start,
+    };
+    drawProgress();
+    setPrompt(giusta ? '<strong>Giusta.</strong>' : 'No.', giusta ? 'good' : 'bad');
+    later(() => {
+      if (current.index + 1 < items.length) load(current.index + 1);
+      else renderEsameEsito(registraEsame(code, tipo, risposte));
+    }, 850);
+  }
+
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+  session = { onMove };
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  load(0);
+}
+
+function renderEsameFinito(code) {
+  setBar({ title: 'Esame', back: '#/' });
+  mount(h(`<div class="stack">
+    <div class="note">
+      <div class="note__label">Posizioni d’esame esaurite</div>
+      Ogni item d’esame si spende una volta sola, e per questo livello sono finiti.
+      È il prezzo di una misura onesta: si può rifare l’esame solo con materiale nuovo,
+      e per averne serve rigenerare il corpus da un database più grande.
+    </div>
+    <button class="btn btn--primary" data-go="#/">Torna alla home</button>
+  </div>`));
+}
+
+/** L'esame dei due livelli di base: item generati, ma da un serbatoio tenuto fuori. */
+function renderEsameBase(code, tipo) {
+  const livello = Percorso.byCode(code);
+  const axis = livello.axis;
+  const pool = (axis === Basics.VISTA ? Basics.vistaPool(7) : Basics.sicurezzaPool(400))
+    .filter((it) => Esame.inEsame(it.id, Esame.QUOTA_GENERATI));
+  /* `mescola` lavora sulle voci della coda ({ item }), non sugli item nudi. */
+  const items = Basics.mescola(pool.map((item) => ({ item })))
+    .map((x) => x.item)
+    .slice(0, livello.esame.su);
+  if (items.length < livello.esame.su) return renderEsameFinito(code);
+
+  setBar({ title: NOME_ESAME[tipo], back: '#/' });
+  const risposte = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <div class="opts" id="opts"></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Interrompi</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptText = promptEl.querySelector('.prompt__text');
+  const optsEl = view.querySelector('#opts');
+
+  const setPrompt = (t, k = '') => {
+    promptEl.className = `prompt${k ? ` prompt--${k}` : ''}`;
+    promptText.innerHTML = t;
+  };
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    items.forEach((_, i) => {
+      const span = document.createElement('span');
+      if (risposte[i]) span.className = risposte[i].ok ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  const boardHost = view.querySelector('#board-host');
+
+  function load(index) {
+    const item = items[index];
+    current = { item, index, start: Date.now(), risposto: false };
+    headEl.innerHTML = `<h2>Domanda ${index + 1} di ${items.length}</h2>`;
+
+    /* La scacchiera serve solo ad alcune domande: le altre si fanno a mente. */
+    const mostra = !!(item.fen || item.empty);
+    boardHost.hidden = !mostra;
+    if (mostra) {
+      if (!boardHost.contains(board.el)) boardHost.appendChild(board.el);
+      let stato = fromFen(item.fen || VUOTA);
+      let ultima = null;
+      if (item.firstMove) {
+        const mossa = legalMoves(stato).find((m) => nameOf(m.from) + nameOf(m.to) === item.firstMove.slice(0, 4));
+        if (mossa) { ultima = mossa; stato = applyMove(stato, mossa); }
+      }
+      board.setOrientation(item.side || 'w');
+      board.setInteractive(false);
+      board.setPosition(stato, ultima);
+      (item.marks || []).forEach((m) => board.flash(m.square, m.kind || 'hint', 60000));
+    }
+
+    /* All'esame il suggerimento non si dà: fa parte di quello che si misura. */
+    setPrompt(esc(item.prompt).replace(/&lt;(\/?)strong&gt;/g, '<$1strong>'));
+    drawProgress();
+
+    optsEl.textContent = '';
+    if (item.kind === 'opzioni') {
+      item.options.forEach((opt) => {
+        const b = h(`<button class="btn">${esc(opt.label)}</button>`);
+        b.onclick = () => rispondi(opt.ok, b);
+        optsEl.appendChild(b);
+      });
+    } else {
+      board.setSelectMode((square) => rispondi(square === item.answer, null));
+    }
+  }
+
+  function rispondi(giusta, bottone) {
+    if (!current || current.risposto) return;
+    current.risposto = true;
+    board.setSelectMode(null);
+    board.clearFlash('hint');
+    if (bottone) bottone.classList.add(giusta ? 'btn--good' : 'btn--bad');
+    beep(giusta ? 'ok' : 'err');
+    risposte[current.index] = {
+      id: current.item.id,
+      ok: giusta,
+      theme: Basics.tipoDi(current.item),
+      ms: Date.now() - current.start,
+    };
+    drawProgress();
+    optsEl.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    later(() => {
+      if (current.index + 1 < items.length) load(current.index + 1);
+      else renderEsameEsito(registraEsame(code, tipo, risposte));
+    }, 700);
+  }
+
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+  session = null;
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  load(0);
+}
+
+/* ------------------------ L4 · calcolo e visualizzazione ------------------ */
+
+/*
+ * La posizione si guarda per qualche secondo, poi si spegne. Le mosse si
+ * giocano sulla scacchiera vuota e la risposta dell'avversario arriva scritta.
+ *
+ * Non è un numero da circo: fra grandi maestri, giocare senza vedere la
+ * scacchiera non aumenta gli errori rispetto al gioco rapido — è la fretta che
+ * li aumenta. Tenere la posizione in testa non è un talento a parte: è la
+ * stessa competenza del calcolo, misurata senza l'aiuto degli occhi.
+ */
+function renderCalcolo({ esame = null } = {}) {
+  const log = Store.getLog();
+  const state = Store.getRating(Tactics.AXIS) || { rating: Rating.START_RATING };
+  const viste = new Set(Store.allCards(Calcolo.PREFIX).map((c) => c.id));
+
+  const items = esame
+    ? Calcolo.costruisci({
+      log: log.filter((e) => e.axis === Calcolo.AXIS),
+      rating: state.rating,
+      viste: new Set(),
+      size: Calcolo.USCITA.su,
+      pool: Esame.poolEsame(PUZZLES),
+    })
+    : Calcolo.costruisci({ log, rating: state.rating, viste });
+
+  if (!items.length) return renderEsameFinito('L4');
+
+  setBar({ title: esame ? NOME_ESAME[esame] : 'Calcolo', back: '#/' });
+
+  const scheduler = makeScheduler();
+  const risposte = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <div class="btn-row"><button class="btn" id="rivedi" hidden>👁 Riaccendi (conta come errore)</button></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptDot = promptEl.querySelector('.prompt__dot');
+  const promptText = promptEl.querySelector('.prompt__text');
+  const rivediBtn = view.querySelector('#rivedi');
+
+  const setPrompt = (t, k = '') => {
+    promptEl.className = `prompt${k ? ` prompt--${k}` : ''}`;
+    promptText.innerHTML = t;
+  };
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    items.forEach((_, i) => {
+      const span = document.createElement('span');
+      if (risposte[i]) span.className = risposte[i].ok ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function load(index) {
+    const item = items[index];
+    const start = fromFen(item.puzzle.f);
+    const line = playUci(item.puzzle.m.split(' '), start);
+    const side = other(start.turn);
+
+    current = {
+      ...item, index, states: line.states, moves: line.moves, sans: line.sans,
+      side, ply: 0, errori: 0, riacceso: false, start: Date.now(),
+    };
+
+    headEl.innerHTML = `<h2>Sequenza ${index + 1} di ${items.length}</h2><p>${
+      item.profondita} semimosse · giochi con il ${COLOR_IT[side]}</p>`;
+    promptDot.className = `prompt__dot prompt__dot--${side}`;
+    board.setOrientation(side);
+    board.setBlind(false);
+    board.setPosition(current.states[1], current.moves[0]);
+    current.ply = 1;
+    board.setInteractive(false);
+    rivediBtn.hidden = !!esame;
+    drawProgress();
+
+    let restano = item.secondi;
+    setPrompt(`Guarda bene: la scacchiera si spegne fra <strong>${restano}</strong> s.`);
+    const tick = setInterval(() => {
+      restano -= 1;
+      if (restano > 0) {
+        setPrompt(`Guarda bene: la scacchiera si spegne fra <strong>${restano}</strong> s.`);
+        return;
+      }
+      clearInterval(tick);
+      spegni();
+    }, 1000);
+    timers.push(tick);
+  }
+
+  function spegni() {
+    current.spenta = true;
+    board.setBlind(true);
+    board.setInteractive(true);
+    setPrompt(`Gioca la mossa del <strong>${COLOR_IT[current.side]}</strong>. A memoria.`);
+  }
+
+  function onMove(move) {
+    if (!current || !board.interactive || !current.spenta) return;
+    const atteso = current.moves[current.ply];
+    const qui = current.states[current.ply];
+    const giusta = sameMove(move, atteso)
+      || (current.ply === current.moves.length - 1
+        && isMate(applyMove(qui, atteso)) && isMate(applyMove(qui, move)));
+
+    if (!giusta) {
+      current.errori += 1;
+      beep('err');
+      board.setInteractive(false);
+      return concludi(false);
+    }
+
+    current.ply += 1;
+    beep('ok');
+    if (current.ply >= current.moves.length) return concludi(true);
+
+    /* La risposta dell'avversario si dice, non si mostra. */
+    board.setInteractive(false);
+    const risposta = san(current.sans[current.ply]);
+    setPrompt(`L’avversario risponde <strong>${esc(risposta)}</strong>. Continua.`);
+    later(() => {
+      current.ply += 1;
+      if (current.ply >= current.moves.length) return concludi(true);
+      board.setInteractive(true);
+      setPrompt(`Gioca la mossa del <strong>${COLOR_IT[current.side]}</strong>.`);
+    }, 1400);
+  }
+
+  function concludi(ok) {
+    board.setInteractive(false);
+    const secondi = Math.round((Date.now() - current.start) / 1000);
+    const pulita = ok && !current.riacceso;
+    risposte[current.index] = {
+      id: current.puzzle.id,
+      ok: pulita,
+      theme: current.puzzle.t,
+      semimosse: current.profondita,
+      ms: secondi * 1000,
+    };
+    drawProgress();
+
+    if (!esame) {
+      const before = Store.getCard(current.id) || newCard(current.id, { r: current.puzzle.r });
+      const card = scheduler.review(before, pulita ? GOOD : AGAIN, Date.now());
+      Store.saveCard(card);
+      Store.addCount(Calcolo.AXIS, pulita);
+      Store.logReview({
+        id: card.id,
+        t: Date.now(),
+        g: pulita ? GOOD : AGAIN,
+        isNew: !before.reps,
+        wasReview: before.state === 'review',
+        correct: pulita,
+        ivl: card.ivl,
+        axis: Calcolo.AXIS,
+        ms: secondi * 1000,
+        theme: current.puzzle.t,
+        semimosse: current.profondita,
+      });
+    }
+
+    board.setBlind(false);
+    board.setPosition(current.states[current.ply], current.moves[current.ply - 1] || null);
+    setPrompt(pulita
+      ? '<strong>Fino in fondo.</strong>'
+      : `Era <strong>${esc(san(current.sans[current.ply]))}</strong>. Ecco dov’eri.`,
+    pulita ? 'good' : 'bad');
+
+    later(() => {
+      if (current.index + 1 < items.length) load(current.index + 1);
+      else fine();
+    }, pulita ? 1300 : 2400);
+  }
+
+  function fine() {
+    if (esame) return renderEsameEsito(registraEsame('L4', esame, risposte));
+    const giuste = risposte.filter((r) => r && r.ok).length;
+    const u = Calcolo.uscita(Store.getLog());
+    mount(h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">Sessione finita</div>
+        <div class="result__sub">${giuste} sequenze su ${risposte.length} portate fino in fondo</div>
+      </div>
+      <div class="note"><div class="note__label">Verso l’uscita</div>${esc(u.label)}</div>
+      <button class="btn btn--primary" id="more">Un’altra</button>
+      <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+    </div>`));
+    document.getElementById('more').onclick = () => renderCalcolo({});
+    sincronizzaPresto();
+  }
+
+  rivediBtn.onclick = () => {
+    if (!current || !current.spenta) return;
+    current.riacceso = true;
+    board.setBlind(false);
+    setPrompt('Riaccesa: questa non conta come pulita.', 'bad');
+    later(() => {
+      board.setBlind(true);
+      setPrompt(`Gioca la mossa del <strong>${COLOR_IT[current.side]}</strong>.`);
+    }, 2500);
+  };
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+
+  session = { onMove };
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  load(0);
+}
+
+/* --------------------- L0 · ricostruzione a cinque secondi ---------------- */
+
+/*
+ * L'esperimento con cui è cominciata la psicologia degli scacchi, messo dentro
+ * l'app perché è la misura più diretta di quello che il livello 0 dice di
+ * allenare. Accanto alle posizioni vere ce ne sono di casuali con gli stessi
+ * pezzi: su quelle nessuno migliora, e il divario fra le due è la parte che
+ * l'esperienza costruisce. Un punteggio solo non direbbe niente; due sì.
+ */
+function renderRicostruzione() {
+  const seed = (Store.getLog().length % 997) + 1;
+  const items = Ricostruzione.costruisci({ seed });
+
+  setBar({ title: 'Ricostruzione', back: '#/vista' });
+
+  const risposte = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <div class="btn-row"><button class="btn btn--primary" id="fatto" hidden>Ho finito</button></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptText = promptEl.querySelector('.prompt__text');
+  const fattoBtn = view.querySelector('#fatto');
+
+  const setPrompt = (t, k = '') => {
+    promptEl.className = `prompt${k ? ` prompt--${k}` : ''}`;
+    promptText.innerHTML = t;
+  };
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    items.forEach((_, i) => {
+      const span = document.createElement('span');
+      if (risposte[i]) span.className = risposte[i].quota >= 0.75 ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function load(index) {
+    const item = items[index];
+    current = { ...item, index };
+    headEl.innerHTML = `<h2>Posizione ${index + 1} di ${items.length}</h2><p>Guarda, poi rimettila</p>`;
+    fattoBtn.hidden = true;
+    board.setBlind(false);
+    board.setOrientation('w');
+    board.setPosition(fromFen(item.fen), null);
+    board.setInteractive(false);
+    board.setEditable && board.setEditable(false);
+    drawProgress();
+
+    let restano = item.secondi;
+    setPrompt(`<strong>${restano}</strong> secondi.`);
+    const tick = setInterval(() => {
+      restano -= 1;
+      setPrompt(restano > 0 ? `<strong>${restano}</strong> secondi.` : 'Adesso rimettila.');
+      if (restano <= 0) { clearInterval(tick); componi(); }
+    }, 1000);
+    timers.push(tick);
+  }
+
+  /*
+   * La scacchiera dell'app muove pezzi, non li crea: per far ricostruire senza
+   * riscriverla, si mostra la posizione vuota e si chiede quali case erano
+   * occupate, una per una, dai pezzi di quella posizione. Il conto lo fa
+   * `ricostruzione.js`: pezzi al posto giusto, contati.
+   */
+  function componi() {
+    const vero = fromFen(current.fen);
+    const pezzi = [];
+    for (let i = 0; i < 64; i++) if (vero.board[i]) pezzi.push(vero.board[i]);
+    const rimasti = pezzi.slice().sort();
+    current.messi = new Array(64).fill(null);
+    current.coda = rimasti;
+    board.setPosition(fromFen(VUOTA), null);
+    fattoBtn.hidden = false;
+    chiediProssimo();
+  }
+
+  function chiediProssimo() {
+    if (!current.coda.length) return valuta();
+    const pezzo = current.coda[0];
+    setPrompt(`Dove stava <strong>${esc(See.NOME[pezzo.toUpperCase()])} ${
+      colorOf(pezzo) === 'w' ? 'bianco' : 'nero'}</strong>? Tocca la casa.`);
+    board.setSelectMode((casa) => metti(casa));
+  }
+
+  function metti(casa) {
+    if (!current || !current.coda || !current.coda.length) return;
+    if (current.messi[casa]) return;
+    current.messi[casa] = current.coda.shift();
+    const stato = fromFen(VUOTA);
+    stato.board = current.messi.slice();
+    board.setSelectMode(null);
+    board.setPosition(stato, null);
+    beep('move');
+    chiediProssimo();
+  }
+
+  function valuta() {
+    board.setInteractive(false);
+    fattoBtn.hidden = true;
+    const stato = fromFen(VUOTA);
+    stato.board = current.messi.slice();
+    const p = Ricostruzione.punteggio(current.fen, fenDi(stato));
+    risposte[current.index] = { ...p, vera: current.vera };
+    drawProgress();
+
+    Store.logReview({
+      id: current.id,
+      t: Date.now(),
+      g: p.quota >= 0.75 ? GOOD : AGAIN,
+      isNew: true,
+      wasReview: false,
+      correct: p.quota >= 0.75,
+      ivl: 0,
+      axis: Ricostruzione.AXIS,
+      vera: current.vera,
+      quota: p.quota,
+    });
+
+    board.setPosition(fromFen(current.fen), null);
+    setPrompt(`<strong>${p.giusti} pezzi su ${p.totali}</strong> al posto giusto. ${
+      current.vera ? 'Questa era una posizione vera.' : 'Questa era a caso: nessuno la ricostruisce bene, ed è il punto.'
+    }`, p.quota >= 0.75 ? 'good' : '');
+
+    later(() => {
+      if (current.index + 1 < items.length) load(current.index + 1);
+      else fine();
+    }, 2600);
+  }
+
+  function fine() {
+    const vere = risposte.filter((r) => r && r.vera);
+    const cas = risposte.filter((r) => r && !r.vera);
+    const media = (xs) => (xs.length ? Math.round((xs.reduce((s, r) => s + r.quota, 0) / xs.length) * 100) : 0);
+    const d = Ricostruzione.divario(Store.getLog());
+
+    mount(h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">Ricostruzione</div>
+        <div class="result__sub">${media(vere)}% sulle posizioni vere · ${media(cas)}% su quelle a caso</div>
+      </div>
+      <div class="note">
+        <div class="note__label">Che cosa vuol dire</div>
+        Sulle posizioni a caso non migliora nessuno: i pezzi non formano niente da riconoscere.
+        Il divario fra le due colonne è la parte che l’esperienza costruisce, ed è quella che cresce.
+      </div>
+      ${d.pronto ? `<div class="note"><div class="note__label">Su tutte le tue prove</div>
+        ${Math.round(d.vere * 100)}% sulle vere contro ${Math.round(d.casuali * 100)}% sulle casuali
+        (${d.n.vere} e ${d.n.casuali} prove): un divario di ${Math.round(d.divario * 100)} punti.</div>`
+    : `<div class="note"><div class="note__label">Non ancora</div>
+        Servono almeno ${Ricostruzione.MIN_PER_TIPO} prove per tipo prima di dichiarare un divario:
+        finora ne hai ${d.vere} vere e ${d.casuali} casuali.</div>`}
+      <button class="btn btn--primary" id="more">Un’altra</button>
+      <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+    </div>`));
+    document.getElementById('more').onclick = () => renderRicostruzione();
+    sincronizzaPresto();
+  }
+
+  fattoBtn.onclick = () => { current.coda = []; board.setSelectMode(null); valuta(); };
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+
+  session = null;
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  load(0);
+}
+
+/* --------------------------- L6 · il piano nominato ----------------------- */
+
+/*
+ * Il criterio del livello 6 è sempre stato «la linea a memoria **e** il piano
+ * nominato». La prima metà l'app la misurava; la seconda era testo che si legge
+ * nella schermata di studio, e nessuno tornava mai a chiedertelo. Una cosa che
+ * si legge e non si richiama non è una cosa che si sa.
+ *
+ * Le alternative sbagliate vengono dalle aperture della **stessa famiglia**:
+ * strutture simili, dove i piani si confondono davvero. Un distrattore preso da
+ * un'apertura lontana si scarta senza sapere niente.
+ */
+function renderPiani({ esame = null } = {}) {
+  const progressi = Store.allProgress();
+  const items = Piani.costruisci({ progressi, size: esame ? 8 : Piani.SESSION_SIZE });
+  if (!items.length) return renderHome();
+
+  setBar({ title: esame ? NOME_ESAME[esame] : 'Il piano', back: '#/aperture' });
+
+  const risposte = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <div class="stack" id="opts"></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptText = promptEl.querySelector('.prompt__text');
+  const optsEl = view.querySelector('#opts');
+
+  const setPrompt = (t, k = '') => {
+    promptEl.className = `prompt${k ? ` prompt--${k}` : ''}`;
+    promptText.innerHTML = t;
+  };
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    items.forEach((_, i) => {
+      const span = document.createElement('span');
+      if (risposte[i]) span.className = risposte[i].ok ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function load(index) {
+    const item = items[index];
+    current = { ...item, index, start: Date.now() };
+    const line = playLine(item.line.split(' '));
+    const finale = line.states[line.states.length - 1];
+
+    headEl.innerHTML = `<h2>${esc(item.opening.name)}</h2><p>${esc(item.opening.family)}</p>`;
+    board.setOrientation(item.side);
+    board.setPosition(finale, line.moves[line.moves.length - 1]);
+    board.setInteractive(false);
+    drawProgress();
+    setPrompt('Questa è la posizione che la linea produce. <strong>Qual è il piano?</strong>');
+
+    optsEl.textContent = '';
+    item.opzioni.forEach((opt) => {
+      const b = h(`<button class="btn opt opt--long">${esc(opt.testo)}</button>`);
+      b.onclick = () => rispondi(opt, b);
+      optsEl.appendChild(b);
+    });
+  }
+
+  function rispondi(opt, bottone) {
+    if (risposte[current.index]) return;
+    const giusta = !!opt.giusta;
+    bottone.classList.add(giusta ? 'opt--ok' : 'opt--err');
+    if (!giusta) {
+      optsEl.querySelectorAll('.opt').forEach((b, i) => {
+        if (current.opzioni[i].giusta) b.classList.add('opt--ok');
+      });
+    }
+    beep(giusta ? 'ok' : 'err');
+    optsEl.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+
+    risposte[current.index] = { id: current.opening.id, ok: giusta, theme: 'piano' };
+    drawProgress();
+    if (!esame) Store.savePiano(current.opening.id, giusta);
+
+    Store.logReview({
+      id: Piani.cardIdOf(current.opening.id),
+      t: Date.now(),
+      g: giusta ? GOOD : AGAIN,
+      isNew: false,
+      wasReview: false,
+      correct: giusta,
+      ivl: 0,
+      axis: Piani.AXIS,
+      ms: Date.now() - current.start,
+      theme: 'piano',
+    });
+
+    setPrompt(giusta
+      ? '<strong>È quello.</strong>'
+      : `<strong>No.</strong> Il piano dell’${esc(current.opening.name)} è quello segnato in verde.`,
+    giusta ? 'good' : 'bad');
+
+    later(() => {
+      if (current.index + 1 < items.length) load(current.index + 1);
+      else fine();
+    }, giusta ? 1500 : 3200);
+  }
+
+  function fine() {
+    if (esame) return renderEsameEsito(registraEsame('L6', esame, risposte));
+    const giuste = risposte.filter((r) => r && r.ok).length;
+    const u = Piani.uscita({ progressi: Store.allProgress() });
+    mount(h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">Piani</div>
+        <div class="result__sub">${giuste} su ${risposte.length}</div>
+      </div>
+      <div class="note"><div class="note__label">Livello 6</div>${esc(u.label)}.
+        Il criterio è la linea <em>e</em> il piano: due cose, e vanno misurate tutte e due.</div>
+      <button class="btn btn--primary" id="more">Ancora</button>
+      <button class="btn btn--ghost" data-go="#/aperture">Le aperture</button>
+    </div>`));
+    document.getElementById('more').onclick = () => renderPiani({});
+    sincronizzaPresto();
+  }
+
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+  session = null;
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  load(0);
+}
+
 /* -------------------------------- routing ------------------------------- */
 
 function mount(node) {
@@ -2123,6 +3468,10 @@ function route() {
     if (level) return renderTraining(pickQueue(level.id), `#/livello/${level.id}`, `Allenamento ${level.name}`);
   }
   if (screen === 'finali') return renderFinaliSession();
+  if (screen === 'esame' && Percorso.byCode(param)) return renderEsameIntro(param);
+  if (screen === 'calcolo') return renderCalcolo({});
+  if (screen === 'ricostruzione') return renderRicostruzione();
+  if (screen === 'piani') return renderPiani({});
   if (screen === 'vista') return renderBasicsSession(Basics.VISTA);
   if (screen === 'sicurezza') return renderBasicsSession(Basics.SICUREZZA);
   if (screen === 'aperture') return renderOpenings();

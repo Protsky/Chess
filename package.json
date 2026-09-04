@@ -10,6 +10,8 @@
     "validate:percorso": "node tools/validate-percorso.mjs",
     "build:puzzles": "node tools/build-puzzles.mjs",
     "smoke": "node tools/smoke.mjs",
-    "start": "python3 -m http.server 8080"
+    "start": "python -m http.server 8080",
+    "validate:nuovo": "node tools/validate-nuovo.mjs",
+    "build:quiete": "node tools/build-quiete.mjs"
   }
 }
