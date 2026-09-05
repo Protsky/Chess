@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'assets/js/puzzles.js');
@@ -30,11 +31,38 @@ const MIN_RATING = 400;
 const MAX_RATING = 2200;
 const BAND = 100;
 
-/** Quanto materiale per fascia, e quanto per ogni motivo dentro la fascia. */
-const PER_BAND = 190;
-const PER_BAND_THEME = 14;
+/*
+ * Quanto materiale per fascia, e quanto per ogni motivo dentro la fascia.
+ *
+ * Erano 190 e 14, e facevano un corpus da 3235 posizioni. Sembrava abbastanza
+ * finché la macchina della misura non ha cominciato a consumarlo: l'8% tenuto
+ * fuori per gli esami dava 247 item, di cui **74** entro ±300 punti da 1400 —
+ * cioè tre esami, quanti ne serve un solo percorso (uscita, tenuta a 7 giorni,
+ * tenuta a 30), con zero margine per una riapertura che `statoLivello` prevede
+ * come esito normale.
+ *
+ * Il punto è che quella penuria non veniva dalla fonte: 3235 su 6.057.356 sono
+ * lo 0,053% del database. Veniva da qui.
+ *
+ * L'aumento è **uniforme**, non concentrato attorno a 1400. Infittire solo la
+ * banda dove oggi cade una soglia vorrebbe dire tarare il corpus sul numero che
+ * l'app usa adesso: la soglia può cambiare, i livelli nuovi avranno le loro, e
+ * un corpus adattato alla domanda di oggi è un corpus che mente domani.
+ */
+const PER_BAND = 600;
+const PER_BAND_THEME = 45;
 
-/** Qualità: posizioni giocate abbastanza da avere un punteggio che significa qualcosa. */
+/*
+ * Qualità: posizioni giocate abbastanza da avere un punteggio che significa
+ * qualcosa. Questi tre numeri **non** sono cambiati, ed è la parte importante.
+ *
+ * Il rimedio alla penuria era la densità, non la tolleranza: allargare le maglie
+ * per far entrare più materiale avrebbe fatto crescere il corpus abbassando la
+ * qualità della difficoltà misurata — cioè peggiorando proprio la cosa su cui
+ * l'esame poggia. La deviazione massima resta 90, e adesso viaggia con ogni
+ * posizione (campo `d`), così `calibrato.js` può filtrare invece di dichiarare
+ * un debito.
+ */
 const MIN_PLAYS = 500;
 const MIN_POPULARITY = 85;
 const MAX_DEVIATION = 90;
@@ -181,6 +209,16 @@ for (const raw of zstdRows(source)) {
     f: fen,
     m: moves,
     r: rating,
+    /*
+     * La deviazione del Glicko-2: quanto è **misurata** quella difficoltà.
+     * Senza, `calibrato.js` aveva una soglia che non filtrava niente e lo
+     * dichiarava come debito. Adesso il numero c'è.
+     *
+     * Si chiama `rd` e non `d` di proposito: in `stima.js` il campo `d` di una
+     * risposta è la **difficoltà**, e due significati sullo stesso nome sono il
+     * modo classico di rompere qualcosa senza vederlo.
+     */
+    rd: Number(devText),
     t: motif,
     p: PHASES.find((x) => themes.includes(x)) || 'middlegame',
   });
@@ -190,7 +228,29 @@ for (const raw of zstdRows(source)) {
 
 picked.sort((a, b) => (a.r - b.r) || a.id.localeCompare(b.id));
 
-const lines = picked.map((p) => `  { id: '${p.id}', f: '${p.f}', m: '${p.m}', r: ${p.r}, t: '${p.t}', p: '${p.p}' },`);
+/*
+ * Il manifesto dello snapshot.
+ *
+ * Serve perche' i numeri di scorta che l'app mostra ("ne restano 74, cioe' tre
+ * esami") invecchiano: l'export di Lichess cambia ogni mese, e una cifra senza
+ * la data della fonte da cui viene e' un numero vero oggi e falso domani, senza
+ * che nessuno se ne accorga. Data, byte e impronta stanno accanto al corpus.
+ */
+const stat = fs.statSync(source);
+const impronta = createHash('sha256').update(fs.readFileSync(source)).digest('hex');
+const manifesto = {
+  fonte: 'https://database.lichess.org/lichess_db_puzzle.csv.zst',
+  licenza: 'CC0',
+  scaricato: new Date().toISOString().slice(0, 10),
+  modificato: stat.mtime.toISOString().slice(0, 10),
+  byte: stat.size,
+  sha256: impronta,
+  righeLette: seen,
+  ammesse: picked.length,
+  criteri: { MIN_PLAYS, MIN_POPULARITY, MAX_DEVIATION, PER_BAND, PER_BAND_THEME, MIN_RATING, MAX_RATING, MAX_PLIES },
+};
+
+const lines = picked.map((p) => `  { id: '${p.id}', f: '${p.f}', m: '${p.m}', r: ${p.r}, rd: ${p.rd}, t: '${p.t}', p: '${p.p}' },`);
 
 const body = `/*
  * puzzles.js — il corpus tattico. GENERATO: non modificare a mano.
@@ -210,6 +270,7 @@ const body = `/*
  *   f   FEN di partenza
  *   m   soluzione in UCI, mosse separate da spazio (la prima è dell'avversario)
  *   r   punteggio Glicko-2 della posizione
+ *   rd  deviazione del Glicko-2: quanto e' misurata quella difficolta'
  *   t   motivo tattico principale
  *   p   fase di gioco
  */
@@ -247,6 +308,29 @@ export function distribution() {
 `;
 
 fs.writeFileSync(OUT, body);
+fs.writeFileSync(
+  path.join(ROOT, 'assets/js/corpus-manifesto.json'),
+  `${JSON.stringify(manifesto, null, 2)}\n`,
+);
+
+/*
+ * E lo stesso manifesto come modulo: l'app lo importa come tutto il resto,
+ * senza fetch e senza import assertion (che i browser trattano ancora a modo
+ * loro). Il JSON resta accanto, per chi lo legge a mano.
+ */
+fs.writeFileSync(path.join(ROOT, 'assets/js/manifesto.js'), `/*
+ * manifesto.js — da dove viene il corpus. GENERATO: non modificare a mano.
+ *
+ * Serve a una cosa sola: le cifre di scorta che l'app mostra ("ne restano 264,
+ * cioè 11 esami") invecchiano, perché l'export di Lichess cambia ogni mese. Un
+ * numero senza la data della fonte da cui viene è vero oggi e falso domani, e
+ * nessuno se ne accorge.
+ */
+
+export const MANIFESTO = ${JSON.stringify(manifesto, null, 2)};
+
+export const dataSnapshot = () => MANIFESTO.modificato;
+`);
 
 const themeTotals = {};
 for (const p of picked) themeTotals[p.t] = (themeTotals[p.t] || 0) + 1;
@@ -259,6 +343,30 @@ perBand.forEach((n, i) => {
   const from = MIN_RATING + i * BAND;
   console.log(`  ${from}-${from + BAND - 1}  ${String(n).padStart(4)}${n < PER_BAND ? '  ← sotto la quota' : ''}`);
 });
+/*
+ * Il conteggio che conta davvero, e che prima non si stampava: quante posizioni
+ * finiscono nel pool d'ESAME (l'8% tenuto fuori, diviso in modo deterministico
+ * sull'identificativo) e quante di quelle stanno vicino a una soglia. E' il
+ * numero che decide quanti esami si possono sostenere - ed e' quello che era
+ * sceso a 74, cioe' tre esami, con zero margine per una riapertura.
+ */
+function inEsame(id) {
+  let h = 2166136261;
+  const testo = `esame:${id}`;
+  for (let i = 0; i < testo.length; i++) {
+    h ^= testo.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967296 < 0.08;
+}
+
+const dEsame = picked.filter((p) => inEsame(p.id));
+console.log(`\nPool d'esame (8% deterministico): ${dEsame.length}`);
+for (const soglia of [800, 1000, 1200, 1400, 1600, 1800]) {
+  const vicini = dEsame.filter((p) => Math.abs(p.r - soglia) <= 300).length;
+  console.log(`  attorno a ${soglia} (+-300): ${String(vicini).padStart(4)}  ->  ${Math.floor(vicini / 24)} esami`);
+}
+
 console.log('\nPer motivo:');
 for (const [key, name] of THEMES) {
   const n = themeTotals[key] || 0;

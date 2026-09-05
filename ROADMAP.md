@@ -454,18 +454,39 @@ lo richiede su materiale nuovo, e se non regge il livello si riapre.
       calcolato su milioni di tentativi: la stima **può essere smentita**. Se
       divergono, ha torto l'app.
 
+- [x] **Il corpus rigenerato: la penuria era autoinflitta** — il vincolo più
+      stretto del progetto («74 posizioni d'esame entro ±300 da 1400, cioè tre
+      esami, zero margine per una riapertura») non veniva dalla fonte. Veniva da
+      due costanti in `build-puzzles.mjs`: 190 posizioni per fascia, 14 per
+      motivo. Le 3235 posizioni sul disco erano lo **0,053%** del database.
+      Fatto: riscaricato l'export di Lichess (6.100.960 righe lette, 304.384.407
+      byte, CC0, impronta e data congelate in `manifesto.js`), alzata la densità
+      a 600 per fascia e 45 per motivo. **I criteri di qualità non sono stati
+      toccati** — giocate ≥ 500, popolarità ≥ 85, deviazione ≤ 90 — ed è la parte
+      importante: il rimedio alla penuria era la densità, non la tolleranza.
+      Allargare le maglie avrebbe fatto crescere il corpus peggiorando proprio la
+      cosa su cui l'esame poggia.
+      Risultato: corpus 3235 → **9970**, pool d'esame 247 → **807**, e attorno a
+      1400 le posizioni utili passano da 74 a **264**, cioè da 3 a **11 esami**.
+      Il margine per una riapertura adesso c'è, e l'app lo dice.
+      A cascata si sono rigenerati: posizioni quiete 656 → **2036**, trappole
+      231/168/94/6 → **717/536/257/17** per fascia.
+      In più, ogni posizione porta adesso la sua `rd` (la deviazione del
+      Glicko-2), e la soglia che `calibrato.js` dichiarava come **debito** —
+      c'era scritta e non filtrava niente — funziona davvero.
+      E ogni cifra di scorta mostrata nell'app porta con sé la data dello
+      snapshot da cui viene: quel numero invecchia, perché l'export cambia ogni
+      mese, e un numero vero oggi e falso domani è il modo più educato di mentire.
+      Provato: tutte e 9970 le soluzioni rigiocate sul motore (92.238 controlli),
+      e le soglie assolute nei test sostituite da proporzioni — un test che si
+      riscrive a ogni rigenerazione del corpus non controlla il codice, insegue i
+      dati.
+
 ## Quello che questa iterazione ha lasciato aperto
 
 Tre cose, e non sono dimenticanze: due hanno bisogno di scaricare qualcosa e una
 di una decisione che non tocca a chi scrive il codice.
 
-- **Le scorte d'esame.** Attorno a 1400 restano 74 posizioni entro ±300 punti,
-  cioè tre esami — quanti ne serve un percorso completo, con zero margine per una
-  riapertura. Ma è una penuria **rimovibile**: le 3235 posizioni sul disco sono
-  lo 0,053% del database di Lichess (6.057.356 puzzle, CC0). Il CSV pesa 304 MB
-  compressi e non è più sul disco. Rigenerando il corpus, e portandosi dietro la
-  colonna `RatingDeviation` che oggi manca, la soglia dichiarata in
-  `calibrato.js` smetterebbe di essere un debito e comincerebbe a filtrare.
 - **La copertura di L6.** Si può misurare — dalle partite CC0 di Lichess, non da
   quelle dei puzzle — ma solo dichiarando *prima* i quattro parametri (mossa N,
   fascia Elo, controllo di tempo, colore): la stessa cifra può valere 20% o 80%

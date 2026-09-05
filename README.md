@@ -95,13 +95,20 @@ Adesso funziona così.
   quindi la probabilità è una Poisson-binomiale sugli item veri. Sta scritto
   nella schermata d'esame: un criterio che non dice dove sta il proprio punto di
   mezzo è un criterio che non si può interpretare.
-- **Le scorte si contano.** Attorno a 1400 le posizioni d'esame sono 74 entro
-  ±300 punti: tre esami, quanti ne serve un percorso completo (uscita più le due
-  prove di tenuta), con zero margine per una riapertura. L'app lo mostra prima
-  che tu cominci, e quando non basta un esame intero nella fascia utile **non
-  parte**, invece di pescare più lontano: una posizione da 700 la risolvono
+- **Le scorte si contano, e portano la loro data.** Attorno a 1400 le posizioni
+  d'esame sono 264 entro ±300 punti: undici esami, quando un percorso completo
+  (uscita più le due prove di tenuta) ne chiede tre. L'app lo mostra prima che tu
+  cominci, insieme alla data dello snapshot di Lichess da cui quel numero viene —
+  perché l'export cambia ogni mese, e una cifra senza la sua data è vera oggi e
+  falsa domani. Quando non basta un esame intero nella fascia utile l'esame
+  **non parte**, invece di pescare più lontano: una posizione da 700 la risolvono
   tutti e una da 2200 nessuno, e l'intervallo si allargherebbe proprio quando
   servirebbe stretto.
+
+  Per un po' quelle posizioni erano 74, cioè tre esami e zero margine per una
+  riapertura — che il sistema prevede come esito normale. Non era un limite della
+  fonte: le 3235 posizioni del corpus erano lo **0,053%** del database di
+  Lichess. Era un limite di due costanti nel generatore.
 - **Il pavimento per motivo esiste davvero.** Nessun motivo visto almeno otto
   volte può stare sotto il 60% **sulle ultime venti risposte**. Una media alta
   che nasconde un buco non è un livello superato — ma nemmeno un errore di mesi
@@ -482,6 +489,7 @@ assets/js/forzante.js    quali mosse perdono materiale: lo stesso conto in prepa
 assets/js/trappole.js    i numeri di Maia-2, fascia per fascia (generato)
 assets/js/trappola.js    quali trappole tocca a te, e i numeri da mostrare
 assets/js/calibrato.js   che cosa puo entrare nella misura, e che cosa no
+assets/js/manifesto.js   da dove viene il corpus, e di che giorno e (generato)
 assets/js/pgn.js         legge le tue partite, e dice che cosa non ha letto
 assets/js/partite.js     L7: dove hai perso materiale, e che cosa il motore non vede
 assets/js/endgames-data.js  la tavola (dati, generata — non si tocca a mano)

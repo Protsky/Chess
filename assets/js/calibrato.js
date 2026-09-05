@@ -59,9 +59,14 @@ export const CALIBRATO = 't:';
  *
  * Un puzzle risolto da poche persone ha un rating con una deviazione enorme:
  * il numero c'è, ma non è una misura. Lichess pubblica la RatingDeviation
- * proprio per questo, e il corpus attuale non la porta con sé — quindi per ora
- * questa soglia non filtra niente e sta qui dichiarata come **debito**: si
- * applicherà quando il corpus verrà rigenerato portandosi dietro la colonna.
+ * proprio per questo.
+ *
+ * Per un po' il corpus non se la portava dietro, e questa soglia stava qui come
+ * **debito dichiarato**: c'era scritta e non filtrava niente. Dal 05/09/2026 il
+ * corpus ha il campo `rd` e la soglia funziona davvero — anche se in pratica
+ * scarta poco, perché il generatore ammette solo posizioni con deviazione sotto
+ * 90. È difesa in profondità: se un giorno quel filtro si allentasse a monte,
+ * questa barriera resterebbe.
  */
 export const RD_MAX = 100;
 
@@ -84,7 +89,7 @@ export function generato(id) {
 export function misurabile(risposta) {
   if (!risposta || !Number.isFinite(risposta.d)) return false;
   if (risposta.id !== undefined && generato(risposta.id)) return false;
-  if (risposta.rd !== undefined && Number.isFinite(risposta.rd) && risposta.rd > RD_MAX) return false;
+  if (Number.isFinite(risposta.rd) && risposta.rd > RD_MAX) return false;
   return true;
 }
 

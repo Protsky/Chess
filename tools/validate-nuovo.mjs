@@ -82,7 +82,7 @@ for (const p of PUZZLES) {
     if (forma === 'ribaltata') ribaltate += 1;
   }
 }
-ok(specchiate > 2000, `troppe poche posizioni specchiabili: ${specchiate}`);
+ok(specchiate > PUZZLES.length * 0.6, `troppe poche posizioni specchiabili: ${specchiate} su ${PUZZLES.length}`);
 ok(ribaltate === PUZZLES.length, `il ribaltamento deve valere per tutte: ${ribaltate}/${PUZZLES.length}`);
 
 /* Specchiare due volte torna al punto di partenza: è la prova che è un'involuzione. */
@@ -160,7 +160,16 @@ const esame = Esame.poolEsame(PUZZLES);
 ok(allenamento.length + esame.length === PUZZLES.length, 'la divisione deve coprire tutto il corpus');
 const idsAllenamento = new Set(allenamento.map((p) => p.id));
 ok(esame.every((p) => !idsAllenamento.has(p.id)), 'nessuna posizione può stare da tutte e due le parti');
-ok(esame.length > 150 && esame.length < 400, `la quota tenuta fuori è fuori misura: ${esame.length}`);
+/*
+ * La quota e' l'8% del corpus: si controlla la proporzione, non un numero
+ * assoluto. Con un numero assoluto questo test andava rifatto a ogni
+ * rigenerazione del corpus - e un test che si riscrive a ogni build non
+ * controlla il codice, insegue i dati.
+ */
+const quotaVera = esame.length / PUZZLES.length;
+near(quotaVera, Esame.QUOTA, 0.02, 'la quota tenuta fuori deve essere quella dichiarata');
+ok(esame.length >= Esame.ITEM * 3,
+  `servono almeno tre esami di scorta, ce ne sono ${Math.floor(esame.length / Esame.ITEM)}`);
 
 /* Deterministica: rieseguita dà lo stesso insieme. */
 ok(Esame.poolEsame(PUZZLES).map((p) => p.id).join() === esame.map((p) => p.id).join(),
@@ -291,7 +300,7 @@ function guadagnoForzante(stato, profondita) {
   return migliore;
 }
 
-ok(QUIETE.length > 300, `troppe poche posizioni quiete: ${QUIETE.length}`);
+ok(QUIETE.length > PUZZLES.length * 0.1, `troppe poche posizioni quiete: ${QUIETE.length} su ${PUZZLES.length}`);
 let nonQuiete = 0;
 for (const q of QUIETE) {
   const stato = fromFen(q.f);
@@ -337,6 +346,7 @@ ok(Esame.statoLivello(riaperto, { now: adesso + 40 * GIORNO }).stato === 'riaper
 /* L4: le profondità esistono davvero nel corpus, e la scala sale e scende. */
 for (const p of Calcolo.PROFONDITA) {
   ok(Calcolo.poolPer(p).length >= 100, `L4: solo ${Calcolo.poolPer(p).length} posizioni a ${p} semimosse`);
+  ok(Calcolo.poolPer(p).every((x) => Number.isFinite(x.rd)), `L4: al pool a ${p} semimosse manca la deviazione`);
   ok(Calcolo.poolPer(p).every((x) => x.m.split(' ').length === p), `L4: pool a ${p} semimosse sporco`);
   ok(Calcolo.poolPer(p).every((x) => !Esame.inEsame(x.id)), `L4: item d'esame nel pool di allenamento a ${p}`);
 }
@@ -622,7 +632,7 @@ ok(trovatoMinore > 0, 'il caso "e\' gratis, ma ce n\'e\' uno che vale di piu\'" 
  * quella mossa non perde, o viceversa.
  */
 
-ok(TRAPPOLE.length > 3000, `troppe poche righe di trappole: ${TRAPPOLE.length}`);
+ok(TRAPPOLE.length > PUZZLES.length * 0.5, `troppe poche righe di trappole: ${TRAPPOLE.length}`);
 ok(FASCE.length >= 4, `servono almeno quattro fasce: ${FASCE.length}`);
 
 let numeriRotti = 0;

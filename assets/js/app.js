@@ -23,6 +23,7 @@ import * as Trappola from './trappola.js';
 import * as Forzante from './forzante.js';
 import * as Pgn from './pgn.js';
 import * as Partite from './partite.js';
+import { MANIFESTO } from './manifesto.js';
 import { PUZZLES } from './puzzles.js';
 import { createScheduler, newCard, DEFAULT_W, AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 import * as Stats from './stats.js';
@@ -2726,7 +2727,8 @@ function renderEsameIntro(code) {
       <div class="note__label">Che cosa costa provarci</div>
       Questo tentativo spende <strong>${disponibili}</strong> posizioni, e non tornano.
       Nella fascia utile (±${scorte.finestra} punti dalla soglia) ne restano ${scorte.utili},
-      cioè <strong>${scorte.esamiRimasti}</strong> ${scorte.esamiRimasti === 1 ? 'esame' : 'esami'} in tutto.
+      cioè <strong>${scorte.esamiRimasti}</strong> ${scorte.esamiRimasti === 1 ? 'esame' : 'esami'} in tutto
+      <span class="prompt__aside">(corpus dello snapshot Lichess del ${esc(MANIFESTO.modificato)})</span>.
       Un percorso completo — uscita, tenuta a 7 giorni, tenuta a 30 — ne chiede ${Esame.TENUTE.length + 1},
       quindi ${scorte.esamiRimasti > Esame.TENUTE.length + 1
         ? 'c’è margine anche per una riapertura.'
