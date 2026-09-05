@@ -310,7 +310,7 @@ ok(Percorso.LIVELLI.length === 8, 'i livelli del percorso devono essere otto');
 ok(Percorso.LIVELLI.every((l) => l.code && l.name && l.exit), 'ogni livello deve dire come ci si esce');
 
 const attivi = Percorso.LIVELLI.filter((l) => l.state === 'attivo');
-const costruiti = ['L0', 'L1', 'L2', 'L3', 'L4', 'L6'];
+const costruiti = ['L0', 'L1', 'L2', 'L3', 'L4', 'L6', 'L7'];
 ok(attivi.length === costruiti.length && attivi.every((l) => l.hash && costruiti.includes(l.code)),
   'attivi devono essere solo i livelli davvero costruiti, e devono portare da qualche parte');
 ok(Percorso.LIVELLI.filter((l) => l.state === 'in-arrivo').length === 8 - costruiti.length,

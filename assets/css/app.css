@@ -927,3 +927,29 @@ p { margin: 0; }
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.55; transform: scale(1.12); }
 }
+
+/* La casella per incollare il PGN: monospaziata, perche' e' un file. */
+.pgn-box {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.pgn-box:focus {
+  outline: 2px solid var(--gold-dim);
+  outline-offset: 1px;
+}
+
+.btn--small {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  margin-top: 8px;
+}

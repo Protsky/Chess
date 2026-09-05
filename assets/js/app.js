@@ -21,6 +21,8 @@ import * as Piani from './piani.js';
 import * as Regime from './regime.js';
 import * as Trappola from './trappola.js';
 import * as Forzante from './forzante.js';
+import * as Pgn from './pgn.js';
+import * as Partite from './partite.js';
 import { PUZZLES } from './puzzles.js';
 import { createScheduler, newCard, DEFAULT_W, AGAIN, HARD, GOOD, EASY } from './fsrs.js';
 import * as Stats from './stats.js';
@@ -252,7 +254,7 @@ function renderHome() {
     <div class="section-title">Il percorso</div>
     <div class="stack" id="path"></div>
     <p class="hint-text">La forza si misura su tattica, finali e posizione: le aperture sono il livello 6, non il primo.
-      Oggi l’app copre <strong>L0</strong>, <strong>L1</strong>, <strong>L2</strong>, <strong>L3</strong>, <strong>L4</strong> e <strong>L6</strong>; gli altri due sono da costruire, e finché non ci sono restano vuoti invece di fingere.<br>
+      Oggi l’app copre <strong>L0</strong>, <strong>L1</strong>, <strong>L2</strong>, <strong>L3</strong>, <strong>L4</strong>, <strong>L6</strong> e <strong>L7</strong>; manca solo <strong>L5</strong>, ed è da costruire, e finché non ci sono restano vuoti invece di fingere.<br>
       Un livello si supera <strong>solo con un esame</strong> su posizioni mai viste, e resta superato solo se regge a sette e a trenta giorni.</p>
 
     <div class="section-title">Studio</div>
@@ -3833,6 +3835,361 @@ function renderTrappoleFinite(sessione) {
   </div>`));
 }
 
+/* ------------------- L7 · il materiale nelle tue partite ------------------ */
+
+/*
+ * Il livello che l'app aveva promesso e non aveva. Il nome dice quello che fa:
+ * **materiale**, non «i tuoi errori». A runtime c'è solo il motore di casa, che
+ * vede le sviste di materiale e i matti brevi; un rilevatore incompleto vale
+ * come veto e mai come assoluzione, quindi «non ho trovato niente» non vuol dire
+ * «hai giocato bene», e sta scritto nella schermata invece che in un commento.
+ *
+ * Niente di quello che succede qui tocca la misura della forza: `calibrato.js`
+ * respinge questi item per due ragioni indipendenti — non hanno una difficoltà
+ * misurata, e sono posizioni che hai già vissuto al tavolo.
+ */
+
+const L7_CHIAVE = 'aperture-scacchi/partite';
+
+function partiteSalvate() {
+  try {
+    const raw = localStorage.getItem(L7_CHIAVE);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function salvaPartite(dati) {
+  try { localStorage.setItem(L7_CHIAVE, JSON.stringify(dati)); } catch { /* memoria piena */ }
+}
+
+function renderPartite() {
+  const salvato = partiteSalvate();
+  if (!salvato || !salvato.items?.length) return renderPartiteImport();
+  return renderPartiteSessione(salvato);
+}
+
+function renderPartiteImport(messaggio = '') {
+  setBar({ title: 'Le tue partite', back: '#/' });
+
+  const view = h(`<div class="stack">
+    <div class="opening-head">
+      <h2>Il materiale nelle tue partite</h2>
+      <p>Incolla un PGN: l’app cerca le posizioni in cui hai perso materiale, e te le rigioca.</p>
+    </div>
+    <div class="note">
+      <div class="note__label">Che cosa trova</div>
+      ${Partite.TROVA.map((x) => `· ${esc(x)}`).join('<br>')}
+    </div>
+    <div class="note">
+      <div class="note__label">Che cosa <em>non</em> trova</div>
+      ${Partite.NON_TROVA.map((x) => `· ${esc(x)}`).join('<br>')}
+      <br><br>A runtime l’app ha solo il proprio motore: conta i cambi su una casa e cerca le sequenze
+      forzanti entro tre semimosse. Quindi <strong>«non ho trovato niente» non vuol dire «hai giocato bene»</strong>:
+      vuol dire che questo rilevatore non ha niente da dire.
+    </div>
+    <div class="note">
+      <div class="note__label">Come si prende il file</div>
+      Su <strong>Lichess</strong>: profilo ▸ menu ▸ <em>Esporta le partite</em>.<br>
+      Su <strong>Chess.com</strong>: Archivio ▸ Scarica ▸ PGN del mese.<br>
+      Tutto resta su questo dispositivo: il PGN non viene spedito da nessuna parte.
+    </div>
+    ${messaggio ? `<div class="note"><div class="note__label">Non è andata</div>${esc(messaggio)}</div>` : ''}
+    <textarea class="pgn-box" id="pgn" rows="7" placeholder="[Event &quot;...&quot;]&#10;1. e4 e5 2. Nf3 ..."></textarea>
+    <button class="btn btn--primary" id="leggi">Leggi le partite</button>
+    <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+  </div>`);
+
+  mount(view);
+  view.querySelector('#leggi').onclick = () => {
+    const testo = view.querySelector('#pgn').value.trim();
+    if (!testo) return renderPartiteImport('Non c’è niente da leggere: incolla il contenuto del file.');
+    let letto;
+    try { letto = Pgn.leggi(testo); } catch (e) { return renderPartiteImport(`Il file non si legge: ${e.message}`); }
+    if (!letto.trovate) return renderPartiteImport('Non ho riconosciuto nessuna partita in quel testo.');
+    return renderPartiteRiepilogo(letto);
+  };
+}
+
+/*
+ * Il riepilogo dell'import. La proprietà che lo rende un'affermazione
+ * verificabile invece di una rassicurazione: lette + scartate deve fare il
+ * numero di partite trovate, e ogni scarto ha il suo motivo stampato.
+ */
+function renderPartiteRiepilogo(letto, nome = null) {
+  setBar({ title: 'Le tue partite', back: '#/partite' });
+
+  const chi = nome ? { nome } : Pgn.giocatorePiuFrequente(letto.partite);
+  if (!chi) return renderPartiteChiSei(letto);
+
+  const estratto = Partite.estrai(letto.partite, { nome: chi.nome });
+  const abbastanza = letto.partite.length >= Partite.MIN_PARTITE;
+
+  const view = h(`<div class="stack">
+    <div class="result">
+      <div class="result__title">${letto.partite.length} ${letto.partite.length === 1 ? 'partita letta' : 'partite lette'}</div>
+      <div class="result__sub">${estratto.items.length} ${estratto.items.length === 1 ? 'posizione' : 'posizioni'} in cui hai perso materiale</div>
+    </div>
+    <div class="note">
+      <div class="note__label">Che cosa è entrato</div>
+      Nel file c’erano <strong>${letto.trovate}</strong> partite: ne ho lette ${letto.partite.length}
+      e scartate ${letto.scarti.length}.
+      ${letto.motivi.length ? `<br>${letto.motivi.map((m) => `${esc(m.motivo)} — ${m.quante}`).join('<br>')}` : ''}
+      ${letto.conOrologio ? `<br>${letto.conOrologio} con i tempi per mossa.` : ''}
+    </div>
+    <div class="note">
+      <div class="note__label">Giocavi tu</div>
+      ${esc(chi.nome)} — le semimosse guardate sono le tue: ${estratto.semimosseTue} su ${estratto.semimosseTotali}.
+      <button class="btn btn--ghost btn--small" id="cambia">Non sono io</button>
+    </div>
+    ${abbastanza ? `<div class="note">
+      <div class="note__label">Quanto ha potuto giudicare</div>
+      Di ${estratto.semimosseTue} tue semimosse, <strong>${estratto.conScelta}</strong> avevano almeno due mosse legali,
+      cioè una scelta vera (${Math.round(estratto.copertura * 100)}%). Le altre erano obbligate.
+      Su quelle con scelta il motore ha trovato ${estratto.items.length}
+      ${estratto.items.length === 1 ? 'perdita di materiale' : 'perdite di materiale'} —
+      e sulle restanti <strong>non dice niente</strong>, che non è la stessa cosa che dire che andavano bene.
+    </div>` : `<div class="note">
+      <div class="note__label">Poche partite per una frazione</div>
+      Con ${letto.partite.length} ${letto.partite.length === 1 ? 'partita' : 'partite'} gli item si possono allenare,
+      ma qualunque percentuale sarebbe rumore: ne servono almeno ${Partite.MIN_PARTITE} perché voglia dire qualcosa.
+    </div>`}
+    ${estratto.items.length ? `<button class="btn btn--primary" id="via">${
+      estratto.items.length === 1 ? 'Rigioca quella posizione' : `Rigioca quelle ${estratto.items.length} posizioni`}</button>`
+    : `<div class="note"><div class="note__label">Nessun item</div>
+      Il motore non ha trovato perdite di materiale nelle tue semimosse. <strong>Non vuol dire che fossero partite pulite</strong>:
+      vuol dire che questo rilevatore, che vede solo il materiale entro tre semimosse forzanti, non ha niente da dire.
+    </div>`}
+    <button class="btn btn--ghost" id="altro">Carica un altro file</button>
+  </div>`);
+
+  mount(view);
+  view.querySelector('#cambia').onclick = () => renderPartiteChiSei(letto);
+  view.querySelector('#altro').onclick = () => { salvaPartite(null); renderPartiteImport(); };
+  const via = view.querySelector('#via');
+  if (via) {
+    via.onclick = () => {
+      /* Gli stati non si possono serializzare: si tiene la FEN e si ricostruisce. */
+      salvaPartite({
+        nome: chi.nome,
+        quando: Date.now(),
+        partite: letto.partite.length,
+        copertura: estratto.copertura,
+        semimosseTue: estratto.semimosseTue,
+        items: estratto.items.map((x) => ({
+          id: x.id,
+          fen: fenDi(x.stato),
+          san: x.san,
+          mossa: x.mossa,
+          tipo: x.tipo,
+          testo: x.testo,
+          perdita: x.perdita ?? null,
+        })),
+      });
+      renderPartite();
+    };
+  }
+}
+
+/** Quando i nomi non bastano a capire chi sei, si chiede invece di indovinare. */
+function renderPartiteChiSei(letto) {
+  setBar({ title: 'Chi sei', back: '#/partite' });
+  const nomi = new Map();
+  for (const p of letto.partite) {
+    for (const c of ['White', 'Black']) {
+      const n = (p.tag[c] || '').trim();
+      if (n) nomi.set(n, (nomi.get(n) || 0) + 1);
+    }
+  }
+  const view = h(`<div class="stack">
+    <div class="note">
+      <div class="note__label">Quale di questi sei tu</div>
+      Nel file compaiono più nomi con la stessa frequenza: indovinare sarebbe un modo per sbagliare in silenzio.
+    </div>
+    <div class="stack" id="nomi"></div>
+    <button class="btn btn--ghost" data-go="#/partite">Indietro</button>
+  </div>`);
+  const box = view.querySelector('#nomi');
+  [...nomi.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).forEach(([n, q]) => {
+    const b = h(`<button class="btn">${esc(n)} <span class="tag">${q}</span></button>`);
+    b.onclick = () => renderPartiteRiepilogo(letto, n);
+    box.appendChild(b);
+  });
+  mount(view);
+}
+
+/*
+ * La sessione: la stessa interazione delle trappole, e con lo stesso giudice.
+ * «Gioca una mossa che non perde materiale» — il motore di casa decide, come ha
+ * deciso quando ha trovato l'item.
+ */
+function renderPartiteSessione(salvato) {
+  const viste = new Set(Store.allCards(Partite.PREFIX).map((c) => c.id));
+  const items = Partite.costruisci(salvato.items, { viste });
+  if (!items.length) return renderPartiteFinite(salvato);
+
+  setBar({ title: 'Le tue partite', back: '#/', action: { label: '⇅', aria: 'Gira la scacchiera', onClick: () => board.flip() } });
+
+  const scheduler = makeScheduler();
+  const results = [];
+  let current = null;
+
+  const view = h(`<div class="stack">
+    <div class="opening-head" id="head"></div>
+    <div class="progress-line" id="progress"></div>
+    <div class="board-wrap" id="board-host"></div>
+    <div class="prompt" id="prompt"><span class="prompt__dot"></span><span class="prompt__text"></span></div>
+    <button class="btn btn--ghost btn--danger" id="quit">Esci</button>
+  </div>`);
+
+  const headEl = view.querySelector('#head');
+  const progressEl = view.querySelector('#progress');
+  const promptEl = view.querySelector('#prompt');
+  const promptDot = promptEl.querySelector('.prompt__dot');
+  const promptText = promptEl.querySelector('.prompt__text');
+  const setPrompt = (t, k = '') => {
+    promptEl.className = `prompt${k ? ` prompt--${k}` : ''}`;
+    promptText.innerHTML = t;
+  };
+
+  function drawProgress() {
+    progressEl.textContent = '';
+    items.forEach((_, i) => {
+      const span = document.createElement('span');
+      if (results[i]) span.className = results[i].correct ? 'ok' : 'err';
+      else if (current && i === current.index) span.className = 'now';
+      progressEl.appendChild(span);
+    });
+  }
+
+  function load(index) {
+    const item = items[index];
+    const stato = fromFen(item.fen);
+    if (!stato) {
+      results[index] = null;
+      if (index + 1 < items.length) return load(index + 1);
+      return fine();
+    }
+    current = { ...item, index, stato, risposto: false, start: Date.now() };
+
+    headEl.innerHTML = `<h2>Posizione ${index + 1} di ${items.length}</h2><p>tua partita · mossa ${
+      item.mossa} · avevi giocato ${esc(san(item.san))}</p>`;
+    promptDot.className = `prompt__dot prompt__dot--${stato.turn}`;
+    board.setOrientation(stato.turn);
+    board.setBlind(false);
+    board.setPosition(stato, null);
+    board.setInteractive(true);
+    drawProgress();
+    setPrompt(`Qui avevi perso materiale. <strong>Trova una mossa che non ne perde.</strong>`);
+  }
+
+  function onMove(mossa) {
+    if (!current || current.risposto || !board.interactive) return;
+    current.risposto = true;
+    board.setInteractive(false);
+
+    const perde = Forzante.perdente(current.stato, mossa);
+    const secondi = Math.round((Date.now() - current.start) / 1000);
+    beep(perde ? 'err' : 'ok');
+    board.flash(mossa.to, perde ? 'wrong' : 'good', 900);
+
+    const before = Store.getCard(Partite.cardIdOf(current.id)) || newCard(Partite.cardIdOf(current.id), {});
+    const card = scheduler.review(before, perde ? AGAIN : GOOD, Date.now());
+    Store.saveCard(card);
+    Store.addCount(Partite.AXIS, !perde);
+    Store.logReview({
+      id: card.id,
+      t: Date.now(),
+      g: perde ? AGAIN : GOOD,
+      isNew: !before.reps,
+      wasReview: before.state === 'review',
+      correct: !perde,
+      ivl: card.ivl,
+      axis: Partite.AXIS,
+      ms: secondi * 1000,
+      theme: current.tipo,
+    });
+
+    results[current.index] = { correct: !perde, item: current };
+    drawProgress();
+
+    if (!perde) {
+      setPrompt(`<strong>Questa regge.</strong> In partita avevi giocato ${esc(san(current.san))}: ${esc(current.testo)}`, 'good');
+      later(avanti, 3000);
+      return;
+    }
+
+    const dopo = applyMove(current.stato, mossa);
+    const conf = See.confutazione(dopo);
+    board.setPosition(dopo, mossa);
+    setPrompt('<strong>Anche questa perde.</strong>', 'bad');
+    later(() => {
+      if (conf) {
+        board.setPosition(applyMove(dopo, conf.move), conf.move);
+        board.flash(conf.move.to, 'wrong', 1200);
+        setPrompt(esc(See.testoConfutazione(dopo, conf)), 'bad');
+      }
+      later(() => {
+        board.setPosition(current.stato, null);
+        setPrompt(`In partita avevi giocato ${esc(san(current.san))}: ${esc(current.testo)}`, 'bad');
+        later(avanti, 2600);
+      }, 1900);
+    }, 1400);
+  }
+
+  function avanti() {
+    if (current.index + 1 < items.length) load(current.index + 1);
+    else fine();
+  }
+
+  function fine() {
+    const fatte = results.filter(Boolean);
+    const rette = fatte.filter((r) => r.correct).length;
+    mount(h(`<div class="stack">
+      <div class="result">
+        <div class="result__title">Le tue partite</div>
+        <div class="result__sub">${rette} su ${fatte.length} senza perdere materiale</div>
+      </div>
+      <div class="note">
+        <div class="note__label">Da dove venivano</div>
+        Da ${salvato.partite} ${salvato.partite === 1 ? 'partita tua' : 'partite tue'}, lette il
+        ${new Date(salvato.quando).toLocaleDateString('it-CH')}. Sono posizioni che hai già avuto davanti
+        una volta, con l’orologio che correva.
+      </div>
+      <div class="note">
+        <div class="note__label">Quello che resta fuori</div>
+        Il motore di casa vede il materiale entro tre semimosse forzanti. Piani, struttura, iniziativa e
+        finali lunghi non li vede — e quindi su quelli l’app non dice niente, né in bene né in male.
+      </div>
+      <button class="btn btn--primary" id="more">Ancora</button>
+      <button class="btn btn--ghost" id="nuovo">Carica altre partite</button>
+      <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+    </div>`));
+    document.getElementById('more').onclick = () => renderPartite();
+    document.getElementById('nuovo').onclick = () => { salvaPartite(null); renderPartiteImport(); };
+    sincronizzaPresto();
+  }
+
+  view.querySelector('#quit').onclick = () => { location.hash = '#/'; };
+  session = { onMove };
+  mount(view);
+  view.querySelector('#board-host').appendChild(board.el);
+  load(0);
+}
+
+function renderPartiteFinite(salvato) {
+  setBar({ title: 'Le tue partite', back: '#/' });
+  mount(h(`<div class="stack">
+    <div class="note">
+      <div class="note__label">Le hai viste tutte</div>
+      Le ${salvato.items.length} posizioni di queste partite sono state rigiocate. Torneranno come ripasso
+      quando scadono — oppure carica partite nuove: è l’unico livello che si rifornisce da solo, giocando.
+    </div>
+    <button class="btn btn--primary" id="nuovo">Carica altre partite</button>
+    <button class="btn btn--ghost" data-go="#/">Torna alla home</button>
+  </div>`));
+  document.getElementById('nuovo').onclick = () => { salvaPartite(null); renderPartiteImport(); };
+}
+
 /* -------------------------------- routing ------------------------------- */
 
 function mount(node) {
@@ -3873,6 +4230,7 @@ function route() {
   if (screen === 'esame' && Percorso.byCode(param)) return renderEsameIntro(param);
   if (screen === 'calcolo') return renderCalcolo({});
   if (screen === 'trappole') return renderTrappole();
+  if (screen === 'partite') return renderPartite();
   if (screen === 'ricostruzione') return renderRicostruzione();
   if (screen === 'piani') return renderPiani({});
   if (screen === 'vista') return renderBasicsSession(Basics.VISTA);

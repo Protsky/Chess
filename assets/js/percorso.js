@@ -143,10 +143,23 @@ export const LIVELLI = [
   },
   {
     code: 'L7',
-    name: 'Le proprie partite',
-    line: 'Importi il PGN, l’app trova i tuoi crolli e li trasforma in carte.',
-    exit: 'nessuna: è il regime di crociera',
-    state: 'in-arrivo',
+    name: 'Il materiale nelle tue partite',
+    line: 'Incolli il PGN, l’app trova dove hai perso materiale e te lo rigioca.',
+    accesso: 'nessuno: si apre appena hai un file di partite',
+    exit: 'nessuno: è il regime di crociera, non un gradino da superare',
+    state: 'attivo',
+    hash: '#/partite',
+    action: 'Importa',
+    axis: 'partite',
+    /*
+     * L'unico livello **senza esame**, ed è una conseguenza di come è fatto, non
+     * una dimenticanza: i suoi item non hanno una difficoltà misurata e sono
+     * posizioni che hai già vissuto al tavolo. `calibrato.js` li respinge dalla
+     * misura, quindi non possono certificare niente — e va detto invece di
+     * lasciar credere che ci sia un gradino.
+     */
+    esame: null,
+    senzaEsame: true,
   },
 ];
 
@@ -205,6 +218,8 @@ export function curvaDi(code, { spesi = new Set() } = {}) {
 export function pronto(code, { log = [], rating = Rating.START_RATING, aperture = null } = {}) {
   const livello = byCode(code);
   if (!livello || livello.state !== 'attivo') return false;
+  /* Un livello senza esame non e' mai "pronto per l'esame": non ce n'e' uno. */
+  if (livello.senzaEsame) return false;
 
   if (code === 'L0' || code === 'L1') {
     const ultime = Stats.recentByAxis(log, livello.axis, 20);
@@ -254,7 +269,9 @@ export function pronto(code, { log = [], rating = Rating.START_RATING, aperture 
  */
 export function verdetto(code, risposte, { log = [] } = {}) {
   const livello = byCode(code);
-  if (!livello?.esame) return { passa: false, motivo: 'livello senza esame' };
+  if (!livello?.esame) {
+    return { passa: false, motivo: 'livello senza esame', tipo: 'nessuno', giuste: 0, su: 0, deboli: [] };
+  }
 
   if (livello.esame.tipo === 'stima') {
     const out = Esame.esito({
@@ -343,6 +360,7 @@ function misura(livello, { rating, aperture, log }) {
     case 'L3': return uscitaTattica(rating);
     case 'L4': return Calcolo.uscita(log);
     case 'L6': return Piani.uscita({ progressi: aperture?.progress || {} });
+    case 'L7': return uscitaPartite(log);
     default: return { percent: 0, label: '' };
   }
 }
@@ -388,6 +406,23 @@ function uscitaFinali(log) {
     label: puliti
       ? `${puliti} ${puliti === 1 ? 'finale portato a casa' : 'finali portati a casa'} su ${soglia}, senza mai perdere l’esito`
       : `Servono ${soglia} finali portati a casa senza mai perdere l’esito`,
+  };
+}
+
+/**
+ * L7 non ha una soglia: e' il regime di crociera. La barra mostra quante
+ * posizioni delle proprie partite sono state rigiocate, che e' un conteggio e
+ * non un avanzamento verso qualcosa.
+ */
+function uscitaPartite(log) {
+  const fatte = log.filter((e) => e.axis === 'partite').length;
+  const rette = log.filter((e) => e.axis === 'partite' && e.correct).length;
+  return {
+    percent: 0,
+    senzaSoglia: true,
+    label: fatte
+      ? `${rette} posizioni su ${fatte} rigiocate senza perdere materiale`
+      : 'Nessuna partita importata: si comincia incollando un PGN',
   };
 }
 

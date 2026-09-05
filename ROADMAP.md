@@ -52,7 +52,7 @@ documentata e pubblicata**.
 | L4 | Calcolo e visualizzazione | sequenze di 4 semimosse alla cieca, 8 su 10 |
 | L5 | Posizione e piani | 70% su item posizionali del proprio livello |
 | L6 | Le aperture, come conseguenza | 7 piani nominati su 8, su aperture della stessa famiglia |
-| L7 | Le proprie partite | nessuna: è il regime di crociera |
+| L7 | Il materiale nelle tue partite | nessuna: è il regime di crociera, e non ha esame perché i suoi item non possono certificare niente |
 
 E nessun livello resta superato per decreto: a **sette e a trenta giorni** l'app
 lo richiede su materiale nuovo, e se non regge il livello si riapre.
@@ -409,14 +409,73 @@ lo richiede su materiale nuovo, e se non regge il livello si riapre.
       **punisci la deviazione**: l'avversario esce dal libro alla quarta mossa,
       che è ciò che succede quasi sempre.
 
-- [ ] **9. Importa le tue partite (L7)** — PGN incollato o utente Lichess: l'app
-      trova i punti dove la valutazione crolla e fabbrica carte con la posizione
-      immediatamente prima dell'errore.
+- [x] **9. Il materiale nelle tue partite (L7)** — costruito, ma con il nome che
+      il motore di casa consente davvero.
+      Il piano diceva «l'app trova i punti dove la valutazione crolla». Non può:
+      a runtime c'è solo il motore di casa, che conta i cambi su una casa e cerca
+      le sequenze forzanti entro tre semimosse. Vede le sviste di materiale e i
+      matti brevi; non vede un piano sbagliato, una struttura rovinata,
+      un'iniziativa regalata, un finale a cinque pezzi. Chiamare «i tuoi crolli»
+      un rilevatore di materiale sarebbe una previsione scritta come un fatto.
+      Quindi il livello si chiama **Materiale nelle tue partite**, e la
+      schermata elenca in testa che cosa trova e che cosa **non** trova. Un
+      rilevatore incompleto vale come veto e mai come assoluzione: «non ho
+      trovato niente» non vuol dire «hai giocato bene», e sta scritto.
+      Fatto: `pgn.js` legge un file multipartita (commenti, varianti annidate,
+      NAG, orologi `%clk`) e dichiara **lette + scartate = trovate**, con il
+      motivo di ogni scarto; dal PGN entrano solo mosse, orologi e tag standard —
+      nessun simbolo di valutazione e nessuna categoria della piattaforma
+      d'origine, perché il giudizio del motore di qualcun altro non si riscrive
+      come giudizio di questa app. `partite.js` trova le semimosse in cui hai
+      perso materiale **e** in cui esisteva un'alternativa che non ne perdeva
+      (dove tutte le mosse perdono, l'errore era prima). L'esercizio è quello
+      delle trappole: «trova una mossa che non perde materiale», stesso giudice.
+      Sotto cinque partite non si mostra nessuna percentuale: sarebbe rumore.
+      Provato: 18.7k+ controlli, fra cui la pipeline vera su un PGN vero.
+
+- [x] **La barriera di misura** — la regola «solo item con difficoltà misurata
+      entrano nella stima» era scritta nei commenti e rispettata a mano.
+      Adesso è codice (`calibrato.js`), e serviva prima di L7 per una ragione
+      precisa: item scelti perché li hai sbagliati **tu** sono sistematicamente
+      difficili per te, quindi non abbassano solo la stima — **restringono
+      l'intervallo**, perché ogni item aggiunge informazione di Fisher. E
+      siccome il criterio d'uscita è il limite inferiore dell'intervallo, non
+      corromperebbero la stima: corromperebbero il test, che è peggio e si vede
+      meno. La barriera poggia su due requisiti indipendenti, così cade solo se
+      cadono entrambi: difficoltà ignota, e posizione già vissuta al tavolo. Il
+      secondo chiude anche la scappatoia futura «installo un motore forte e li
+      calibro a posteriori». `stima.js` non filtra più in silenzio: restituisce
+      gli scarti col motivo.
+
+
 
 - [ ] **10. Il controllo del modello** — la pagina che confronta la forza stimata
       dall'app con il punteggio online vero. Gli item Lichess hanno un punteggio
       calcolato su milioni di tentativi: la stima **può essere smentita**. Se
       divergono, ha torto l'app.
+
+## Quello che questa iterazione ha lasciato aperto
+
+Tre cose, e non sono dimenticanze: due hanno bisogno di scaricare qualcosa e una
+di una decisione che non tocca a chi scrive il codice.
+
+- **Le scorte d'esame.** Attorno a 1400 restano 74 posizioni entro ±300 punti,
+  cioè tre esami — quanti ne serve un percorso completo, con zero margine per una
+  riapertura. Ma è una penuria **rimovibile**: le 3235 posizioni sul disco sono
+  lo 0,053% del database di Lichess (6.057.356 puzzle, CC0). Il CSV pesa 304 MB
+  compressi e non è più sul disco. Rigenerando il corpus, e portandosi dietro la
+  colonna `RatingDeviation` che oggi manca, la soglia dichiarata in
+  `calibrato.js` smetterebbe di essere un debito e comincerebbe a filtrare.
+- **La copertura di L6.** Si può misurare — dalle partite CC0 di Lichess, non da
+  quelle dei puzzle — ma solo dichiarando *prima* i quattro parametri (mossa N,
+  fascia Elo, controllo di tempo, colore): la stessa cifra può valere 20% o 80%
+  a seconda di scelte fatte dopo aver visto il risultato.
+- **L5.** Un pilota con Maia-2, già installata, direbbe se è costruibile: quante
+  posizioni hanno una mossa di riferimento la cui probabilità **cresce** con la
+  forza. Perché la strada ovvia («trova la mossa che il motore mette prima») non
+  regge: l'accordo con la prima scelta del motore cresce di circa 1,2 punti
+  percentuali ogni 100 Elo, che su 24 item binari fa 0,6 risposte attese ogni
+  200 punti — sotto il rumore.
 
 ## Cosa non si promette, e va scritto nell'app
 

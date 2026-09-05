@@ -1,5 +1,5 @@
 /* Service worker: rende l'app utilizzabile offline dopo la prima visita. */
-const CACHE = 'aperture-scacchi-v12';
+const CACHE = 'aperture-scacchi-v13';
 
 const ASSETS = [
   './',
@@ -36,6 +36,9 @@ const ASSETS = [
   'assets/js/trappole.js',
   'assets/js/trappola.js',
   'assets/js/forzante.js',
+  'assets/js/calibrato.js',
+  'assets/js/pgn.js',
+  'assets/js/partite.js',
   'assets/icons/icon-180.png',
   'assets/icons/icon-192.png',
   'assets/icons/icon-512.png',

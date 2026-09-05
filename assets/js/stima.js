@@ -18,6 +18,8 @@
  * punteggio, ha un limite inferiore ("almeno tanto"), e lo si scrive così.
  */
 
+import * as Calibrato from './calibrato.js';
+
 /** Da punti Elo a logit e ritorno: 400 punti = un fattore 10 di probabilità. */
 const SCALA = 400 / Math.LN10;
 
@@ -46,13 +48,22 @@ const MAX = 2800;
  * casi `rating` è il bordo della finestra e va letto come "almeno"/"al più".
  */
 export function stima(risposte) {
-  const dati = risposte.filter((r) => Number.isFinite(r.d));
+  /*
+   * La barriera, non un filtro.
+   *
+   * Prima qui c'era `filter((r) => Number.isFinite(r.d))`: le risposte senza
+   * difficoltà sparivano in silenzio, e una regola che sparisce in silenzio è
+   * una regola che prima o poi non c'è più. Adesso `calibrato.js` dice che cosa
+   * può misurare una forza e che cosa no, e gli scarti tornano indietro col
+   * motivo — così chi chiama può dirlo invece di non accorgersene.
+   */
+  const { dentro: dati, fuori } = Calibrato.separa(risposte);
   const n = dati.length;
   const giuste = dati.filter((r) => r.ok).length;
 
-  if (!n) return { rating: null, lo: null, hi: null, se: null, n: 0, giuste: 0, saturo: null };
-  if (giuste === n) return bordo(dati, MAX, 'alto');
-  if (giuste === 0) return bordo(dati, MIN, 'basso');
+  if (!n) return { rating: null, lo: null, hi: null, se: null, n: 0, giuste: 0, saturo: null, scartate: fuori };
+  if (giuste === n) return { ...bordo(dati, MAX, 'alto'), scartate: fuori };
+  if (giuste === 0) return { ...bordo(dati, MIN, 'basso'), scartate: fuori };
 
   /*
    * La derivata della log-verosimiglianza è proporzionale a (giuste − attese),
@@ -77,6 +88,7 @@ export function stima(risposte) {
     n,
     giuste,
     saturo: null,
+    scartate: fuori,
   };
 }
 

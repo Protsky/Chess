@@ -202,6 +202,54 @@ aperture della **stessa famiglia**: strutture simili, dove i piani si confondono
 davvero. Un distrattore preso da un'apertura lontana si scarta senza sapere
 niente, e misurerebbe la capacità di escludere.
 
+### ♟ L7 · Il materiale nelle tue partite
+
+Incolli un PGN — da Lichess o da Chess.com — e l'app cerca le posizioni in cui
+hai perso materiale, e te le rigioca. Tutto resta sul dispositivo: il file non
+viene spedito da nessuna parte.
+
+Il nome dice quello che fa, e la differenza non è di stile. A runtime l'app ha
+solo il proprio motore: conta i cambi su una casa e cerca le sequenze forzanti
+entro tre semimosse. **Vede** un pezzo lasciato in presa, una cattura che perde
+il cambio, un matto in una concesso o mancato. **Non vede** errori di piano,
+struttura di pedoni, iniziativa, finali oltre i tre pezzi, imprecisioni
+d'apertura che non perdono materiale.
+
+Un rilevatore incompleto vale come **veto**, mai come assoluzione: «non ho
+trovato niente» non vuol dire «hai giocato bene», vuol dire che questo
+rilevatore non ha niente da dire. Sta scritto nella schermata, non in un
+commento nel codice.
+
+Altre due regole che si vedono dall'esterno:
+
+- **Lette + scartate = trovate.** Se nel file ci sono 52 partite e ne legge 40,
+  lo dice, e dice perché ha scartato le altre dodici. «Ho letto 40 partite» su un
+  file da 52 è un'affermazione falsa detta senza mentire.
+- **Sotto cinque partite non compare nessuna percentuale.** Gli item si possono
+  allenare lo stesso, ma una frazione su due partite è rumore.
+
+Dal PGN entrano solo mosse, orologi e tag standard: nessun simbolo di
+valutazione, nessuna categoria della piattaforma d'origine. Il giudizio dato dal
+motore di qualcun altro non si riscrive come giudizio di questa app.
+
+### 🚧 La barriera di misura
+
+Un item entra nella stima della forza solo se ha una difficoltà **misurata su
+tentativi umani**. Era una regola scritta nei commenti; adesso è codice
+(`calibrato.js`), e serviva prima di L7.
+
+Il motivo è meno ovvio di quanto sembri. Gli item delle proprie partite sono
+scelti perché *tu* li hai sbagliati: sono sistematicamente difficili per te.
+Quindi non abbassano soltanto la stima — **restringono l'intervallo di
+confidenza**, perché ogni item in più aggiunge informazione. E siccome il
+criterio d'uscita è il limite inferiore di quell'intervallo, non corromperebbero
+la stima: corromperebbero il test. È un danno peggiore, e si vede molto meno.
+
+La barriera poggia su due requisiti indipendenti, così cade solo se cadono
+entrambi: la difficoltà è ignota, e la posizione l'hai già vissuta al tavolo. Il
+secondo chiude anche la scappatoia futura «installo un motore forte e li calibro
+a posteriori»: calibrati o no, restano posizioni già viste.
+
 ### ⏱ Dove va il tempo, e quando fermarsi
 
 Nel quaderno, tre misure calcolate **solo sui tuoi dati**: i minuti spesi per
@@ -433,6 +481,9 @@ assets/js/regime.js      fatica, freno, e dove rende il tempo
 assets/js/forzante.js    quali mosse perdono materiale: lo stesso conto in preparazione e a runtime
 assets/js/trappole.js    i numeri di Maia-2, fascia per fascia (generato)
 assets/js/trappola.js    quali trappole tocca a te, e i numeri da mostrare
+assets/js/calibrato.js   che cosa puo entrare nella misura, e che cosa no
+assets/js/pgn.js         legge le tue partite, e dice che cosa non ha letto
+assets/js/partite.js     L7: dove hai perso materiale, e che cosa il motore non vede
 assets/js/endgames-data.js  la tavola (dati, generata — non si tocca a mano)
 assets/js/openings.js    il repertorio (dati)
 assets/js/puzzles.js     il corpus tattico (dati, generato — non si tocca a mano)

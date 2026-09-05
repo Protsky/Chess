@@ -39,6 +39,9 @@ const Regime = await import('../assets/js/regime.js');
 const Tactics = await import('../assets/js/tactics.js');
 const Basics = await import('../assets/js/basics.js');
 const Trappola = await import('../assets/js/trappola.js');
+const Calibrato = await import('../assets/js/calibrato.js');
+const Pgn = await import('../assets/js/pgn.js');
+const Partite = await import('../assets/js/partite.js');
 const Forzante = await import('../assets/js/forzante.js');
 const { TRAPPOLE, FASCE, SOGLIA_ALTA, SALTO } = await import('../assets/js/trappole.js');
 const Sync = await import('../assets/js/sync.js');
@@ -473,12 +476,17 @@ for (const l of Percorso.LIVELLI) {
     continue;
   }
   ok(!!l.hash, `${l.code} è attivo ma non ha una schermata`);
-  ok(!!l.esame, `${l.code} è attivo ma non ha un criterio d'esame`);
+  /* L7 e' attivo e senza esame: e' una scelta dichiarata, non una mancanza. */
+  ok(!!l.esame || l.senzaEsame === true,
+    `${l.code} è attivo senza criterio d'esame e senza dichiararlo`);
 }
 const avanz = Percorso.avanzamenti({ rating: 900, aperture: { progress: {} }, log: [], livelli: {} });
-ok(Object.keys(avanz).length === 6, `sei livelli attivi, non ${Object.keys(avanz).length}`);
+const attiviOra = Percorso.LIVELLI.filter((l) => l.state === 'attivo').length;
+ok(Object.keys(avanz).length === attiviOra, `gli avanzamenti devono coprire i ${attiviOra} livelli attivi, non ${Object.keys(avanz).length}`);
 ok(Object.values(avanz).every((a) => a.percent >= 0 && a.percent <= 100), 'nessun avanzamento fuori da 0-100');
-ok(!('L5' in avanz) && !('L7' in avanz), 'i livelli non costruiti non devono avere un avanzamento');
+ok(!('L5' in avanz), 'L5 non e ancora costruito e non deve avere un avanzamento');
+ok('L7' in avanz && avanz.L7.senzaSoglia === true,
+  'L7 e attivo ma senza soglia: la sua riga conta, non misura un avanzamento');
 
 /* La sessione di oggi conta il corpus allenabile, non quello intero. */
 const oggi = Percorso.oggi({ due: 0, introduced: 0, settings: { newPerDay: 8 }, size: 12, maxNew: 8, viste: 0 });
@@ -839,6 +847,19 @@ for (const l of Percorso.LIVELLI.filter((x) => x.state === 'attivo')) {
   ok(!!l.accesso, `${l.code}: manca il criterio d'accesso dichiarato`);
   ok(!!l.exit, `${l.code}: manca il criterio d'uscita dichiarato`);
 
+  /*
+   * Un livello puo' non avere esame, ma allora deve dirlo esplicitamente: e' il
+   * caso di L7, i cui item non hanno difficolta' misurata e sono posizioni gia'
+   * vissute, quindi non possono certificare niente.
+   */
+  if (l.senzaEsame) {
+    ok(l.esame === null, `${l.code}: dichiarato senza esame ma ne ha uno`);
+    ok(!Percorso.pronto(l.code, { log: [], rating: 3000 }), `${l.code}: senza esame non puo' essere "pronto"`);
+    ok(!Percorso.verdetto(l.code, []).passa, `${l.code}: senza esame non puo' emettere un verdetto positivo`);
+    continue;
+  }
+  ok(!!l.esame, `${l.code}: manca il descrittore d'esame`);
+
   if (l.esame.tipo === 'conta') {
     /* I numeri dell'esame devono comparire nel testo d'uscita. */
     ok(l.exit.includes(String(l.esame.giuste)) || l.exit.includes(String(l.esame.su)),
@@ -878,6 +899,101 @@ ok(!Percorso.pronto('L3', { log: logTattica.slice(0, 20), rating: meta + 200 }),
  * con una regola che non misura piu' quello che dice. Non si spedisce.
  */
 ok(Esame.ITEM === 24, 'la lunghezza dell\'esame e\' fissa per scelta misurata: non renderla variabile senza rifare la simulazione');
+
+/* ------------- 15. la barriera: chi puo' entrare nella misura ------------- */
+
+/*
+ * La regola era scritta nei commenti e rispettata a mano. Adesso e' codice, e
+ * questi controlli la tengono ferma: un item senza difficolta' misurata non ha
+ * un posto nella verosimiglianza di Rasch, e dargliene uno vuol dire
+ * inventargli un numero.
+ *
+ * Il caso pericoloso e' L7: item scelti perche' li hai sbagliati TU. Non
+ * abbassano solo la stima, RESTRINGONO l'intervallo (ogni item aggiunge
+ * informazione di Fisher) - e siccome il criterio d'uscita e' il limite
+ * inferiore, non corrompono la stima: corrompono il test.
+ */
+
+for (const prefisso of Calibrato.NON_CALIBRATI) {
+  ok(Calibrato.generato(`${prefisso}qualcosa`), `${prefisso} deve risultare generato in casa`);
+  ok(!Calibrato.misurabile({ id: `${prefisso}x`, d: 1400 }),
+    `${prefisso}: un item generato non puo' entrare nella misura, nemmeno con una difficolta' addosso`);
+}
+ok(Calibrato.misurabile({ id: 't:abc', d: 1400 }), 'un item del corpus con difficolta' + ' deve poter misurare');
+ok(!Calibrato.misurabile({ id: 't:abc' }), 'senza difficolta non si misura');
+ok(!Calibrato.misurabile({ id: 't:abc', d: 1400, rd: 200 }), 'con una deviazione troppo grande non si misura');
+
+/* Lo stimatore non filtra in silenzio: restituisce gli scarti col motivo. */
+const misto = [
+  { id: 't:a', d: 1400, ok: true }, { id: 't:b', d: 1450, ok: false },
+  { id: 'g:mia', d: 1400, ok: false }, { id: 'b:presa:x', d: 900, ok: true },
+];
+const st = Stima.stima(misto);
+ok(st.n === 2, `lo stimatore deve usare solo i due item del corpus, ne ha usati ${st.n}`);
+ok(st.scartate.length === 2, 'e deve restituire i due scartati');
+ok(st.scartate.every((x) => x.motivo), 'ogni scarto deve avere un motivo scritto');
+
+/*
+ * La prova che conta: la pipeline VERA di L7 su un PGN vero. Con oggetti
+ * costruiti a mano il test passerebbe anche se la barriera non esistesse nel
+ * percorso reale.
+ */
+const PGN_PROVA = `[Event "Prova"]
+[Site "https://lichess.org/xyz"]
+[White "io"]
+[Black "altri"]
+[Result "0-1"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. Ng5 Qxg5 5. d3 Qxg2 0-1`;
+
+const letto = Pgn.leggi(PGN_PROVA);
+ok(letto.partite.length === 1, 'il PGN di prova deve leggersi');
+ok(letto.partite.length + letto.scarti.length === letto.trovate, 'lette + scartate deve fare le trovate');
+const estratto = Partite.estrai(letto.partite, { nome: 'io' });
+ok(estratto.items.length >= 1, 'nel PGN di prova c-e almeno una perdita di materiale (4.Ng5)');
+
+/* Ogni item di L7 deve essere respinto dalla misura. */
+for (const item of estratto.items) {
+  const id = Partite.cardIdOf(item.id);
+  ok(Calibrato.generato(id), `l'item di L7 ${id} deve risultare generato`);
+  ok(!Calibrato.misurabile({ id, d: 1400, ok: true }), `l'item di L7 ${id} non puo' entrare nella misura`);
+}
+const conL7 = Stima.stima([
+  { id: 't:a', d: 1400, ok: true },
+  ...estratto.items.map((x) => ({ id: Partite.cardIdOf(x.id), d: 1400, ok: false })),
+]);
+ok(conL7.n === 1, `gli item di L7 non devono entrare nello stimatore (ne sono entrati ${conL7.n - 1})`);
+
+/* E il pool d'esame non li contiene, perche' non stanno nemmeno nel corpus. */
+ok(Esame.poolEsame(PUZZLES).every((p) => !Calibrato.generato(p.id)),
+  'nel pool d-esame non deve esserci nessun item generato');
+
+/* Il lettore di PGN dichiara gli scarti invece di ingoiarli. */
+const conVariante = `${PGN_PROVA}
+
+[Event "X"]
+[White "a"]
+[Black "b"]
+[Variant "Crazyhouse"]
+[Result "1-0"]
+
+1. e4 e5 1-0`;
+const letto2 = Pgn.leggi(conVariante);
+ok(letto2.trovate === 2, `due partite nel file, ne ha trovate ${letto2.trovate}`);
+ok(letto2.scarti.length === 1, 'la variante non standard va scartata');
+ok(letto2.scarti[0].motivo.includes('Crazyhouse'), 'e il motivo deve nominarla');
+
+/* Nessun simbolo di valutazione della piattaforma sopravvive all'import. */
+const conSimboli = `[Event "X"]
+[White "io"]
+[Black "altri"]
+[Result "*"]
+
+1. e4?! { [%eval 0.2] } e5!! $2 { commento } 2. Nf3 *`;
+const letto3 = Pgn.leggi(conSimboli);
+ok(letto3.partite.length === 1, 'la partita con simboli deve leggersi');
+ok(letto3.partite[0].passi.every((x) => !/[?!$]/.test(x.san)),
+  'nessun simbolo di valutazione deve sopravvivere alle mosse importate');
 
 /* -------------------------------- verdetto ------------------------------- */
 

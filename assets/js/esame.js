@@ -23,6 +23,7 @@
  */
 
 import * as Stima from './stima.js';
+import * as Calibrato from './calibrato.js';
 
 /**
  * Quanta parte del corpus resta fuori: l'otto per cento, che su 3235 posizioni
@@ -59,7 +60,15 @@ function hash(testo) {
 export const inEsame = (id, quota = QUOTA) => hash(`esame:${id}`) < quota;
 
 export const poolAllenamento = (pool, quota = QUOTA) => pool.filter((p) => !inEsame(p.id, quota));
-export const poolEsame = (pool, quota = QUOTA) => pool.filter((p) => inEsame(p.id, quota));
+
+/*
+ * Nel pool d'esame entrano solo item con una difficoltà **misurata**: la
+ * barriera di `calibrato.js` sta anche qui, a monte, così un esame non si
+ * compone nemmeno con materiale che poi lo stimatore respingerebbe.
+ */
+export const poolEsame = (pool, quota = QUOTA) => pool.filter(
+  (p) => inEsame(p.id, quota) && Calibrato.itemMisurabile(p),
+);
 
 /*
  * I livelli di base non pescano da un corpus ma da un generatore: le posizioni
