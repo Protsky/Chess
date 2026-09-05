@@ -3931,8 +3931,9 @@ function renderPartiteRiepilogo(letto, nome = null) {
     </div>
     <div class="note">
       <div class="note__label">Che cosa è entrato</div>
-      Nel file c’erano <strong>${letto.trovate}</strong> partite: ne ho lette ${letto.partite.length}
-      e scartate ${letto.scarti.length}.
+      Nel file ${letto.trovate === 1 ? 'c’era <strong>1</strong> partita' : `ce n’erano <strong>${letto.trovate}</strong>`}:
+      ${letto.partite.length === 1 ? 'ne ho letta 1' : `ne ho lette ${letto.partite.length}`} e
+      ${letto.scarti.length === 1 ? 'scartata 1' : `scartate ${letto.scarti.length}`}.
       ${letto.motivi.length ? `<br>${letto.motivi.map((m) => `${esc(m.motivo)} — ${m.quante}`).join('<br>')}` : ''}
       ${letto.conOrologio ? `<br>${letto.conOrologio} con i tempi per mossa.` : ''}
     </div>
