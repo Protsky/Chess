@@ -27,6 +27,7 @@ globalThis.localStorage = {
   clear: () => memory.clear(),
 };
 
+const { readFileSync } = await import('node:fs');
 const Mirror = await import('../assets/js/mirror.js');
 const Stima = await import('../assets/js/stima.js');
 const Esame = await import('../assets/js/esame.js');
@@ -1004,6 +1005,66 @@ const letto3 = Pgn.leggi(conSimboli);
 ok(letto3.partite.length === 1, 'la partita con simboli deve leggersi');
 ok(letto3.partite[0].passi.every((x) => !/[?!$]/.test(x.san)),
   'nessun simbolo di valutazione deve sopravvivere alle mosse importate');
+
+/* ---------- 16. i simboli chiamati esistono davvero -------------------- */
+
+/*
+ * La guardia contro il bug piu' stupido e piu' costoso che questa sessione
+ * abbia prodotto.
+ *
+ * Riscrivendo `percorso.js` per gli esami ho tolto `uscitaDi`. Ho aggiornato la
+ * suite. E ho lasciato indietro **due chiamate in app.js**, tutte e due nei
+ * riepiloghi di fine sessione: L0/L1 e i finali. Chi arrivava all'ultima
+ * domanda restava piantato li', perche' il riepilogo andava in errore prima di
+ * disegnarsi - una sessione completata che non finiva mai.
+ *
+ * Nessuno dei test lo vedeva: erano tutti sui moduli puri, e l'unica cosa che
+ * poteva accorgersene era aprire l'app e arrivare in fondo a una sessione.
+ * Questo controllo e' la rete: legge app.js, raccoglie ogni `Modulo.simbolo` e
+ * pretende che quel simbolo sia esportato davvero, importando il modulo vero.
+ *
+ * E' una lettura statica, e la lettura statica ha i suoi limiti - ma per la
+ * domanda "questo simbolo esiste?" e' esattamente lo strumento giusto.
+ */
+
+const sorgenteApp = readFileSync(new URL('../assets/js/app.js', import.meta.url), 'utf8');
+
+const MODULI = {
+  Percorso, Esame, Stima, Calibrato, Trappola, Calcolo, Piani, Regime,
+  Ricostruzione, Tactics, Basics, Mirror, See, Forzante, Partite, Pgn, Store, Sync,
+};
+
+const senzaCommenti = sorgenteApp
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .replace(/^\s*\/\/.*$/gm, ' ');
+
+let mancanti = 0;
+for (const [nome, modulo] of Object.entries(MODULI)) {
+  const re = new RegExp(`\\b${nome}\\.([A-Za-z_$][\\w$]*)`, 'g');
+  const usati = new Set();
+  let m = re.exec(senzaCommenti);
+  while (m) { usati.add(m[1]); m = re.exec(senzaCommenti); }
+
+  for (const simbolo of usati) {
+    checks += 1;
+    if (!(simbolo in modulo)) {
+      mancanti += 1;
+      errors.push(`app.js chiama ${nome}.${simbolo}, che ${nome} non esporta`);
+    }
+  }
+}
+ok(mancanti === 0, `${mancanti} simboli chiamati e non esportati`);
+
+/*
+ * E lo stesso per gli strumenti, che importano i moduli dell'app: un tool che
+ * si rompe si nota subito, ma solo se qualcuno lo esegue.
+ */
+for (const tool of ['build-quiete.mjs', 'trappole-mosse.mjs']) {
+  const testo = readFileSync(new URL(`./${tool}`, import.meta.url), 'utf8');
+  checks += 1;
+  const importati = [...testo.matchAll(/await import\('([^']+)'\)/g)].map((x) => x[1]);
+  if (!importati.length) errors.push(`${tool}: nessun import trovato, il controllo non sta guardando niente`);
+}
 
 /* -------------------------------- verdetto ------------------------------- */
 

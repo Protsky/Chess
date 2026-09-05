@@ -165,6 +165,37 @@ function sincronizzaPresto() {
   }, 1500);
 }
 
+/**
+ * L'avanzamento di un livello, letto dall'unica funzione che lo calcola.
+ *
+ * Serve perché tre schermate diverse mostrano «verso l'uscita» a fine sessione,
+ * e per un po' lo chiedevano a una funzione che non esisteva più: `uscitaDi` è
+ * sparita quando `percorso.js` è passato agli esami, i test sono stati
+ * aggiornati e **due chiamate in questo file sono rimaste indietro**. Risultato:
+ * la sessione arrivava all'ultima domanda e si piantava lì, perché il riepilogo
+ * andava in errore prima di disegnarsi.
+ *
+ * Non è un bug di logica, è un bug di superficie: un simbolo tolto in un file e
+ * ancora chiamato in un altro. Per questo `validate-nuovo.mjs` adesso controlla
+ * che ogni `Modulo.simbolo` scritto qui dentro esista davvero.
+ */
+function avanzamentoDi(code) {
+  const avanzamenti = Percorso.avanzamenti({
+    rating: tacticState().rating,
+    aperture: Store.summarize(OPENINGS),
+    log: Store.getLog(),
+    livelli: Store.getLivelli(),
+  });
+  return avanzamenti[code] || { percent: 0, label: '' };
+}
+
+/** Da quale asse di allenamento viene, a quale gradino appartiene. */
+const CODICE_DI = {
+  [Basics.VISTA]: 'L0',
+  [Basics.SICUREZZA]: 'L1',
+  [Endgames.AXIS]: 'L2',
+};
+
 /* ------------------------------- schermate ------------------------------ */
 
 /**
@@ -1810,7 +1841,7 @@ function renderBasicsSession(axis) {
     const fatte = results.filter(Boolean);
     const giuste = fatte.filter((r) => r.correct).length;
     const stato = basicsState(axis);
-    const uscita = Percorso.uscitaDi(axis, Store.getLog());
+    const uscita = avanzamentoDi(CODICE_DI[axis]);
 
     const panel = h(`<div class="stack">
       <div class="result">
@@ -2030,7 +2061,7 @@ function renderFinaliSession() {
     const fatti = results.filter(Boolean);
     const puliti = fatti.filter((r) => r.correct).length;
     const stato = Store.getRating(Endgames.AXIS) || { rating: Endgames.START, attempts: 0 };
-    const uscita = Percorso.uscitaDi(Endgames.AXIS, Store.getLog());
+    const uscita = avanzamentoDi('L2');
 
     const panel = h(`<div class="stack">
       <div class="result">

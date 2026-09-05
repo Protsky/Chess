@@ -384,7 +384,7 @@ function uscitaBase(axis, log) {
     return {
       percent: percent === 100 && !veloce ? 99 : percent,
       label: ultime.length
-        ? `${giuste} giuste sulle ultime ${ultime.length}${mediana !== null ? `, mediana ${(mediana / 1000).toFixed(1)} s` : ''}`
+        ? `${giuste} ${giuste === 1 ? 'giusta' : 'giuste'} sulle ultime ${ultime.length}${mediana !== null ? `, mediana ${(mediana / 1000).toFixed(1)} s` : ''}`
         : 'Nessuna risposta ancora',
     };
   }
@@ -393,7 +393,7 @@ function uscitaBase(axis, log) {
   return {
     percent,
     label: ultime.length
-      ? `${giuste} giuste sulle ultime ${ultime.length}`
+      ? `${giuste} ${giuste === 1 ? 'giusta' : 'giuste'} sulle ultime ${ultime.length}`
       : 'Nessuna risposta ancora',
   };
 }
