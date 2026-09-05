@@ -48,23 +48,37 @@ import { OPENINGS } from './openings.js';
  *
  *   { tipo: 'stima', soglia }        il limite inferiore deve superare la soglia
  *   { tipo: 'conta', giuste, su }    servono tante risposte giuste su tante
+ *
+ * ACCESSO e ESAME sono due cose diverse, e per un po' sono state raccontate
+ * come una sola.
+ *
+ * `accesso` è quello che `pronto()` guarda sul registro di **allenamento**:
+ * serve solo a non far sprecare posizioni d'esame a chi è lontano. `exit` è
+ * quello che `verdetto()` applica sulle posizioni **mai viste**, ed è l'unica
+ * cosa che fa dire «superato». Dichiararne uno e misurare l'altro è lo stesso
+ * difetto che questo file è nato per togliere — e ci era rientrato da solo:
+ * L2 diceva «sei finali» mentre l'esame ne chiedeva tre, L6 diceva «la linea e
+ * il piano» mentre l'esame era 7 su 8, e la mediana di L0 non la guardava
+ * nessuno.
  */
 export const LIVELLI = [
   {
     code: 'L0',
     name: 'Vista della scacchiera',
     line: 'Colore di una casa, salti del cavallo, chi attacca cosa. E la posizione rimessa a memoria dopo cinque secondi.',
-    exit: '18 risposte giuste su 20 mai viste, mediana sotto i 3 secondi',
+    accesso: '17 giuste sulle ultime 20 di allenamento, con mediana sotto i 3 secondi',
+    exit: '18 risposte giuste su 20 mai viste, e mediana sotto i 3 secondi anche lì',
     state: 'attivo',
     hash: '#/vista',
     action: 'Allenati',
     axis: Basics.VISTA,
-    esame: { tipo: 'conta', giuste: 18, su: 20 },
+    esame: { tipo: 'conta', giuste: 18, su: 20, medianaMax: Basics.USCITA[Basics.VISTA].mediana },
   },
   {
     code: 'L1',
     name: 'Non regalare pezzi',
     line: 'Che cosa resta in presa dopo la tua mossa. Il livello che rende di più a chi comincia.',
+    accesso: '18 giuste sulle ultime 20 di allenamento',
     exit: '19 controlli di sicurezza su 20 mai visti',
     state: 'attivo',
     hash: '#/sicurezza',
@@ -76,7 +90,8 @@ export const LIVELLI = [
     code: 'L2',
     name: 'I finali che si vincono a memoria',
     line: 'Re e Donna, Re e Torre: matto forzato, con la tavola dei finali a fare da giudice.',
-    exit: 'sei finali portati a casa senza mai perdere l’esito',
+    accesso: 'sei finali portati a casa senza mai perdere l’esito',
+    exit: '3 finali di fila senza perdere l’esito, su posizioni della prova',
     state: 'attivo',
     hash: '#/finali',
     action: 'Allenati',
@@ -87,7 +102,8 @@ export const LIVELLI = [
     code: 'L3',
     name: 'I motivi tattici, mescolati',
     line: 'Trova la mossa: dodici motivi che non si annunciano mai prima, e un item su quattro dove non c’è niente.',
-    exit: 'esame a 1400: il limite inferiore lo supera, e nessun motivo sotto il 60%',
+    accesso: 'il punteggio di allenamento arriva dove l’esame si supera una volta su due',
+    exit: 'esame a 1400 sul limite inferiore dell’intervallo, e nessun motivo sotto il 60%',
     state: 'attivo',
     hash: '#/tattica',
     action: 'Allenati',
@@ -98,7 +114,8 @@ export const LIVELLI = [
     code: 'L4',
     name: 'Calcolo e visualizzazione',
     line: 'La posizione si guarda, poi si spegne. Le mosse si giocano a memoria.',
-    exit: 'sequenze di 4 semimosse alla cieca, 8 su 10',
+    accesso: '8 sequenze giuste su 10 in allenamento, a 4 semimosse',
+    exit: 'le stesse 8 su 10, ma su posizioni mai viste',
     state: 'attivo',
     hash: '#/calcolo',
     action: 'Allenati',
@@ -116,7 +133,8 @@ export const LIVELLI = [
     code: 'L6',
     name: 'Le aperture',
     line: '33 varianti con idea, piano e commenti: la linea, e perché.',
-    exit: 'la linea a memoria e il piano nominato',
+    accesso: 'almeno otto linee portate a tre stelle',
+    exit: '7 piani nominati su 8, su aperture della stessa famiglia',
     state: 'attivo',
     hash: '#/aperture',
     action: 'Studia',
@@ -138,6 +156,41 @@ export const byCode = (code) => LIVELLI.find((l) => l.code === code) || null;
 export function livelloCorrente(avanzamenti) {
   const attivi = LIVELLI.filter((l) => l.state === 'attivo');
   return attivi.find((l) => !['superato'].includes(avanzamenti[l.code]?.stato)) || attivi[attivi.length - 1];
+}
+
+/* ---------------------- la curva di questo esame -------------------------- */
+
+/*
+ * Il punto in cui l'esame si supera una volta su due. Si calcola sugli item che
+ * l'esame userebbe davvero, quindi è un numero dei dati e non una convenzione —
+ * ma costa qualcosa, e la home lo chiede a ogni disegno: si tiene da parte.
+ */
+const META_CACHE = new Map();
+
+export function puntoMeta(soglia) {
+  if (META_CACHE.has(soglia)) return META_CACHE.get(soglia);
+  const items = Esame.componi({ pool: PUZZLES, soglia });
+  const c = items.length ? Esame.curvaOperativa({ items, soglia }) : null;
+  const meta = c && c.meta !== null ? c.meta : soglia;
+  META_CACHE.set(soglia, meta);
+  return meta;
+}
+
+/** La curva intera, per le schermate che la mostrano. */
+export function curvaDi(code, { spesi = new Set() } = {}) {
+  const livello = byCode(code);
+  if (!livello?.esame) return null;
+  if (livello.esame.tipo === 'conta') {
+    return {
+      tipo: 'conta',
+      giuste: livello.esame.giuste,
+      su: livello.esame.su,
+      tasso50: Esame.tasso50(livello.esame),
+    };
+  }
+  const items = Esame.componi({ pool: PUZZLES, soglia: livello.esame.soglia, spesi });
+  if (!items.length) return null;
+  return { tipo: 'stima', soglia: livello.esame.soglia, ...Esame.curvaOperativa({ items, soglia: livello.esame.soglia }) };
 }
 
 /* ---------------------- pronti per l'esame? ------------------------------ */
@@ -167,9 +220,17 @@ export function pronto(code, { log = [], rating = Rating.START_RATING, aperture 
     return log.filter((e) => e.axis === Endgames.AXIS && e.correct).length >= Endgames.USCITA.puliti;
   }
   if (code === 'L3') {
-    /* Il punteggio adattivo deve essere arrivato a tiro, e con abbastanza prove. */
+    /*
+     * La soglia d'accesso non è più un numero incollato.
+     *
+     * Era `rating >= 1350`, e a 1350 questo esame si supera il 0,5% delle volte:
+     * si bruciavano ventiquattro delle poche posizioni d'esame rimaste per un
+     * tentativo quasi certamente perso — l'esatto contrario di quello che il
+     * commento qui sopra dichiara di fare. Adesso si apre dove l'esame si supera
+     * **una volta su due**, e quel punto lo calcola la curva sugli item veri.
+     */
     const attempts = log.filter((e) => e.axis === 'tattica').length;
-    return attempts >= 60 && rating >= 1350;
+    return attempts >= 60 && rating >= puntoMeta(livello.esame.soglia);
   }
   if (code === 'L4') {
     return Calcolo.uscita(log).giuste >= Calcolo.USCITA.giuste;
@@ -212,17 +273,43 @@ export function verdetto(code, risposte, { log = [] } = {}) {
   }
 
   const giuste = risposte.filter((r) => r.ok).length;
+  const ora = Date.now();
   const deboli = Esame.motiviDeboli(
-    [...log, ...risposte.map((r) => ({ axis: livello.axis, theme: r.theme, correct: r.ok }))],
+    [...log, ...risposte.map((r, i) => ({
+      axis: livello.axis, theme: r.theme, correct: r.ok, t: ora + i,
+    }))],
     { axis: livello.axis },
   );
+
+  /*
+   * La mediana, dove il criterio la dichiara.
+   *
+   * L0 dice «18 su 20, mediana sotto i 3 secondi» da sempre, ma il tempo lo
+   * guardava solo `pronto()`, cioè la soglia d'accesso: nel verdetto non
+   * entrava mai. Un criterio scritto e non applicato — proprio quello che
+   * questo file esiste per togliere, rientrato dalla finestra.
+   */
+  const tempi = risposte.map((r) => r.ms).filter((x) => Number.isFinite(x));
+  const mediana = tempi.length ? [...tempi].sort((a, b) => a - b)[Math.floor(tempi.length / 2)] : null;
+  const chiedeMediana = Number.isFinite(livello.esame.medianaMax);
+  const medianaOk = !chiedeMediana || (mediana !== null && mediana <= livello.esame.medianaMax);
+
+  const abbastanza = giuste >= livello.esame.giuste;
+  const pezzi = [`${giuste} su ${risposte.length} (ne servivano ${livello.esame.giuste})`];
+  if (chiedeMediana && mediana !== null) {
+    pezzi.push(`mediana ${(mediana / 1000).toFixed(1)} s (serve sotto ${(livello.esame.medianaMax / 1000).toFixed(1)})`);
+  }
+
   return {
     tipo: 'conta',
-    passa: giuste >= livello.esame.giuste && deboli.length === 0,
+    passa: abbastanza && medianaOk && deboli.length === 0,
     giuste,
     su: risposte.length,
     deboli,
-    testo: `${giuste} su ${risposte.length} (ne servivano ${livello.esame.giuste})`,
+    mediana,
+    medianaOk,
+    medianaMax: livello.esame.medianaMax ?? null,
+    testo: pezzi.join(' · '),
   };
 }
 
@@ -305,8 +392,14 @@ function uscitaFinali(log) {
 }
 
 function uscitaTattica(rating) {
+  /*
+   * La barra punta al punto in cui l'esame si supera una volta su due, non alla
+   * soglia nominale: arrivare a 1400 di allenamento e trovarsi un esame che a
+   * 1400 si supera il 3% delle volte e' esattamente il genere di numero che
+   * questa app non stampa.
+   */
   const da = Rating.START_RATING;
-  const a = 1400;
+  const a = puntoMeta(1400);
   return {
     percent: Math.max(0, Math.min(100, Math.round(((rating - da) / (a - da)) * 100))),
     label: `punteggio di allenamento ${rating} di ${a}`,

@@ -320,8 +320,17 @@ const senzaStorico = { log: [], livelli: {} };
 const av = Percorso.avanzamenti({ rating: 800, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico });
 ok(Object.keys(av).length === attivi.length, 'nessun avanzamento va calcolato per i livelli che non esistono');
 ok(av.L3.percent === 0, 'a punteggio di partenza il livello 3 deve stare a zero');
-ok(Percorso.avanzamenti({ rating: 1400, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico }).L3.percent === 100,
-  'alla soglia d’esame il livello 3 deve stare a 100');
+/*
+ * La barra di L3 punta al punto in cui l'esame si supera una volta su due
+ * (~1542), non alla soglia nominale: a 1400 di allenamento l'esame "a 1400" si
+ * supera il 3% delle volte, e una barra piena la' sarebbe una promessa falsa.
+ */
+const meta = Percorso.puntoMeta(1400);
+ok(meta > 1400, `il punto di meta deve stare sopra la soglia nominale (vale ${meta})`);
+ok(Percorso.avanzamenti({ rating: 1400, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico }).L3.percent < 100,
+  'a 1400 di allenamento il livello 3 non deve essere pieno: quel esame si supera il 3% delle volte');
+ok(Percorso.avanzamenti({ rating: meta, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico }).L3.percent === 100,
+  'al punto in cui si supera una volta su due la barra deve essere piena');
 ok(Percorso.avanzamenti({ rating: 3000, aperture: { percent: 0, stars: 0, max: 99, progress: {} }, ...senzaStorico }).L3.percent === 100,
   'l’avanzamento non può superare il 100%');
 

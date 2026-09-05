@@ -25,9 +25,16 @@
 import * as Stima from './stima.js';
 
 /**
- * Quanta parte del corpus resta fuori. Otto per cento di 3235 sono ~260
- * posizioni: bastano per una decina di esami da ventiquattro senza mai
- * ripetersi, e tolgono all'allenamento meno di quanto si perda in una settimana.
+ * Quanta parte del corpus resta fuori: l'otto per cento, che su 3235 posizioni
+ * fa **247**.
+ *
+ * La prima versione di questo commento diceva «~260, bastano per una decina di
+ * esami». Il numero era arrotondato e il conto era sbagliato, perché ignorava
+ * la finestra: un esame pesca attorno alla soglia, e attorno a 1400 le
+ * posizioni tenute fuori sono 74 entro ±300 — cioè tre esami, quanti ne serve
+ * **un solo percorso** di L3 (uscita, tenuta a 7 giorni, tenuta a 30), con zero
+ * margine per la riapertura che `statoLivello` prevede come esito normale.
+ * `magazzino()` qui sotto conta le scorte vere, e l'app le mostra.
  */
 export const QUOTA = 0.08;
 
@@ -70,16 +77,46 @@ export const QUOTA_GENERATI = 0.25;
  * mescolano i motivi come in sessione — un esame a blocchi misurerebbe una
  * cosa diversa dall'allenamento.
  */
+/**
+ * Quante posizioni d'esame restano davvero, e a che distanza dalla soglia.
+ *
+ * Serve perché il numero che l'app mostrava era `componi(...).length`, cioè
+ * sempre 24: diceva quanto è lungo l'esame, non quanto ne resta. Le scorte sono
+ * la risorsa che si consuma — ogni item si spende una volta sola — e vanno
+ * contate nella finestra che conta, non in totale.
+ */
+export const FINESTRA_UTILE = 300;
+
+export function magazzino({ pool, soglia, spesi = new Set(), finestra = FINESTRA_UTILE } = {}) {
+  const liberi = poolEsame(pool).filter((p) => !spesi.has(p.id));
+  const vicini = liberi.filter((p) => Math.abs(p.r - soglia) <= finestra);
+  return {
+    utili: vicini.length,
+    totali: liberi.length,
+    esamiRimasti: Math.floor(vicini.length / ITEM),
+    finestra,
+    /* Sotto un esame intero nella finestra utile non si comincia: si dice. */
+    bastano: vicini.length >= ITEM,
+  };
+}
+
 export function componi({ pool, soglia, n = ITEM, spesi = new Set(), finestra = 150 } = {}) {
   const disponibili = poolEsame(pool).filter((p) => !spesi.has(p.id));
   let scelti = [];
   let raggio = finestra;
-  while (raggio <= 800) {
+  while (raggio <= FINESTRA_UTILE) {
     scelti = disponibili.filter((p) => Math.abs(p.r - soglia) <= raggio);
     if (scelti.length >= n) break;
     raggio += finestra;
   }
-  if (scelti.length < n) scelti = disponibili.slice();
+  /*
+   * Oltre la finestra utile non si allarga più. Prima si arrivava a ±800: gli
+   * item smettono di dire qualcosa sulla soglia (uno da 600 lo risolvono tutti,
+   * uno da 2200 nessuno) e l'intervallo si allarga proprio quando servirebbe
+   * stretto. Meglio un esame che non parte, dicendolo, di un esame che misura
+   * male senza dirlo.
+   */
+  if (scelti.length < n) return [];
 
   const ordinati = scelti
     .map((p) => ({ p, d: Math.abs(p.r - soglia), h: hash(`ordine:${p.id}`) }))
@@ -119,20 +156,161 @@ export function mescolaMotivi(items) {
 export const MIN_PER_MOTIVO = 8;
 export const PAVIMENTO = 0.6;
 
-export function motiviDeboli(log, { axis, min = MIN_PER_MOTIVO, soglia = PAVIMENTO } = {}) {
+/**
+ * Quante risposte guarda il pavimento, per motivo. È una **finestra**, e non
+ * era così.
+ *
+ * Prima il conto girava su tutto il registro (fino a 3000 ripassi): un motivo
+ * sbagliato nelle prime settimane restava nel denominatore per mesi, e il
+ * pavimento non misurava come stai andando adesso ma la media della tua vita.
+ * Un livello poteva restare chiuso su risposte date molto tempo prima, cioè
+ * l'opposto di quello che il criterio dice di fare.
+ */
+export const FINESTRA_MOTIVO = 20;
+
+export function motiviDeboli(log, {
+  axis, min = MIN_PER_MOTIVO, soglia = PAVIMENTO, finestra = FINESTRA_MOTIVO,
+} = {}) {
+  /* In ordine di tempo: la finestra ha senso solo se «ultimi» vuol dire qualcosa. */
+  const righe = log
+    .filter((e) => (!axis || e.axis === axis) && e.theme)
+    .slice()
+    .sort((a, b) => (a.t || 0) - (b.t || 0));
+
   const per = new Map();
-  for (const e of log) {
-    if (axis && e.axis !== axis) continue;
-    if (!e.theme) continue;
-    const v = per.get(e.theme) || { n: 0, ok: 0 };
-    v.n += 1;
-    if (e.correct) v.ok += 1;
-    per.set(e.theme, v);
+  for (const e of righe) {
+    if (!per.has(e.theme)) per.set(e.theme, []);
+    per.get(e.theme).push(e);
   }
+
   return [...per.entries()]
-    .filter(([, v]) => v.n >= min && v.ok / v.n < soglia)
-    .map(([theme, v]) => ({ theme, n: v.n, quota: v.ok / v.n }))
+    .map(([theme, tutte]) => {
+      const ultime = tutte.slice(-finestra);
+      const ok = ultime.filter((e) => e.correct).length;
+      return {
+        theme,
+        n: ultime.length,
+        quota: ultime.length ? ok / ultime.length : 0,
+        viste: tutte.length,
+      };
+    })
+    .filter((x) => x.n >= min && x.quota < soglia)
     .sort((a, b) => a.quota - b.quota);
+}
+
+/* -------------------------- la curva dell'esame --------------------------- */
+
+/*
+ * Che cosa misura davvero questo esame.
+ *
+ * L'app dice «esame a 1400: il limite inferiore lo supera». È vero, ed è
+ * calcolato sui dati veri — ma nomina una cosa diversa da quella che decide.
+ * Con ventiquattro item l'errore standard vale ottanta punti abbondanti, e
+ * 1,96 errori standard si sommano alla soglia: chi vale **esattamente** 1400
+ * supera questo esame il 2,8% delle volte, e il cinquanta per cento si
+ * raggiunge intorno a **1545**.
+ *
+ * Non è un difetto da correggere abbassando la soglia: è la prudenza che si è
+ * scelta, e va bene. È un numero da **scrivere accanto**, perché un criterio
+ * che non dice dove sta il proprio punto di mezzo è un criterio che chi studia
+ * non può interpretare.
+ *
+ * Il conto è esatto, non simulato, e si può fare perché nel modello di Rasch il
+ * punteggio dipende **solo dal numero** di risposte giuste (il conteggio è una
+ * statistica sufficiente per la forza). Quindi la regola «il limite inferiore
+ * supera la soglia» si riduce a «almeno k risposte giuste», e la probabilità di
+ * arrivarci è quella di una Poisson-binomiale sui ventiquattro item veri.
+ */
+
+/** Il minimo numero di risposte giuste che fa passare la regola in vigore. */
+export function conteggioMinimo(items, soglia) {
+  for (let k = 0; k <= items.length; k++) {
+    const risposte = items.map((p, i) => ({ d: p.r, ok: i < k }));
+    if (Stima.superaSoglia(Stima.stima(risposte), soglia)) return k;
+  }
+  return null;         // nemmeno prendendole tutte: la soglia è fuori portata
+}
+
+/**
+ * P(almeno k successi) con probabilità diverse per ogni prova. Programmazione
+ * dinamica sulla distribuzione del numero di successi: esatta, e su
+ * ventiquattro item costa nulla.
+ */
+function almeno(ps, k) {
+  let dist = [1];
+  for (const p of ps) {
+    const next = new Array(dist.length + 1).fill(0);
+    for (let i = 0; i < dist.length; i++) {
+      next[i] += dist[i] * (1 - p);
+      next[i + 1] += dist[i] * p;
+    }
+    dist = next;
+  }
+  return dist.slice(k).reduce((a, b) => a + b, 0);
+}
+
+/**
+ * La curva operativa: per una griglia di forze vere, la probabilità che questo
+ * esame dichiari «superato».
+ *
+ * Riguarda la sola regola sul punteggio. Il pavimento per motivo è una
+ * condizione **in più**, che può solo abbassare questa curva: dipende da quali
+ * motivi si sbagliano, non da quanti, e non si riduce a un conteggio.
+ */
+export function curvaOperativa({ items, soglia, da = soglia - 100, a = soglia + 400, passo = 50 } = {}) {
+  const k = conteggioMinimo(items, soglia);
+  if (k === null) return { k: null, punti: [], meta: null };
+
+  const punti = [];
+  for (let theta = da; theta <= a; theta += passo) {
+    const ps = items.map((p) => Stima.probabilita(theta, p.r));
+    punti.push({ forza: theta, p: almeno(ps, k) });
+  }
+
+  return { k, punti, meta: forza50(items, soglia, k), su: items.length };
+}
+
+/** La forza a cui questo esame si supera una volta su due, per bisezione. */
+function forza50(items, soglia, k) {
+  let lo = soglia - 400;
+  let hi = soglia + 800;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    const p = almeno(items.map((x) => Stima.probabilita(mid, x.r)), k);
+    if (p < 0.5) lo = mid; else hi = mid;
+  }
+  return Math.round((lo + hi) / 2);
+}
+
+/** La probabilità di superare, a una forza data: il numero da mostrare. */
+export function probabilitaA(items, soglia, forza) {
+  const k = conteggioMinimo(items, soglia);
+  if (k === null) return 0;
+  return almeno(items.map((x) => Stima.probabilita(forza, x.r)), k);
+}
+
+/**
+ * La stessa domanda per gli esami a conteggio, dove la difficoltà degli item
+ * non è misurata: lì la curva è una binomiale semplice sulla probabilità di
+ * risposta giusta, ed è l'unica cosa onesta che si possa dire.
+ */
+export function curvaConteggio({ giuste, su, da = 0.5, a = 1, passo = 0.05 } = {}) {
+  const punti = [];
+  for (let p = da; p <= a + 1e-9; p += passo) {
+    punti.push({ p: Math.min(1, p), passa: almeno(new Array(su).fill(Math.min(1, p)), giuste) });
+  }
+  return punti;
+}
+
+/** A quale tasso di risposta giusta un criterio a conteggio si supera a meta'. */
+export function tasso50({ giuste, su }) {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (almeno(new Array(su).fill(mid), giuste) < 0.5) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 /* --------------------------- stato dei livelli ---------------------------- */

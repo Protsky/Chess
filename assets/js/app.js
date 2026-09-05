@@ -314,7 +314,9 @@ function renderHome() {
         <div class="path-row__line">${esc(livello.line)}</div>
         ${attivo && avanzamento
           ? `<div class="bar"><div class="bar__fill" style="width:${avanzamento.percent}%"></div></div>
-             <div class="bar__label">${esc(avanzamento.label)} · si esce a: ${esc(livello.exit)}</div>`
+             <div class="bar__label">${esc(avanzamento.label)}${
+               livello.accesso ? `<br>per l’esame: ${esc(livello.accesso)}` : ''
+             }<br>si supera con: ${esc(livello.exit)}</div>`
           : `<div class="bar__label">Da costruire · si uscirà a: ${esc(livello.exit)}</div>`}
       </div>
       ${attivo ? '<div class="level-card__chevron">›</div>' : '<div class="path-row__soon">in arrivo</div>'}
@@ -2669,9 +2671,18 @@ function renderEsameIntro(code) {
   if (!livello?.esame) return renderHome();
   const tipo = tipoEsame(code);
   const spesi = Store.itemSpesi();
+  const curva = Percorso.curvaDi(code, { spesi });
+  const scorte = livello.esame.tipo === 'stima'
+    ? Esame.magazzino({ pool: PUZZLES, soglia: livello.esame.soglia, spesi })
+    : null;
   const disponibili = livello.esame.tipo === 'stima'
     ? Esame.componi({ pool: PUZZLES, soglia: livello.esame.soglia, spesi }).length
     : livello.esame.su;
+
+  /* Senza un esame intero nella finestra utile non si comincia: si dice. */
+  if (livello.esame.tipo === 'stima' && (!disponibili || (scorte && !scorte.bastano))) {
+    return renderEsameFinito(code, scorte);
+  }
 
   setBar({ title: 'Esame', back: '#/' });
 
@@ -2691,8 +2702,41 @@ function renderEsameIntro(code) {
       ${livello.esame.tipo === 'stima'
         ? `Il <strong>limite inferiore</strong> dell’intervallo di confidenza deve superare ${livello.esame.soglia}.
            Non la stima migliore: il limite inferiore, così non si passa per fortuna in una giornata buona.`
-        : `Servono <strong>${livello.esame.giuste} risposte giuste su ${livello.esame.su}</strong>.`}
-      In più, nessun motivo può stare sotto il 60%: una media alta che nasconde un buco non è un livello superato.
+        : `Servono <strong>${livello.esame.giuste} risposte giuste su ${livello.esame.su}</strong>${
+          livello.esame.medianaMax ? `, con mediana sotto ${(livello.esame.medianaMax / 1000).toFixed(0)} secondi` : ''}.`}
+      In più, nessun motivo può stare sotto il 60% sulle ultime ${Esame.FINESTRA_MOTIVO} risposte:
+      una media alta che nasconde un buco non è un livello superato.
+    </div>
+    ${curva ? `<div class="note">
+      <div class="note__label">Dov’è il punto di mezzo</div>
+      ${curva.tipo === 'stima'
+        ? `Servono <strong>${curva.k} risposte giuste su ${curva.su}</strong>. Con ventiquattro posizioni
+           l’incertezza è di una ottantina di punti, e il limite inferiore se la porta dietro: chi vale
+           esattamente ${curva.soglia} supera questo esame il
+           <strong>${(Esame.probabilitaA(Esame.componi({ pool: PUZZLES, soglia: livello.esame.soglia, spesi }), curva.soglia, curva.soglia) * 100).toFixed(0)}%</strong>
+           delle volte, e si arriva a una su due intorno a <strong>${curva.meta}</strong>.
+           È la prudenza che l’app ha scelto, e sta scritta invece di restare implicita.`
+        : `Il criterio ${curva.giuste} su ${curva.su} si supera una volta su due quando si risponde giusto
+           circa il <strong>${Math.round(curva.tasso50 * 100)}%</strong> delle volte. Sotto quel tasso l’esame
+           quasi sempre respinge, sopra quasi sempre passa.`}
+    </div>` : ''}
+    ${scorte ? `<div class="note">
+      <div class="note__label">Che cosa costa provarci</div>
+      Questo tentativo spende <strong>${disponibili}</strong> posizioni, e non tornano.
+      Nella fascia utile (±${scorte.finestra} punti dalla soglia) ne restano ${scorte.utili},
+      cioè <strong>${scorte.esamiRimasti}</strong> ${scorte.esamiRimasti === 1 ? 'esame' : 'esami'} in tutto.
+      Un percorso completo — uscita, tenuta a 7 giorni, tenuta a 30 — ne chiede ${Esame.TENUTE.length + 1},
+      quindi ${scorte.esamiRimasti > Esame.TENUTE.length + 1
+        ? 'c’è margine anche per una riapertura.'
+        : 'non c’è margine per una riapertura: se una tenuta non regge, le scorte finiscono.'}
+    </div>` : ''}
+    <div class="note">
+      <div class="note__label">Che cosa questo esame non misura</div>
+      ${code === 'L3'
+        ? 'Misura posizioni tattiche del database di Lichess. Il punteggio dei puzzle e il punteggio di partita sono due scale diverse: l’app non ha nessun dato che leghi le due, e non promette punti in partita.'
+        : code === 'L4'
+          ? 'Misura la capacità di tenere una posizione in testa per qualche semimossa. Non misura la tua forza di gioco, e l’app non ha dati per legare le due cose.'
+          : 'Misura quello che chiede, su posizioni mai viste. Non è una previsione di quanto giocherai bene: l’app non ha dati per farla.'}
     </div>
     ${tipo !== 'uscita' ? `<div class="note">
       <div class="note__label">Perché di nuovo</div>
@@ -2726,10 +2770,17 @@ function renderEsameEsito(risultato) {
       <div class="note__label">Il risultato</div>
       ${esc(testo)}
     </div>
+    ${risultato.medianaMax && risultato.mediana !== null && !risultato.medianaOk ? `<div class="note">
+      <div class="note__label">Le risposte bastavano, il tempo no</div>
+      Mediana ${(risultato.mediana / 1000).toFixed(1)} s: serve sotto ${(risultato.medianaMax / 1000).toFixed(1)}.
+      Qui non conta che sia giusto, conta che sia automatico — è tutto il senso del livello.
+    </div>` : ''}
     ${deboli && deboli.length ? `<div class="note">
       <div class="note__label">Sotto il pavimento</div>
-      ${deboli.map((d) => `${esc(Tactics.themeName({ t: d.theme }))}: ${Math.round(d.quota * 100)}% su ${d.n} risposte`).join(' · ')}.
+      ${deboli.map((d) => `${esc(Tactics.themeName({ t: d.theme }))}: ${Math.round(d.quota * 100)}% sulle ultime ${d.n}`).join(' · ')}.
       Finché uno di questi resta sotto il 60% il livello non si chiude, e le sessioni pescheranno di lì.
+      Si guardano le <strong>ultime ${Esame.FINESTRA_MOTIVO}</strong> risposte per motivo, non tutta la storia:
+      un errore di mesi fa non deve tenere chiuso un livello.
     </div>` : ''}
     ${passa && tipo === 'uscita' ? `<div class="note">
       <div class="note__label">Da qui</div>
@@ -2859,14 +2910,21 @@ function renderEsameTattica(code, tipo) {
   load(0);
 }
 
-function renderEsameFinito(code) {
+function renderEsameFinito(code, scorte = null) {
   setBar({ title: 'Esame', back: '#/' });
   mount(h(`<div class="stack">
     <div class="note">
       <div class="note__label">Posizioni d’esame esaurite</div>
-      Ogni item d’esame si spende una volta sola, e per questo livello sono finiti.
-      È il prezzo di una misura onesta: si può rifare l’esame solo con materiale nuovo,
-      e per averne serve rigenerare il corpus da un database più grande.
+      Ogni item d’esame si spende una volta sola, e per questo livello ne restano troppo poche
+      ${scorte ? `nella fascia che conta: <strong>${scorte.utili}</strong> entro ±${scorte.finestra} punti dalla soglia,
+      su ${scorte.totali} ancora libere in tutto.` : '.'}
+    </div>
+    <div class="note">
+      <div class="note__label">Perché non allarghiamo la ricerca</div>
+      Si potrebbe pescare più lontano dalla soglia, e l’app lo faceva. Ma una posizione da 700 la risolvono
+      tutti e una da 2200 nessuno: item così non dicono niente su dove sta la tua forza, e l’intervallo
+      si allarga proprio quando servirebbe stretto. Meglio un esame che non parte, dicendolo,
+      di un esame che misura male senza dirlo.
     </div>
     <button class="btn btn--primary" data-go="#/">Torna alla home</button>
   </div>`));

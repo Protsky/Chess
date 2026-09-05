@@ -87,9 +87,26 @@ Adesso funziona così.
   un centinaio di punti, e passare per fortuna in una giornata buona non è
   passare. Chi le prende tutte non riceve un punto ma un «almeno», perché è
   quello che i dati dicono.
+- **E l'app dice dov'è il punto di mezzo.** «Esame a 1400» è vero, ma nomina una
+  cosa diversa da quella che decide: chi vale *esattamente* 1400 supera questo
+  esame il **2,9%** delle volte, e si arriva a una su due intorno a **1542**.
+  Servono 17 risposte giuste su 24. Il conto è esatto, non simulato — nel
+  modello di Rasch il punteggio dipende solo dal numero di risposte giuste,
+  quindi la probabilità è una Poisson-binomiale sugli item veri. Sta scritto
+  nella schermata d'esame: un criterio che non dice dove sta il proprio punto di
+  mezzo è un criterio che non si può interpretare.
+- **Le scorte si contano.** Attorno a 1400 le posizioni d'esame sono 74 entro
+  ±300 punti: tre esami, quanti ne serve un percorso completo (uscita più le due
+  prove di tenuta), con zero margine per una riapertura. L'app lo mostra prima
+  che tu cominci, e quando non basta un esame intero nella fascia utile **non
+  parte**, invece di pescare più lontano: una posizione da 700 la risolvono
+  tutti e una da 2200 nessuno, e l'intervallo si allargherebbe proprio quando
+  servirebbe stretto.
 - **Il pavimento per motivo esiste davvero.** Nessun motivo visto almeno otto
-  volte può stare sotto il 60%. Una media alta che nasconde un buco non è un
-  livello superato.
+  volte può stare sotto il 60% **sulle ultime venti risposte**. Una media alta
+  che nasconde un buco non è un livello superato — ma nemmeno un errore di mesi
+  fa deve tenere chiuso un livello, e per un po' lo faceva: il conto girava su
+  tutto il registro.
 - **Superato non è per sempre.** A sette e a trenta giorni l'app richiede la
   stessa prova su materiale nuovo. Se non regge, il livello **si riapre**. Non è
   una punizione: quello che si sa fare oggi dopo dieci ripetizioni non è quello

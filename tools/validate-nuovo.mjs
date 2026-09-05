@@ -53,6 +53,9 @@ const {
 let checks = 0;
 const errors = [];
 const ok = (cond, message) => { checks += 1; if (!cond) errors.push(message); };
+const near = (valore, atteso, tolleranza, message) => {
+  ok(Math.abs(valore - atteso) <= tolleranza, `${message} (${valore}, atteso ${atteso} ± ${tolleranza})`);
+};
 
 const GIORNO = 86400000;
 
@@ -703,6 +706,179 @@ ok(n.tuo === rigaProva.e[0] && n.alto === rigaProva.e[rigaProva.e.length - 1],
 ok(n.divario === n.tuo - n.alto, 'il divario e\' la differenza fra i due, e nient\'altro');
 ok(n.tuo >= SOGLIA_ALTA && n.divario >= SALTO, 'la trappola piu\' insidiosa deve rispettare le soglie');
 
+/* --------- 14. la curva dell'esame, il magazzino, i criteri applicati ------ */
+
+/*
+ * Il difetto che questi controlli esistono per non far tornare e' il piu'
+ * subdolo di tutti: un criterio **dichiarato e non applicato**. Il file
+ * percorso.js e' nato per toglierne uno (il pavimento del 60% che nessuno
+ * faceva rispettare) e nel frattempo ne aveva lasciati entrare altri tre - la
+ * mediana di L0, i sei finali di L2, la linea+piano di L6.
+ *
+ * Qui ogni numero che l'app mostra viene confrontato con la costante che decide
+ * davvero. Se le due divergono, il test fallisce.
+ */
+
+const itemsL3 = Esame.componi({ pool: PUZZLES, soglia: 1400 });
+ok(itemsL3.length === Esame.ITEM, `l'esame di L3 deve comporsi: ${itemsL3.length} item`);
+
+const curva = Esame.curvaOperativa({ items: itemsL3, soglia: 1400 });
+ok(curva.k !== null, 'la curva deve trovare un conteggio minimo');
+ok(curva.k > 0 && curva.k <= itemsL3.length, `conteggio minimo fuori scala: ${curva.k}`);
+
+/* Il conteggio minimo e' minimo davvero: uno in meno non deve passare. */
+const conK = itemsL3.map((p, i) => ({ d: p.r, ok: i < curva.k }));
+const conKmeno = itemsL3.map((p, i) => ({ d: p.r, ok: i < curva.k - 1 }));
+ok(Stima.superaSoglia(Stima.stima(conK), 1400), 'con il conteggio minimo si deve passare');
+ok(!Stima.superaSoglia(Stima.stima(conKmeno), 1400), 'con una risposta in meno non si deve passare');
+
+/* La curva sale sempre: piu' sei forte, piu' e' probabile passare. */
+for (let i = 1; i < curva.punti.length; i++) {
+  checks += 1;
+  if (curva.punti[i].p < curva.punti[i - 1].p) {
+    errors.push('la curva operativa deve essere monotona crescente');
+    break;
+  }
+}
+
+/* Al punto di meta' la probabilita' e' meta'. */
+const pMeta = Esame.probabilitaA(itemsL3, 1400, curva.meta);
+near(pMeta, 0.5, 0.02, 'al punto di meta\' la probabilita\' di superare deve valere 0,5');
+
+/*
+ * La prova che conta: il conto esatto (Poisson-binomiale) deve coincidere con
+ * una simulazione indipendente. Se il conto esatto fosse sbagliato, il numero
+ * mostrato all'utente sarebbe inventato — ed e' proprio il numero con cui l'app
+ * si presenta.
+ */
+let seme = 24680;
+const dado = () => {
+  seme ^= seme << 13; seme >>>= 0;
+  seme ^= seme >>> 17;
+  seme ^= seme << 5; seme >>>= 0;
+  return seme / 4294967296;
+};
+for (const vera of [1400, 1500, 1600]) {
+  let passa = 0;
+  const N = 6000;
+  for (let k = 0; k < N; k++) {
+    const ris = itemsL3.map((x) => ({ d: x.r, ok: dado() < Stima.probabilita(vera, x.r) }));
+    if (Stima.superaSoglia(Stima.stima(ris), 1400)) passa += 1;
+  }
+  near(Esame.probabilitaA(itemsL3, 1400, vera), passa / N, 0.02,
+    `a forza ${vera} il conto esatto deve coincidere con la simulazione`);
+}
+
+/* E a 1400 esatti l'esame "a 1400" si supera poco: e' il numero da dichiarare. */
+ok(Esame.probabilitaA(itemsL3, 1400, 1400) < 0.10,
+  'a 1400 esatti questo esame si supera raramente: se non fosse cosi\' la prudenza dichiarata non ci sarebbe');
+ok(curva.meta > 1450 && curva.meta < 1700, `il punto di meta\' e\' fuori misura: ${curva.meta}`);
+
+/* I criteri a conteggio: la loro curva binomiale. */
+for (const c of [{ giuste: 18, su: 20 }, { giuste: 19, su: 20 }, { giuste: 8, su: 10 }, { giuste: 3, su: 3 }]) {
+  const t = Esame.tasso50(c);
+  ok(t > 0.5 && t < 1, `${c.giuste}/${c.su}: tasso al 50% fuori scala (${t})`);
+  const punti = Esame.curvaConteggio(c);
+  ok(punti.every((x, i) => i === 0 || x.passa >= punti[i - 1].passa - 1e-9),
+    `${c.giuste}/${c.su}: la curva a conteggio deve salire`);
+}
+
+/* ------------------------------ il magazzino ------------------------------ */
+
+const mag = Esame.magazzino({ pool: PUZZLES, soglia: 1400 });
+const contoAMano = Esame.poolEsame(PUZZLES).filter((p) => Math.abs(p.r - 1400) <= Esame.FINESTRA_UTILE).length;
+ok(mag.utili === contoAMano, `il magazzino conta ${mag.utili}, a mano ne risultano ${contoAMano}`);
+ok(mag.totali === Esame.poolEsame(PUZZLES).length, 'il totale deve essere il pool d\'esame intero');
+ok(mag.esamiRimasti === Math.floor(contoAMano / Esame.ITEM), 'gli esami rimasti sono le scorte diviso la lunghezza');
+
+/*
+ * E non si allarga piu' in silenzio: se nella finestra utile non c'e' un esame
+ * intero, `componi` torna vuoto invece di pescare a duecento punti di distanza.
+ */
+const quasiTutti = new Set(Esame.poolEsame(PUZZLES)
+  .filter((p) => Math.abs(p.r - 1400) <= Esame.FINESTRA_UTILE)
+  .slice(0, contoAMano - 5)
+  .map((p) => p.id));
+ok(Esame.componi({ pool: PUZZLES, soglia: 1400, spesi: quasiTutti }).length === 0,
+  'con meno di un esame nella finestra utile, comporre deve fallire invece di allargare');
+ok(!Esame.magazzino({ pool: PUZZLES, soglia: 1400, spesi: quasiTutti }).bastano,
+  'e il magazzino deve dire che non bastano');
+
+/* ------------------- il pavimento guarda la finestra ---------------------- */
+
+/*
+ * Prima il pavimento girava su tutto il registro: un motivo sbagliato mesi fa
+ * teneva chiuso un livello per sempre. Adesso guarda le ultime venti.
+ */
+const t0 = 1_700_000_000_000;
+const risalito = [
+  ...Array.from({ length: 40 }, (_, i) => ({ axis: 'tattica', theme: 'pin', correct: i % 10 < 3, t: t0 + i })),
+  ...Array.from({ length: 20 }, (_, i) => ({ axis: 'tattica', theme: 'pin', correct: i < 17, t: t0 + 100 + i })),
+];
+ok(Esame.motiviDeboli(risalito, { axis: 'tattica' }).length === 0,
+  'un motivo che negli ultimi venti sta all\'85% non deve piu\' tenere chiuso il livello');
+
+const ancoraDebole = [
+  ...Array.from({ length: 40 }, (_, i) => ({ axis: 'tattica', theme: 'pin', correct: true, t: t0 + i })),
+  ...Array.from({ length: 20 }, (_, i) => ({ axis: 'tattica', theme: 'pin', correct: i < 8, t: t0 + 100 + i })),
+];
+const deboliOra = Esame.motiviDeboli(ancoraDebole, { axis: 'tattica' });
+ok(deboliOra.length === 1 && deboliOra[0].theme === 'pin',
+  'un motivo al 40% sulle ultime venti deve bloccare, anche se prima andava bene');
+ok(deboliOra[0].n === Esame.FINESTRA_MOTIVO, `la quota va calcolata sulla finestra, non su ${deboliOra[0].n} risposte`);
+ok(deboliOra[0].viste === 60, 'e va detto quante se ne sono viste in tutto');
+
+/* ------------- ogni criterio dichiarato e' anche applicato ---------------- */
+
+/*
+ * Il test che i quattro difetti trovati dall'analisi non possano tornare: per
+ * ogni livello attivo, i numeri che compaiono nel testo mostrato devono essere
+ * gli stessi che decidono nel codice.
+ */
+for (const l of Percorso.LIVELLI.filter((x) => x.state === 'attivo')) {
+  ok(!!l.accesso, `${l.code}: manca il criterio d'accesso dichiarato`);
+  ok(!!l.exit, `${l.code}: manca il criterio d'uscita dichiarato`);
+
+  if (l.esame.tipo === 'conta') {
+    /* I numeri dell'esame devono comparire nel testo d'uscita. */
+    ok(l.exit.includes(String(l.esame.giuste)) || l.exit.includes(String(l.esame.su)),
+      `${l.code}: il testo d'uscita ("${l.exit}") non nomina i numeri dell'esame (${l.esame.giuste}/${l.esame.su})`);
+  } else {
+    ok(l.exit.includes(String(l.esame.soglia)),
+      `${l.code}: il testo d'uscita non nomina la soglia ${l.esame.soglia}`);
+  }
+}
+
+/* La mediana di L0 entra nel verdetto, non solo nell'accesso. */
+const venti = (ok_, ms) => Array.from({ length: 20 }, (_, i) => ({ ok: i < ok_, theme: 'colore', ms }));
+ok(!Percorso.verdetto('L0', venti(19, 4500)).passa, 'L0: 19 su 20 ma lente non deve passare');
+ok(Percorso.verdetto('L0', venti(19, 2400)).passa, 'L0: 19 su 20 e veloci deve passare');
+ok(!Percorso.verdetto('L0', venti(17, 2000)).passa, 'L0: 17 su 20 non basta nemmeno se velocissime');
+ok(Percorso.verdetto('L0', venti(19, 4500)).medianaOk === false, 'e l\'esito deve dire che il problema e\' la mediana');
+/* L1 non chiede la mediana: non deve inventarsela. */
+ok(Percorso.verdetto('L1', venti(19, 9000)).passa, 'L1 non ha un criterio di tempo, e non deve applicarne uno');
+
+/* L'accesso a L3 e' legato alla curva, non a un numero incollato. */
+const logTattica = Array.from({ length: 80 }, (_, i) => ({ axis: 'tattica', correct: true, t: t0 + i }));
+const meta = Percorso.puntoMeta(1400);
+ok(meta === curva.meta, 'il punto di meta\' usato dall\'accesso deve essere quello della curva');
+ok(!Percorso.pronto('L3', { log: logTattica, rating: meta - 60 }), 'sotto il punto di meta\' non si accede');
+ok(Percorso.pronto('L3', { log: logTattica, rating: meta + 20 }), 'sopra il punto di meta\' si accede');
+ok(!Percorso.pronto('L3', { log: logTattica.slice(0, 20), rating: meta + 200 }),
+  'con poche risposte non si accede, per quanto alto sia il punteggio');
+
+/*
+ * L'esame ha lunghezza FISSA, e deve restare cosi'.
+ *
+ * Un arresto anticipato (fermarsi appena l'intervallo e' deciso) era stato
+ * proposto per risparmiare item, ed e' stato **misurato**: sposta la curva
+ * operativa fino a 8,4 punti percentuali, e nel verso che rende l'esame piu'
+ * facile, perche' guardare lo stesso intervallo dopo ogni risposta e' un test
+ * ripetuto. La lunghezza media scendeva a 18,6 item: un risparmio vero, pagato
+ * con una regola che non misura piu' quello che dice. Non si spedisce.
+ */
+ok(Esame.ITEM === 24, 'la lunghezza dell\'esame e\' fissa per scelta misurata: non renderla variabile senza rifare la simulazione');
+
 /* -------------------------------- verdetto ------------------------------- */
 
 console.log(`Controlli: ${checks}`);
@@ -713,6 +889,8 @@ console.log(`Posizioni quiete ricontrollate: ${QUIETE.length}`);
 console.log(`Confutazioni trovate: ${confutate}/${occasioni}`);
 console.log(`Case del livello 1 con una spiegazione vera: ${Object.values(casiVisti).reduce((a, b) => a + b, 0)}`);
 console.log(`Trappole per fascia: ${Trappola.disponibili().map((d) => `${d.fascia}:${d.quante}`).join(' ')}`);
+console.log(`Esame di L3: servono ${curva.k}/${curva.su}, a 1400 si supera il ${(Esame.probabilitaA(itemsL3, 1400, 1400) * 100).toFixed(1)}%, meta' a ${curva.meta}`);
+console.log(`Magazzino d'esame a 1400: ${mag.utili} posizioni utili (${mag.esamiRimasti} esami) su ${mag.totali} libere`);
 
 if (errors.length) {
   console.error(`\n${errors.length} problemi:`);

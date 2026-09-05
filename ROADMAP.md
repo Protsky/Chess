@@ -45,13 +45,13 @@ documentata e pubblicata**.
 
 | | Livello | Uscita misurata (su posizioni **mai viste**) |
 | --- | --- | --- |
-| L0 | Vista della scacchiera | 18/20 all'esame, mediana sotto i 3 secondi |
+| L0 | Vista della scacchiera | 18/20 all'esame **e** mediana sotto i 3 secondi anche li' |
 | L1 | Non regalare pezzi | 19/20 controlli di sicurezza all'esame |
-| L2 | I finali che si vincono a memoria | sei tecniche portate a casa senza perdere l'esito |
-| L3 | I motivi tattici, mescolati | esame a 1400: **il limite inferiore** dell'intervallo lo supera, e nessun motivo sotto il 60% |
+| L2 | I finali che si vincono a memoria | 3 finali di fila senza perdere l'esito (i sei sono l'accesso) |
+| L3 | I motivi tattici, mescolati | esame a 1400 sul **limite inferiore** (17 giuste su 24; meta' delle volte a 1542), e nessun motivo sotto il 60% sulle ultime venti |
 | L4 | Calcolo e visualizzazione | sequenze di 4 semimosse alla cieca, 8 su 10 |
 | L5 | Posizione e piani | 70% su item posizionali del proprio livello |
-| L6 | Le aperture, come conseguenza | la linea a memoria **e** il piano nominato |
+| L6 | Le aperture, come conseguenza | 7 piani nominati su 8, su aperture della stessa famiglia |
 | L7 | Le proprie partite | nessuna: è il regime di crociera |
 
 E nessun livello resta superato per decreto: a **sette e a trenta giorni** l'app
@@ -294,6 +294,59 @@ lo richiede su materiale nuovo, e se non regge il livello si riapre.
       (altri 11).
       Provato: 3780 case toccate su item veri, ognuna con una spiegazione
       verificata rigiocando la ripresa sulla posizione vera.
+
+- [x] **3h. La curva dell'esame, e i criteri che nessuno applicava** — nato da
+      un'analisi multi-agente sull'app com'era, con verifica avversaria delle
+      fonti. Quattro dei difetti trovati erano stati introdotti dalla tappa 3e,
+      cioe' proprio da quella che doveva togliere i criteri dichiarati e non
+      applicati. Vale la pena elencarli.
+      **Il punto di mezzo.** L'app diceva «esame a 1400» e implementava un esame
+      che a 1400 esatti si supera il **2,9%** delle volte: con ventiquattro item
+      l'errore standard vale ottanta punti, e il limite inferiore se li porta
+      dietro. Il cinquanta per cento si raggiunge a **1542**. Non e' un difetto
+      da correggere abbassando la soglia — e' la prudenza scelta — ma un numero
+      da scrivere accanto. Adesso `esame.js` lo calcola in modo **esatto**:
+      nel modello di Rasch il punteggio dipende solo dal *numero* di risposte
+      giuste, quindi la regola si riduce a «almeno 17 su 24» e la probabilita' e'
+      una Poisson-binomiale sugli item veri. Niente simulazione, niente
+      approssimazione.
+      **La soglia d'accesso a L3** era `rating >= 1350`, dove l'esame si supera
+      lo 0,5% delle volte: si bruciavano ventiquattro delle poche posizioni
+      d'esame per un tentativo quasi certamente perso, cioe' l'opposto di quello
+      che il commento dichiarava. Adesso la legge dalla curva.
+      **La mediana di L0** era dichiarata da sempre («18 su 20, mediana sotto i
+      3 secondi») e nel verdetto non entrava: la guardava solo l'accesso. Adesso
+      un esame con 19 risposte giuste e mediana 4,5 s **non passa**, e l'esito
+      dice che il problema e' il tempo.
+      **Il pavimento per motivo** girava su tutto il registro (fino a 3000
+      ripassi): un motivo sbagliato mesi prima restava nel denominatore per
+      sempre, e teneva chiuso un livello su risposte vecchie. Adesso guarda le
+      **ultime venti** risposte per motivo.
+      **Il magazzino.** Il numero mostrato erano gli item dell'esame (sempre 24),
+      non le scorte. Attorno a 1400 le posizioni d'esame sono **74** entro ±300,
+      cioe' tre esami — quanti ne serve un percorso completo, con zero margine
+      per una riapertura. Adesso l'app conta e mostra le scorte vere, e `componi`
+      **non allarga piu' in silenzio** oltre ±300: prima arrivava a ±800, dove gli
+      item non dicono piu' niente sulla soglia e l'intervallo si allarga proprio
+      quando servirebbe stretto. Meglio un esame che non parte, dicendolo.
+      **Accesso e uscita** sono adesso due righe distinte per ogni livello: L2
+      dichiarava «sei finali» e l'esame ne chiedeva tre, L6 dichiarava «la linea
+      e il piano» e l'esame era 7 su 8.
+      Provato: 18.643 controlli in `validate-nuovo.mjs`, fra cui il confronto fra
+      il conto esatto e una simulazione indipendente (entro 2 punti percentuali)
+      e un test che, per ogni livello attivo, pretende che i numeri scritti nel
+      testo siano quelli che decidono nel codice — cosi' il difetto non puo'
+      rientrare una terza volta.
+
+- [ ] **Arresto anticipato dell'esame — MISURATO E RESPINTO.** Fermarsi appena
+      l'intervallo e' deciso avrebbe fatto scendere la lunghezza media da 24 a
+      18,6 item, e le scorte sono la risorsa scarsa. Ma la simulazione dice che
+      sposta la curva operativa fino a **8,4 punti percentuali**, e nel verso che
+      rende l'esame piu' facile: guardare lo stesso intervallo dopo ogni risposta
+      e' un test ripetuto. Il piano prevedeva di spedirlo solo se lo scarto
+      restava sotto i 2 punti. Non ci sta, quindi non si spedisce, e un test lo
+      blocca. (Scartato anche l'SPRT: la fonte che lo vendeva riporta lunghezze
+      medie fra 22,7 e 33,5 item, cioe' **piu'** dei 24 fissi.)
 
 - [ ] **5. Test d'ingresso e profilo a quattro assi** — sicurezza, tattica,
       finali, posizione, misurati separatamente sullo stampo dell'Amsterdam
